@@ -175,7 +175,12 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := copyFile(launcherArtifact, filepath.Join(releaseTree, "launcher", launcherName), 0o755); err != nil {
 		return Result{}, err
 	}
-	if err := copyTree(packRoot, filepath.Join(releaseTree, "payload", "app"), options.Target.Platform == target.Win); err != nil {
+	if err := copyTree(
+		packRoot,
+		filepath.Join(releaseTree, "payload", "app"),
+		options.Target.Platform == target.Win,
+		repositoryRoot,
+	); err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
 	}
 	manifest := release.Manifest{
@@ -359,7 +364,7 @@ func selectExecutable(candidates []string, preferred string) string {
 	return ""
 }
 
-func copyTree(source, destination string, dereferenceLinks bool) error {
+func copyTree(source, destination string, dereferenceLinks bool, repositoryDependencyRoot string) error {
 	root, err := filepath.Abs(source)
 	if err != nil {
 		return err
@@ -368,7 +373,14 @@ func copyTree(source, destination string, dereferenceLinks bool) error {
 	if err != nil {
 		return err
 	}
-	return copyTreeEntry(root, physicalRoot, root, destination, dereferenceLinks, make(map[string]bool))
+	physicalRepositoryRoot := ""
+	if repositoryDependencyRoot != "" {
+		physicalRepositoryRoot, err = canonicalPath(repositoryDependencyRoot)
+		if err != nil {
+			return err
+		}
+	}
+	return copyTreeEntry(root, physicalRoot, physicalRepositoryRoot, root, destination, dereferenceLinks, make(map[string]bool))
 }
 
 // copyTreeEntry deliberately materializes links for Windows payloads. pnpm
@@ -376,7 +388,7 @@ func copyTree(source, destination string, dereferenceLinks bool) error {
 // points must not leak into a final-user archive that may be extracted without
 // Windows symlink privileges. Other targets retain safe relative symlinks for
 // native layouts such as macOS frameworks.
-func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
+func copyTreeEntry(root, physicalRoot, physicalRepositoryRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
 	info, err := os.Lstat(source)
 	if err != nil {
 		return err
@@ -384,7 +396,7 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 
 	if info.Mode()&os.ModeSymlink != 0 {
 		if dereferenceLinks {
-			return copyDereferencedEntry(root, physicalRoot, source, destination, dereferenceLinks, activeDirectories)
+			return copyDereferencedEntry(root, physicalRoot, physicalRepositoryRoot, source, destination, dereferenceLinks, activeDirectories)
 		}
 		link, err := os.Readlink(source)
 		if err != nil {
@@ -401,7 +413,7 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 		if err != nil {
 			return fmt.Errorf("resolve full pack symlink %s: %w", source, err)
 		}
-		if !pathWithin(physicalRoot, physical) {
+		if !allowedMaterializationPath(physicalRoot, "", physical) {
 			return fmt.Errorf("full pack symlink resolves outside pack root: %s", source)
 		}
 		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -416,7 +428,7 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 		if err != nil {
 			return err
 		}
-		if !pathWithin(physicalRoot, physical) {
+		if !allowedMaterializationPath(physicalRoot, physicalRepositoryRoot, physical) {
 			return fmt.Errorf("full pack directory resolves outside pack root: %s", source)
 		}
 		key := directoryKey(physical)
@@ -436,6 +448,7 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 			if err := copyTreeEntry(
 				root,
 				physicalRoot,
+				physicalRepositoryRoot,
 				filepath.Join(source, entry.Name()),
 				filepath.Join(destination, entry.Name()),
 				dereferenceLinks,
@@ -454,19 +467,19 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 		if dereferenceLinks {
 			followed, followErr := os.Stat(source)
 			if followErr == nil && (followed.IsDir() || followed.Mode().IsRegular()) {
-				return copyDereferencedEntry(root, physicalRoot, source, destination, dereferenceLinks, activeDirectories)
+				return copyDereferencedEntry(root, physicalRoot, physicalRepositoryRoot, source, destination, dereferenceLinks, activeDirectories)
 			}
 		}
 		return fmt.Errorf("unsupported full pack entry %s", source)
 	}
 }
 
-func copyDereferencedEntry(root, physicalRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
+func copyDereferencedEntry(root, physicalRoot, physicalRepositoryRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
 	physical, err := canonicalPath(source)
 	if err != nil {
 		return fmt.Errorf("resolve full pack link %s: %w", source, err)
 	}
-	if !pathWithin(physicalRoot, physical) {
+	if !allowedMaterializationPath(physicalRoot, physicalRepositoryRoot, physical) {
 		return fmt.Errorf("full pack link resolves outside pack root: %s", source)
 	}
 	info, err := os.Stat(source)
@@ -492,6 +505,7 @@ func copyDereferencedEntry(root, physicalRoot, source, destination string, deref
 			if err := copyTreeEntry(
 				root,
 				physicalRoot,
+				physicalRepositoryRoot,
 				filepath.Join(source, entry.Name()),
 				filepath.Join(destination, entry.Name()),
 				dereferenceLinks,
@@ -506,6 +520,30 @@ func copyDereferencedEntry(root, physicalRoot, source, destination string, deref
 	default:
 		return fmt.Errorf("unsupported dereferenced full pack entry %s", source)
 	}
+}
+
+// allowedMaterializationPath accepts the full pack itself plus dependency
+// material under this checkout's node_modules trees. pnpm's Windows deploy can
+// point a copied workspace package dependency back to its source node_modules.
+// That build-time edge is safe to read and materialize, but source files and
+// global content-addressable stores remain outside the closure boundary.
+func allowedMaterializationPath(physicalRoot, physicalRepositoryRoot, candidate string) bool {
+	if pathWithin(physicalRoot, candidate) {
+		return true
+	}
+	if physicalRepositoryRoot == "" || !pathWithin(physicalRepositoryRoot, candidate) {
+		return false
+	}
+	relative, err := filepath.Rel(physicalRepositoryRoot, candidate)
+	if err != nil {
+		return false
+	}
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		if strings.EqualFold(component, "node_modules") {
+			return true
+		}
+	}
+	return false
 }
 
 func directoryKey(name string) string {

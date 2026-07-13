@@ -126,7 +126,7 @@ func TestCopyTreeDereferencesInternalDirectoryLink(t *testing.T) {
 	}
 
 	destination := filepath.Join(t.TempDir(), "destination")
-	if err := copyTree(source, destination, true); err != nil {
+	if err := copyTree(source, destination, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	copiedLink := filepath.Join(destination, "node_modules", "ws")
@@ -153,7 +153,7 @@ func TestCopyTreePreservesInternalDirectoryLink(t *testing.T) {
 	}
 
 	destination := filepath.Join(t.TempDir(), "destination")
-	if err := copyTree(source, destination, false); err != nil {
+	if err := copyTree(source, destination, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	copiedLink := filepath.Join(destination, "Versions", "Current")
@@ -179,7 +179,53 @@ func TestCopyTreeDereferenceRejectsExternalLink(t *testing.T) {
 	if err := os.Symlink(external, link); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	if err := copyTree(source, filepath.Join(parent, "destination"), true); err == nil {
+	if err := copyTree(source, filepath.Join(parent, "destination"), true, ""); err == nil {
 		t.Fatal("external link was accepted")
+	}
+}
+
+func TestCopyTreeDereferencesRepositoryDependencyLink(t *testing.T) {
+	repository := t.TempDir()
+	source := filepath.Join(repository, ".tmp", "full-pack")
+	dependency := filepath.Join(repository, "packages", "client", "node_modules", "ws")
+	link := filepath.Join(source, "resources", "payload", "node_modules", "ws")
+	if err := os.MkdirAll(dependency, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dependency, "package.json"), []byte(`{"name":"ws"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dependency, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	destination := filepath.Join(t.TempDir(), "destination")
+	if err := copyTree(source, destination, true, repository); err != nil {
+		t.Fatal(err)
+	}
+	copied := filepath.Join(destination, "resources", "payload", "node_modules", "ws")
+	if info, err := os.Lstat(copied); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("repository dependency was not materialized: info=%v err=%v", info, err)
+	}
+}
+
+func TestCopyTreeRejectsRepositorySourceLink(t *testing.T) {
+	repository := t.TempDir()
+	source := filepath.Join(repository, ".tmp", "full-pack")
+	productSource := filepath.Join(repository, "packages", "client", "src")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(productSource, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(productSource, filepath.Join(source, "source")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true, repository); err == nil {
+		t.Fatal("repository source link was accepted")
 	}
 }

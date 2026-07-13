@@ -38,7 +38,7 @@ func TestCopyTreeDereferencesWindowsJunction(t *testing.T) {
 	}
 
 	destination := filepath.Join(t.TempDir(), "destination")
-	if err := copyTree(source, destination, true); err != nil {
+	if err := copyTree(source, destination, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	copied := filepath.Join(destination, "node_modules", "package")
@@ -59,7 +59,54 @@ func TestCopyTreeRejectsWindowsJunctionCycle(t *testing.T) {
 	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, source).CombinedOutput(); err != nil {
 		t.Fatalf("create junction: %v: %s", err, output)
 	}
-	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true); err == nil {
+	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true, ""); err == nil {
 		t.Fatal("junction cycle was accepted")
+	}
+}
+
+func TestCopyTreeDereferencesWindowsRepositoryDependencyJunction(t *testing.T) {
+	repository := t.TempDir()
+	source := filepath.Join(repository, ".tmp", "full-pack")
+	dependency := filepath.Join(repository, "packages", "client", "node_modules", "ws")
+	junction := filepath.Join(source, "resources", "node_modules", "ws")
+	if err := os.MkdirAll(dependency, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dependency, "package.json"), []byte(`{"name":"ws"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(junction), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, dependency).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v: %s", err, output)
+	}
+
+	destination := filepath.Join(t.TempDir(), "destination")
+	if err := copyTree(source, destination, true, repository); err != nil {
+		t.Fatal(err)
+	}
+	copied := filepath.Join(destination, "resources", "node_modules", "ws")
+	if info, err := os.Lstat(copied); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("dependency junction was not materialized: info=%v err=%v", info, err)
+	}
+}
+
+func TestCopyTreeRejectsWindowsRepositorySourceJunction(t *testing.T) {
+	repository := t.TempDir()
+	source := filepath.Join(repository, ".tmp", "full-pack")
+	productSource := filepath.Join(repository, "packages", "client", "src")
+	junction := filepath.Join(source, "source")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(productSource, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, productSource).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v: %s", err, output)
+	}
+	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true, repository); err == nil {
+		t.Fatal("repository source junction was accepted")
 	}
 }
