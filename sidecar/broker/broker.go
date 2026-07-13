@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-	"github.com/gorilla/websocket"
 	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/sidecar/auth"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/gofrs/flock"
+	"github.com/gorilla/websocket"
 )
 
 var ErrAlreadyRunning = errors.New("cell broker is already running")

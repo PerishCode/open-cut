@@ -315,7 +315,7 @@ func locateElectronPack(output, productName string, buildTarget target.Target) (
 					candidates = append(candidates, filepath.Join(root, entry.Name()))
 				}
 			}
-			executable = selectExecutable(candidates, productName)
+			executable = selectExecutable(candidates, slug(productName))
 		}
 		if executable == "" {
 			continue

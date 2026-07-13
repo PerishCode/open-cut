@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/PerishCode/open-cut/internal/target"
 )
 
 func TestRemoveExternalDeploySelfLink(t *testing.T) {
@@ -29,6 +31,27 @@ func TestRemoveExternalDeploySelfLink(t *testing.T) {
 	}
 	if _, err := os.Lstat(selfLink); !os.IsNotExist(err) {
 		t.Fatalf("external self-link still exists: %v", err)
+	}
+}
+
+func TestLocateLinuxPackSelectsSluggedProductExecutable(t *testing.T) {
+	output := t.TempDir()
+	root := filepath.Join(output, "linux-unpacked")
+	for _, name := range []string{"open-cut", "libEGL.so", "libffmpeg.so"} {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	packRoot, entry, err := locateElectronPack(output, "Open Cut", target.Target{Platform: target.Linux, Arch: target.X64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packRoot != root || entry != "open-cut" {
+		t.Fatalf("root=%q entry=%q", packRoot, entry)
 	}
 }
 

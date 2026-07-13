@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/gorilla/websocket"
 )
 
 type Client struct {

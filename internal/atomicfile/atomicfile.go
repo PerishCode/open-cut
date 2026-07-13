@@ -53,12 +53,8 @@ func Write(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("replace destination: %w", err)
 	}
 
-	parent, err := os.Open(dir)
-	if err == nil {
-		defer parent.Close()
-		if err := parent.Sync(); err != nil {
-			return fmt.Errorf("sync parent directory: %w", err)
-		}
+	if err := syncParent(dir); err != nil {
+		return fmt.Errorf("sync parent directory: %w", err)
 	}
 	return nil
 }
