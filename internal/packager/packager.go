@@ -364,7 +364,7 @@ func copyTree(source, destination string, dereferenceLinks bool) error {
 	if err != nil {
 		return err
 	}
-	physicalRoot, err := filepath.EvalSymlinks(root)
+	physicalRoot, err := canonicalPath(root)
 	if err != nil {
 		return err
 	}
@@ -397,7 +397,7 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 		if !pathWithin(root, resolved) {
 			return fmt.Errorf("full pack symlink escapes pack root: %s", source)
 		}
-		physical, err := filepath.EvalSymlinks(source)
+		physical, err := canonicalPath(source)
 		if err != nil {
 			return fmt.Errorf("resolve full pack symlink %s: %w", source, err)
 		}
@@ -412,14 +412,14 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 
 	switch {
 	case info.IsDir():
-		physical, err := filepath.EvalSymlinks(source)
+		physical, err := canonicalPath(source)
 		if err != nil {
 			return err
 		}
 		if !pathWithin(physicalRoot, physical) {
 			return fmt.Errorf("full pack directory resolves outside pack root: %s", source)
 		}
-		key := filepath.Clean(physical)
+		key := directoryKey(physical)
 		if activeDirectories[key] {
 			return fmt.Errorf("full pack contains a directory link cycle at %s", source)
 		}
@@ -462,14 +462,58 @@ func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLi
 }
 
 func copyDereferencedEntry(root, physicalRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
-	physical, err := filepath.EvalSymlinks(source)
+	physical, err := canonicalPath(source)
 	if err != nil {
 		return fmt.Errorf("resolve full pack link %s: %w", source, err)
 	}
 	if !pathWithin(physicalRoot, physical) {
 		return fmt.Errorf("full pack link resolves outside pack root: %s", source)
 	}
-	return copyTreeEntry(root, physicalRoot, physical, destination, dereferenceLinks, activeDirectories)
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	switch {
+	case info.IsDir():
+		key := directoryKey(physical)
+		if activeDirectories[key] {
+			return fmt.Errorf("full pack contains a directory link cycle at %s", source)
+		}
+		activeDirectories[key] = true
+		defer delete(activeDirectories, key)
+		if err := os.MkdirAll(destination, info.Mode().Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := copyTreeEntry(
+				root,
+				physicalRoot,
+				filepath.Join(source, entry.Name()),
+				filepath.Join(destination, entry.Name()),
+				dereferenceLinks,
+				activeDirectories,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	case info.Mode().IsRegular():
+		return copyFile(source, destination, info.Mode().Perm())
+	default:
+		return fmt.Errorf("unsupported dereferenced full pack entry %s", source)
+	}
+}
+
+func directoryKey(name string) string {
+	key := filepath.Clean(name)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(key)
+	}
+	return key
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {

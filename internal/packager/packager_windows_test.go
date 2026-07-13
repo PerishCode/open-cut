@@ -25,6 +25,17 @@ func TestCopyTreeDereferencesWindowsJunction(t *testing.T) {
 	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, target).CombinedOutput(); err != nil {
 		t.Fatalf("create junction: %v: %s", err, output)
 	}
+	junctionPath, err := canonicalPath(junction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetPath, err := canonicalPath(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if directoryKey(junctionPath) != directoryKey(targetPath) {
+		t.Fatalf("junction canonical path=%q target=%q", junctionPath, targetPath)
+	}
 
 	destination := filepath.Join(t.TempDir(), "destination")
 	if err := copyTree(source, destination, true); err != nil {
@@ -36,5 +47,19 @@ func TestCopyTreeDereferencesWindowsJunction(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(copied, "package.json")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCopyTreeRejectsWindowsJunctionCycle(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	junction := filepath.Join(source, "loop")
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, source).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v: %s", err, output)
+	}
+	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true); err == nil {
+		t.Fatal("junction cycle was accepted")
 	}
 }
