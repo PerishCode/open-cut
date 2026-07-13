@@ -241,7 +241,7 @@ func deploy(ctx context.Context, root, packageName, destination string, hoisted 
 		environment = append(os.Environ(), "npm_config_node_linker=hoisted")
 	}
 	if err := run(ctx, root, stdout, stderr, environment,
-		"pnpm", "--filter", packageName, "deploy", "--prod", "--legacy", destination); err != nil {
+		"pnpm", "--config.inject-workspace-packages=true", "--filter", packageName, "deploy", "--prod", destination); err != nil {
 		return fmt.Errorf("deploy %s: %w", packageName, err)
 	}
 	if err := removeExternalDeploySelfLink(destination, packageName); err != nil {
@@ -250,7 +250,7 @@ func deploy(ctx context.Context, root, packageName, destination string, hoisted 
 	return nil
 }
 
-// pnpm deploy --legacy can leave a package-name symlink in its virtual store
+// pnpm deploy can leave a package-name symlink in its virtual store
 // that points back to the source workspace. The link is metadata for workspace
 // development, not a production dependency, and would make the packaged app
 // depend on the build machine. Remove only that exact self-link and only when it
