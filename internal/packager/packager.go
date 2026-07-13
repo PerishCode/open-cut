@@ -113,7 +113,8 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	}
 
 	deployedApp := filepath.Join(workRoot, "electron-app")
-	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, stdout, stderr); err != nil {
+	hoistedDeploy := options.Target.Platform == target.Win
+	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, hoistedDeploy, stdout, stderr); err != nil {
 		return Result{}, err
 	}
 	resourcesRoot := filepath.Join(workRoot, "payload-resources")
@@ -123,7 +124,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 			return Result{}, err
 		}
 		destination := filepath.Join(resourcesRoot, "sidecars", sidecar.App)
-		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, stdout, stderr); err != nil {
+		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, hoistedDeploy, stdout, stderr); err != nil {
 			return Result{}, err
 		}
 	}
@@ -229,8 +230,17 @@ func adHocSignMacPack(ctx context.Context, packRoot string, buildTarget target.T
 	return nil
 }
 
-func deploy(ctx context.Context, root, packageName, destination string, stdout, stderr io.Writer) error {
-	if err := run(ctx, root, stdout, stderr, nil,
+func deploy(ctx context.Context, root, packageName, destination string, hoisted bool, stdout, stderr io.Writer) error {
+	var environment []string
+	if hoisted {
+		// pnpm's isolated Windows layout relies on junctions into its virtual
+		// store. A release cannot preserve those links safely, and materializing
+		// them changes the package's physical path (and therefore Node's lookup
+		// chain). Hoisted deploy produces the same dependency closure as ordinary
+		// directories, which remains valid after final staging and extraction.
+		environment = append(os.Environ(), "npm_config_node_linker=hoisted")
+	}
+	if err := run(ctx, root, stdout, stderr, environment,
 		"pnpm", "--filter", packageName, "deploy", "--prod", "--legacy", destination); err != nil {
 		return fmt.Errorf("deploy %s: %w", packageName, err)
 	}
