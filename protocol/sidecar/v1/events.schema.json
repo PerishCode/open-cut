@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cut.local/protocol/sidecar/v1/events.schema.json",
+  "title": "Sidecar WebSocket event",
+  "oneOf": [
+    { "$ref": "#/$defs/register" },
+    { "$ref": "#/$defs/heartbeat" },
+    { "$ref": "#/$defs/endpoint" },
+    { "$ref": "#/$defs/ready" },
+    { "$ref": "#/$defs/exiting" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "type": "string" } }
+    },
+    "register": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["type", "channel", "namespace", "sessionId", "generation", "app", "mode", "source"],
+          "properties": {
+            "type": { "const": "register" },
+            "channel": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 },
+            "sessionId": { "type": "string", "minLength": 1 },
+            "generation": { "type": "integer", "minimum": 0 },
+            "app": { "type": "string", "minLength": 1 },
+            "mode": { "type": "string", "minLength": 1 },
+            "source": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "heartbeat": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "type": "object", "properties": { "type": { "const": "heartbeat" } } }
+      ]
+    },
+    "endpoint": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["type", "name", "url"],
+          "properties": {
+            "type": { "const": "endpoint" },
+            "name": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "format": "uri" }
+          }
+        }
+      ]
+    },
+    "ready": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "type": "object", "properties": { "type": { "const": "ready" } } }
+      ]
+    },
+    "exiting": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["type", "code"],
+          "properties": {
+            "type": { "const": "exiting" },
+            "code": { "type": "integer" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Go format
+        shell: bash
+        run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: pnpm typecheck
+
+  native-delivery:
+    name: ${{ matrix.target }} delivery
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac-arm64
+            runner: macos-15
+            platform: mac
+            arch: arm64
+            control: ./oc-control
+          - target: win-x64
+            runner: windows-2025
+            platform: win
+            arch: x64
+            control: ./oc-control.exe
+          - target: linux-x64
+            runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+            control: ./oc-control
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build checkout-pinned control CLI
+        shell: bash
+        run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
+      - name: Pack, publish, and verify native full pack
+        shell: bash
+        env:
+          CONTROL: ${{ matrix.control }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          TARGET: ${{ matrix.target }}
+          VERSION: 0.1.0-ci.1
+        run: |
+          set -euo pipefail
+          bundle="dist/open-cut-${VERSION}-${TARGET}.release-bundle.tar.zst"
+          "$CONTROL" doctor
+          "$CONTROL" release keygen --output .tmp/ci/key.json --id ci
+          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$bundle"
+          "$CONTROL" release create --bundle "$bundle" --origin .tmp/ci/origin --key .tmp/ci/key.json
+          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$bundle"
+          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --origin .tmp/ci/origin --channel ci --key .tmp/ci/key.json
+          "$CONTROL" harness full-pack --bundle "$bundle" --workspace .tmp/ci/full-pack
+      - name: Exercise macOS install, inspect, offline run, and idempotent uninstall
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          CONTROL: ${{ matrix.control }}
+        run: |
+          set -euo pipefail
+          workspace=.tmp/ci/install-case
+          receipt="$workspace/receipts/install-receipt.json"
+          bootstrap="$workspace/user/bootstrap/bootstrap.json"
+          "$CONTROL" serve --root .tmp/ci/origin --listen 127.0.0.1:41000 >.tmp/ci/serve.json 2>.tmp/ci/serve.log &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in {1..50}; do
+            curl --fail --silent http://127.0.0.1:41000/metadata/ci/mac-arm64/latest.json >/dev/null && break
+            sleep 0.1
+          done
+          "$CONTROL" harness install mac --arch arm64 --workspace "$workspace" --origin .tmp/ci/origin --origin-url http://127.0.0.1:41000 --key .tmp/ci/key.json --channel ci --headless
+          "$CONTROL" inspect --receipt "$receipt"
+          "$CONTROL" shutdown --bootstrap "$bootstrap"
+          kill "$server_pid"
+          wait "$server_pid" || true
+          trap - EXIT
+          "$CONTROL" harness run --workspace "$workspace" --receipt "$receipt" --headless
+          "$CONTROL" inspect --receipt "$receipt"
+          "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
+          "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-cut-${{ matrix.target }}
+          path: |
+            dist/open-cut-0.1.0-ci.1-${{ matrix.target }}.release-bundle.tar.zst
+            .tmp/ci/origin/releases/0.1.0-ci.1/${{ matrix.target }}/release.json
+            .tmp/ci/origin/metadata/ci/${{ matrix.target }}/latest.json
+          if-no-files-found: error

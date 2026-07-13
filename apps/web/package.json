@@ -1,0 +1,13 @@
+{
+  "name": "@open-cut/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.sidecar.json",
+    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit"
+  },
+  "dependencies": {
+    "@open-cut/sidecar-client": "workspace:*"
+  }
+}

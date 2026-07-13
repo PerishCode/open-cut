@@ -1,0 +1,14 @@
+.task/
+.DS_Store
+.tmp/
+node_modules/
+dist/
+coverage/
+*.log
+
+# Go build/test output
+bin/
+*.test
+
+# pnpm
+.pnpm-store/

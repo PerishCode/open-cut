@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: Open Cut sidecar control plane
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: "0"
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Broker identity without secret material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/status:
+    get:
+      operationId: status
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current cell and session status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "401":
+          description: Invalid capability
+  /v1/sessions/register:
+    get:
+      operationId: registerSession
+      description: Upgrade to WebSocket; first frame must be a register event.
+      security:
+        - bearerAuth: []
+      responses:
+        "101":
+          description: WebSocket session established
+  /v1/control:
+    post:
+      operationId: broadcastControl
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command:
+                  type: string
+                  enum: [show, shutdown]
+      responses:
+        "202":
+          description: Command broadcast to registered lifecycle sessions
+  /v1/capabilities/sidecar:
+    post:
+      operationId: delegateSidecarCapability
+      description: Runtime-role only; mints one short-lived app-subject-bound child token.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 64 }
+                ttlSeconds: { type: integer, minimum: 1, maximum: 3600 }
+      responses:
+        "201":
+          description: Delegated sidecar capability
+        "403":
+          description: Caller is not the runtime role
+  /v1/update/transition:
+    post:
+      operationId: prepareLatestUpdate
+      description: Managed-runtime request for B0 to verify, install, and prepare the latest release.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, const: prepare-latest }
+      responses:
+        "200":
+          description: Latest release is current or prepared for launcher handoff
+        "403":
+          description: Caller is not the managed runtime
+        "409":
+          description: Verification, installation, or state transition failed
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Health:
+      type: object
+      required: [schema, protocol, sessionId, generation]
+      properties:
+        schema: { type: integer, const: 1 }
+        protocol: { type: string }
+        sessionId: { type: string }
+        generation: { type: integer, minimum: 0 }
+    Status:
+      type: object
+      required: [schema, channel, namespace, sessionId, generation, sessions]
+      properties:
+        schema: { type: integer, const: 1 }
+        channel: { type: string }
+        namespace: { type: string }
+        sessionId: { type: string }
+        generation: { type: integer, minimum: 0 }
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+    Session:
+      type: object
+      required: [subject, app, mode, source, ready, connectedAt, lastHeartbeat]
+      properties:
+        subject: { type: string }
+        app: { type: string }
+        mode: { type: string }
+        source: { type: string }
+        ready: { type: boolean }
+        connectedAt: { type: string, format: date-time }
+        lastHeartbeat: { type: string, format: date-time }

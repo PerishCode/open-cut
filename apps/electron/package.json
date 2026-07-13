@@ -1,0 +1,20 @@
+{
+  "name": "@open-cut/electron",
+  "productName": "Open Cut",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/sidecar/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.sidecar.json",
+    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@open-cut/sidecar-client": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "41.3.0",
+    "electron-builder": "26.8.1"
+  }
+}
