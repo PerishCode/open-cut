@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/bundle"
@@ -22,6 +23,8 @@ import (
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
+
+const fullPackReadyTimeout = 45 * time.Second
 
 const fullPackDriver = `const [clientURL, supervisorURL, resourcesRoot] = process.argv.slice(2);
 const { SidecarConnection, loadSidecarLaunch } = await import(clientURL);
@@ -129,7 +132,8 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("create-log-root", os.MkdirAll(logs, 0o700)) {
 		return finish(report, started)
 	}
-	logFile, err := os.OpenFile(filepath.Join(logs, "full-pack.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	logPath := filepath.Join(logs, "full-pack.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if !check("open-full-pack-log", err) {
 		return finish(report, started)
 	}
@@ -157,9 +161,23 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		}
 	}()
 	for _, subject := range append([]string{"payload"}, topology...) {
-		readyContext, cancel := context.WithTimeout(ctx, 15*time.Second)
-		readyErr := cellBroker.WaitReady(readyContext, subject)
+		readyContext, cancel := context.WithTimeout(ctx, fullPackReadyTimeout)
+		ready := make(chan error, 1)
+		go func() { ready <- cellBroker.WaitReady(readyContext, subject) }()
+		var readyErr error
+		select {
+		case readyErr = <-ready:
+		case exitErr := <-exited:
+			command.Process = nil
+			readyErr = fmt.Errorf("packaged runtime exited before %s READY: %v", subject, exitErr)
+		}
 		cancel()
+		if readyErr != nil {
+			_ = logFile.Sync()
+			if tail, tailErr := readLogTail(logPath, 16*1024); tailErr == nil {
+				readyErr = fmt.Errorf("%w; full-pack.log tail:\n%s", readyErr, tail)
+			}
+		}
 		if !check(subject+"-ready", readyErr) {
 			return finish(report, started)
 		}
@@ -184,6 +202,21 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		check("packaged-runtime-clean-exit", errors.New("packaged runtime did not exit after shutdown"))
 	}
 	return finish(report, started)
+}
+
+func readLogTail(path string, maximum int) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maximum {
+		data = data[len(data)-maximum:]
+	}
+	tail := strings.TrimSpace(string(data))
+	if tail == "" {
+		return "(empty)", nil
+	}
+	return tail, nil
 }
 
 func fullPackResources(payloadEntry string) (string, error) {

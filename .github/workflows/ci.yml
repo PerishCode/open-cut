@@ -116,10 +116,12 @@ jobs:
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: open-cut-${{ matrix.target }}
           path: |
             dist/open-cut-0.1.0-ci.1-${{ matrix.target }}.release-bundle.tar.zst
             .tmp/ci/origin/releases/0.1.0-ci.1/${{ matrix.target }}/release.json
             .tmp/ci/origin/metadata/ci/${{ matrix.target }}/latest.json
-          if-no-files-found: error
+            .tmp/ci/full-pack/reports/logs/full-pack.log
+          if-no-files-found: warn
