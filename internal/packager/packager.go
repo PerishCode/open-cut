@@ -256,7 +256,11 @@ func removeExternalDeploySelfLink(destination, packageName string) error {
 		return err
 	}
 	if info.Mode()&os.ModeSymlink == 0 {
-		if !info.IsDir() {
+		followed, err := os.Stat(selfLink)
+		if err != nil {
+			return err
+		}
+		if !followed.IsDir() {
 			return fmt.Errorf("deploy self-reference %s is neither a directory nor a symlink", selfLink)
 		}
 		resolved, err := filepath.EvalSymlinks(selfLink)

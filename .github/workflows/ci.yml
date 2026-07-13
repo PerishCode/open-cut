@@ -12,18 +12,16 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
       - run: pnpm install --frozen-lockfile
       - name: Go format
         shell: bash
@@ -57,18 +55,17 @@ jobs:
             control: ./oc-control
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
+      - name: Enable pinned pnpm
+        shell: bash
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
       - run: pnpm install --frozen-lockfile
       - name: Build checkout-pinned control CLI
         shell: bash
@@ -118,7 +115,7 @@ jobs:
           "$CONTROL" inspect --receipt "$receipt"
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: open-cut-${{ matrix.target }}
           path: |
