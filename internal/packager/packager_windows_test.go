@@ -9,6 +9,49 @@ import (
 	"testing"
 )
 
+func TestRemoveExternalDeploySelfJunction(t *testing.T) {
+	root := t.TempDir()
+	destination := filepath.Join(root, "deploy")
+	selfJunction := filepath.Join(destination, "node_modules", ".pnpm", "node_modules", "@open-cut", "api")
+	workspacePackage := filepath.Join(root, "workspace", "apps", "api")
+	if err := os.MkdirAll(filepath.Dir(selfJunction), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workspacePackage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", selfJunction, workspacePackage).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v: %s", err, output)
+	}
+	if err := removeExternalDeploySelfLink(destination, "@open-cut/api"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(selfJunction); !os.IsNotExist(err) {
+		t.Fatalf("external self junction still exists: %v", err)
+	}
+}
+
+func TestRemoveExternalDeploySelfJunctionPreservesInternalTarget(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "deploy")
+	selfJunction := filepath.Join(destination, "node_modules", ".pnpm", "node_modules", "@open-cut", "api")
+	deployedPackage := filepath.Join(destination, "node_modules", ".pnpm", "api", "node_modules", "@open-cut", "api")
+	if err := os.MkdirAll(filepath.Dir(selfJunction), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(deployedPackage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", selfJunction, deployedPackage).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v: %s", err, output)
+	}
+	if err := removeExternalDeploySelfLink(destination, "@open-cut/api"); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(selfJunction); err != nil || !info.IsDir() {
+		t.Fatalf("internal self junction was removed: info=%v err=%v", info, err)
+	}
+}
+
 func TestCopyTreeDereferencesWindowsJunction(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source")
 	target := filepath.Join(source, "store", "package")

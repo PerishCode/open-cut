@@ -252,43 +252,29 @@ func removeExternalDeploySelfLink(destination, packageName string) error {
 	if !pathWithin(virtualStore, selfLink) || selfLink == virtualStore {
 		return fmt.Errorf("unsafe package name %q", packageName)
 	}
-	info, err := os.Lstat(selfLink)
+	_, err := os.Lstat(selfLink)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		followed, err := os.Stat(selfLink)
-		if err != nil {
-			return err
-		}
-		if !followed.IsDir() {
-			return fmt.Errorf("deploy self-reference %s is neither a directory nor a symlink", selfLink)
-		}
-		resolved, err := filepath.EvalSymlinks(selfLink)
-		if err != nil {
-			return err
-		}
-		resolvedDestination, err := filepath.EvalSymlinks(destination)
-		if err != nil {
-			return err
-		}
-		if pathWithin(resolvedDestination, resolved) {
-			return nil
-		}
-		return os.Remove(selfLink)
-	}
-	target, err := os.Readlink(selfLink)
+	followed, err := os.Stat(selfLink)
 	if err != nil {
 		return err
 	}
-	resolved := target
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(filepath.Dir(selfLink), resolved)
+	if !followed.IsDir() {
+		return fmt.Errorf("deploy self-reference %s is not a directory", selfLink)
 	}
-	if pathWithin(destination, resolved) {
+	resolved, err := canonicalPath(selfLink)
+	if err != nil {
+		return err
+	}
+	resolvedDestination, err := canonicalPath(destination)
+	if err != nil {
+		return err
+	}
+	if pathWithin(resolvedDestination, resolved) {
 		return nil
 	}
 	return os.Remove(selfLink)
