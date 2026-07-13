@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -176,7 +175,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := copyFile(launcherArtifact, filepath.Join(releaseTree, "launcher", launcherName), 0o755); err != nil {
 		return Result{}, err
 	}
-	if err := copyTree(packRoot, filepath.Join(releaseTree, "payload", "app")); err != nil {
+	if err := copyTree(packRoot, filepath.Join(releaseTree, "payload", "app"), options.Target.Platform == target.Win); err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
 	}
 	manifest := release.Manifest{
@@ -360,45 +359,117 @@ func selectExecutable(candidates []string, preferred string) string {
 	return ""
 }
 
-func copyTree(source, destination string) error {
-	return filepath.WalkDir(source, func(name string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+func copyTree(source, destination string, dereferenceLinks bool) error {
+	root, err := filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+	physicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	return copyTreeEntry(root, physicalRoot, root, destination, dereferenceLinks, make(map[string]bool))
+}
+
+// copyTreeEntry deliberately materializes links for Windows payloads. pnpm
+// deploy uses directory junctions inside its virtual store, and those reparse
+// points must not leak into a final-user archive that may be extracted without
+// Windows symlink privileges. Other targets retain safe relative symlinks for
+// native layouts such as macOS frameworks.
+func copyTreeEntry(root, physicalRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
+	info, err := os.Lstat(source)
+	if err != nil {
+		return err
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		if dereferenceLinks {
+			return copyDereferencedEntry(root, physicalRoot, source, destination, dereferenceLinks, activeDirectories)
 		}
-		relative, err := filepath.Rel(source, name)
+		link, err := os.Readlink(source)
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(destination, relative)
-		info, err := os.Lstat(name)
+		if link == "" || filepath.IsAbs(link) {
+			return fmt.Errorf("full pack contains unsafe symlink %s", source)
+		}
+		resolved := filepath.Clean(filepath.Join(filepath.Dir(source), link))
+		if !pathWithin(root, resolved) {
+			return fmt.Errorf("full pack symlink escapes pack root: %s", source)
+		}
+		physical, err := filepath.EvalSymlinks(source)
+		if err != nil {
+			return fmt.Errorf("resolve full pack symlink %s: %w", source, err)
+		}
+		if !pathWithin(physicalRoot, physical) {
+			return fmt.Errorf("full pack symlink resolves outside pack root: %s", source)
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return err
+		}
+		return os.Symlink(link, destination)
+	}
+
+	switch {
+	case info.IsDir():
+		physical, err := filepath.EvalSymlinks(source)
 		if err != nil {
 			return err
 		}
-		switch {
-		case info.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm())
-		case info.Mode()&os.ModeSymlink != 0:
-			link, err := os.Readlink(name)
-			if err != nil {
-				return err
-			}
-			if filepath.IsAbs(link) {
-				return fmt.Errorf("full pack contains absolute symlink %s", name)
-			}
-			resolved := filepath.Clean(filepath.Join(filepath.Dir(name), link))
-			if relativeTarget, err := filepath.Rel(source, resolved); err != nil || relativeTarget == ".." || strings.HasPrefix(relativeTarget, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("full pack symlink escapes pack root: %s", name)
-			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			return os.Symlink(link, target)
-		case info.Mode().IsRegular():
-			return copyFile(name, target, info.Mode().Perm())
-		default:
-			return fmt.Errorf("unsupported full pack entry %s", name)
+		if !pathWithin(physicalRoot, physical) {
+			return fmt.Errorf("full pack directory resolves outside pack root: %s", source)
 		}
-	})
+		key := filepath.Clean(physical)
+		if activeDirectories[key] {
+			return fmt.Errorf("full pack contains a directory link cycle at %s", source)
+		}
+		activeDirectories[key] = true
+		defer delete(activeDirectories, key)
+		if err := os.MkdirAll(destination, info.Mode().Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := copyTreeEntry(
+				root,
+				physicalRoot,
+				filepath.Join(source, entry.Name()),
+				filepath.Join(destination, entry.Name()),
+				dereferenceLinks,
+				activeDirectories,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	case info.Mode().IsRegular():
+		return copyFile(source, destination, info.Mode().Perm())
+	default:
+		// Windows directory junctions are reparse points but are not always
+		// reported as ModeSymlink by os.Lstat. os.Stat follows them, allowing
+		// the Windows materialization policy to handle both representations.
+		if dereferenceLinks {
+			followed, followErr := os.Stat(source)
+			if followErr == nil && (followed.IsDir() || followed.Mode().IsRegular()) {
+				return copyDereferencedEntry(root, physicalRoot, source, destination, dereferenceLinks, activeDirectories)
+			}
+		}
+		return fmt.Errorf("unsupported full pack entry %s", source)
+	}
+}
+
+func copyDereferencedEntry(root, physicalRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
+	physical, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return fmt.Errorf("resolve full pack link %s: %w", source, err)
+	}
+	if !pathWithin(physicalRoot, physical) {
+		return fmt.Errorf("full pack link resolves outside pack root: %s", source)
+	}
+	return copyTreeEntry(root, physicalRoot, physical, destination, dereferenceLinks, activeDirectories)
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {
