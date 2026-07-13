@@ -143,7 +143,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		"extraResources":  []map[string]string{{"from": resourcesRoot, "to": "payload"}},
 		"mac":             map[string]any{"identity": nil, "target": "dir"},
 		"win":             map[string]any{"target": "dir"},
-		"linux":           map[string]any{"target": "dir"},
+		"linux":           map[string]any{"executableName": slug(payloadPackage.ProductName), "target": "dir"},
 	}
 	configPath := filepath.Join(workRoot, "electron-builder.json")
 	if err := atomicfile.WriteJSON(configPath, builderConfig, 0o600); err != nil {
@@ -256,7 +256,21 @@ func removeExternalDeploySelfLink(destination, packageName string) error {
 		return err
 	}
 	if info.Mode()&os.ModeSymlink == 0 {
-		return fmt.Errorf("expected deploy self-reference %s to be a symlink", selfLink)
+		if !info.IsDir() {
+			return fmt.Errorf("deploy self-reference %s is neither a directory nor a symlink", selfLink)
+		}
+		resolved, err := filepath.EvalSymlinks(selfLink)
+		if err != nil {
+			return err
+		}
+		resolvedDestination, err := filepath.EvalSymlinks(destination)
+		if err != nil {
+			return err
+		}
+		if pathWithin(resolvedDestination, resolved) {
+			return nil
+		}
+		return os.Remove(selfLink)
 	}
 	target, err := os.Readlink(selfLink)
 	if err != nil {

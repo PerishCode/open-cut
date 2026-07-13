@@ -81,6 +81,23 @@ func TestRemoveExternalDeploySelfLinkPreservesInternalLink(t *testing.T) {
 	}
 }
 
+func TestRemoveExternalDeploySelfLinkPreservesMaterializedDirectory(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "deploy")
+	selfReference := filepath.Join(destination, "node_modules", ".pnpm", "node_modules", "@open-cut", "api")
+	if err := os.MkdirAll(selfReference, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(selfReference, "package.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeExternalDeploySelfLink(destination, "@open-cut/api"); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(selfReference); err != nil || !info.IsDir() {
+		t.Fatalf("materialized self-reference was not preserved: %v", err)
+	}
+}
+
 func TestRemoveExternalDeploySelfLinkRejectsUnsafePackageName(t *testing.T) {
 	if err := removeExternalDeploySelfLink(t.TempDir(), "../../escape"); err == nil {
 		t.Fatal("unsafe package name accepted")
