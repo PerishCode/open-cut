@@ -1,8 +1,8 @@
 import { runtimePeer } from "@open-cut/contracts";
-import { SidecarConnection, controlCommand, presentation, type SessionStatus } from "@open-cut/sidecar-client";
+import { controlCommand, presentation, type SessionStatus, SidecarConnection } from "@open-cut/sidecar-client";
 import { app } from "electron";
-import { startElectronApp, type ElectronApp } from "../src/main/app.js";
-import { registerOcWebProtocol, type OcWebProtocol } from "../src/main/oc-protocol-electron.js";
+import { type ElectronApp, startElectronApp } from "../src/main/app.js";
+import { type OcWebProtocol, registerOcWebProtocol } from "../src/main/oc-protocol-electron.js";
 
 let electron: ElectronApp | undefined;
 let headlessWeb: OcWebProtocol | undefined;
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
         webLease = undefined;
         sidecar?.notReady();
         headlessWeb?.setWebRuntime(undefined);
-        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+        console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
         await electron?.unavailable();
       });
   });
@@ -95,7 +95,7 @@ app.on("before-quit", (event) => {
 // Electron emits `ready` only after the main entry finishes its first event-loop
 // turn. Top-level-awaiting main() would deadlock startElectronApp's whenReady().
 void main().catch(async (error: unknown) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
   try {
     await stop(1);
   } finally {

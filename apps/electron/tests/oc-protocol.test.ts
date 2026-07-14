@@ -67,11 +67,7 @@ describe("oc:// Web protocol", () => {
   });
 
   it("returns a normal 503 response while no Web lease is active", async () => {
-    const response = await handleOcWebRequest(
-      new Request(OC_WEB_ENTRY_URL),
-      undefined,
-      async () => new Response(),
-    );
+    const response = await handleOcWebRequest(new Request(OC_WEB_ENTRY_URL), undefined, async () => new Response());
     assert.equal(response.status, 503);
     assert.equal((await response.json()).error, "OC_WEB_RUNTIME_UNAVAILABLE");
   });

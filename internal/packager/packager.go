@@ -317,12 +317,12 @@ func pathWithin(root, candidate string) bool {
 }
 
 func run(ctx context.Context, directory string, stdout, stderr io.Writer, environment []string, name string, arguments ...string) error {
-	executable, err := tool.Resolve(name)
+	command, err := tool.ResolveRepository(directory, name)
 	if err != nil {
 		return err
 	}
 	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: executable, Args: arguments, Directory: directory, Env: environment,
+		Executable: command.Executable, Args: command.Arguments(arguments...), Directory: directory, Env: environment,
 		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileProduction,
 	})
 }

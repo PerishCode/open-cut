@@ -27,11 +27,7 @@ export class ProtocolDecodeError extends Error {
   }
 }
 
-export function decodeProtocolValue<T>(
-  name: string,
-  schemas: ProtocolSchemas,
-  value: unknown,
-): T {
+export function decodeProtocolValue<T>(name: string, schemas: ProtocolSchemas, value: unknown): T {
   const schema = schemas[name];
   if (!schema) throw new ProtocolDecodeError(`protocol schema ${name} is missing`);
   validate(schema, schemas, value, "$", true);
@@ -69,7 +65,8 @@ function validate(
   }
 
   if (schema.allOf?.length) {
-    for (const member of schema.allOf) validate(member, schemas, value, path, schema.allOf.length === 1 && rejectUnknownProperties);
+    for (const member of schema.allOf)
+      validate(member, schemas, value, path, schema.allOf.length === 1 && rejectUnknownProperties);
     return;
   }
   if (schema.oneOf?.length) {
@@ -100,7 +97,8 @@ function validate(
       return;
     case "integer":
       if (typeof value !== "number" || !Number.isSafeInteger(value)) fail(path, "must be a safe integer");
-      if (schema.format === "int32" && (value < -2_147_483_648 || value > 2_147_483_647)) fail(path, "must fit signed int32");
+      if (schema.format === "int32" && (value < -2_147_483_648 || value > 2_147_483_647))
+        fail(path, "must fit signed int32");
       validateNumber(schema, value, path);
       return;
     case "number":
@@ -128,13 +126,13 @@ function validateObject(
   const object = value as Record<string, unknown>;
   const properties = schema.properties ?? {};
   for (const required of schema.required ?? []) {
-    if (!Object.prototype.hasOwnProperty.call(object, required)) fail(`${path}.${required}`, "is required");
+    if (!Object.hasOwn(object, required)) fail(`${path}.${required}`, "is required");
   }
   for (const [name, child] of Object.entries(properties)) {
-    if (Object.prototype.hasOwnProperty.call(object, name)) validate(child, schemas, object[name], `${path}.${name}`, true);
+    if (Object.hasOwn(object, name)) validate(child, schemas, object[name], `${path}.${name}`, true);
   }
   for (const [name, child] of Object.entries(object)) {
-    if (Object.prototype.hasOwnProperty.call(properties, name)) continue;
+    if (Object.hasOwn(properties, name)) continue;
     if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
       validate(schema.additionalProperties, schemas, child, `${path}.${name}`, true);
     } else if (schema.additionalProperties !== true && rejectUnknownProperties) {
@@ -145,8 +143,11 @@ function validateObject(
 
 function validateArray(schema: ProtocolSchema, schemas: ProtocolSchemas, value: unknown, path: string): void {
   if (!Array.isArray(value)) fail(path, "must be an array");
-  if (!schema.items) fail(path, "has no item schema");
-  value.forEach((item, index) => validate(schema.items!, schemas, item, `${path}[${index}]`, true));
+  const items = schema.items;
+  if (!items) fail(path, "has no item schema");
+  value.forEach((item, index) => {
+    validate(items, schemas, item, `${path}[${index}]`, true);
+  });
   if (schema.uniqueItems) {
     const encoded = value.map((item) => JSON.stringify(item));
     if (new Set(encoded).size !== encoded.length) fail(path, "must contain unique items");
@@ -155,8 +156,10 @@ function validateArray(schema: ProtocolSchema, schemas: ProtocolSchemas, value: 
 
 function validateString(schema: ProtocolSchema, value: unknown, path: string): void {
   if (typeof value !== "string") fail(path, "must be a string");
-  if (schema.minLength !== undefined && value.length < schema.minLength) fail(path, `must contain at least ${schema.minLength} characters`);
-  if (schema.maxLength !== undefined && value.length > schema.maxLength) fail(path, `must contain at most ${schema.maxLength} characters`);
+  if (schema.minLength !== undefined && value.length < schema.minLength)
+    fail(path, `must contain at least ${schema.minLength} characters`);
+  if (schema.maxLength !== undefined && value.length > schema.maxLength)
+    fail(path, `must contain at most ${schema.maxLength} characters`);
   if (schema.format === "date-time" && (!rfc3339Pattern.test(value) || Number.isNaN(Date.parse(value)))) {
     fail(path, "must be an RFC 3339 date-time");
   }

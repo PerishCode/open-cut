@@ -1,5 +1,5 @@
-import { SidecarConnection, controlCommand } from "@open-cut/sidecar-client";
 import { runtimePeer } from "@open-cut/contracts";
+import { controlCommand, SidecarConnection } from "@open-cut/sidecar-client";
 import { startWebServer, type WebServer } from "./server.js";
 
 let web: WebServer | undefined;

@@ -1,6 +1,6 @@
-import { SidecarConnection, controlCommand } from "@open-cut/sidecar-client";
 import { runtimePeer } from "@open-cut/contracts";
-import { startApiServer, type ApiServer } from "../src/server.js";
+import { controlCommand, SidecarConnection } from "@open-cut/sidecar-client";
+import { type ApiServer, startApiServer } from "../src/server.js";
 
 let api: ApiServer | undefined;
 let sidecar: SidecarConnection | undefined;

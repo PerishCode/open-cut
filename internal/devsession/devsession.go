@@ -37,12 +37,12 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 		return err
 	}
 	if !skipBuild {
-		pnpm, err := tool.Resolve("pnpm")
+		pnpm, err := tool.ResolveRepository(repositoryRoot, "pnpm")
 		if err != nil {
 			return err
 		}
 		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-			Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+			Executable: pnpm.Executable, Args: pnpm.Arguments("-r", "--if-present", "run", "build"), Directory: repositoryRoot,
 			Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		}); err != nil {
 			return fmt.Errorf("build workspace: %w", err)
@@ -104,7 +104,7 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 }
 
 func developmentPlan(repositoryRoot string, config workspace.Config, topology workspace.Topology) (runtimetopology.Plan, error) {
-	node, err := tool.Resolve("node")
+	node, err := tool.ResolveRepository(repositoryRoot, "node")
 	if err != nil {
 		return runtimetopology.Plan{}, fmt.Errorf("resolve Node runtime: %w", err)
 	}
@@ -116,8 +116,8 @@ func developmentPlan(repositoryRoot string, config workspace.Config, topology wo
 	for _, sidecar := range topology.Sidecars {
 		appRoot := filepath.Join(repositoryRoot, "apps", sidecar.App)
 		process := runtimetopology.ResolvedProcess{
-			App: sidecar.App, Command: node,
-			Args:             []string{filepath.Join(appRoot, "dist", "sidecar", "index.js")},
+			App: sidecar.App, Command: node.Executable,
+			Args:             node.Arguments(filepath.Join(appRoot, "dist", "sidecar", "index.js")),
 			WorkingDirectory: appRoot,
 		}
 		if sidecar.App == config.PayloadWorkspace {

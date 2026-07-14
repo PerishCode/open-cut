@@ -6,9 +6,10 @@
   "type": "module",
   "main": "dist/sidecar/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.sidecar.json",
+    "build": "tsc -p tsconfig.sidecar.json && tsc -p tsconfig.tests.json --noEmit",
+    "format": "biome check --write src sidecar tests",
+    "lint": "biome check src sidecar tests",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
     "start": "electron ."
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@open-cut/sidecar-client": "workspace:*"
   },
   "devDependencies": {
+    "@biomejs/biome": "catalog:",
     "@types/node": "24.13.3",
     "electron": "43.1.0",
     "electron-builder": "26.15.6",

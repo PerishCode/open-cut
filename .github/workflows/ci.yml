@@ -20,13 +20,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Enable pinned pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-      - run: pnpm install --frozen-lockfile
-      - name: Check generated protocol artifacts
+      - name: Build checkout-pinned control CLI
         run: |
           mkdir -p .tmp/ci
           go build -trimpath -o .tmp/ci/oc-control ./cmd/oc-control
+      - name: Bootstrap development environment
+        run: .tmp/ci/oc-control bootstrap --repo .
+      - name: Check generated protocol artifacts
+        run: |
           .tmp/ci/oc-control protocol check --repo .
       - name: Go format
         shell: bash
@@ -35,8 +36,9 @@ jobs:
           test -z "$(gofmt -l "${go_files[@]}")"
       - run: go vet ./...
       - run: go test -race ./...
-      - run: pnpm typecheck
-      - run: pnpm test
+      - run: ./.oc-control/bin/pnpm build
+      - run: ./.oc-control/bin/pnpm lint
+      - run: ./.oc-control/bin/pnpm test
 
   native-delivery:
     name: ${{ matrix.target }} delivery
@@ -69,13 +71,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Enable pinned pnpm
-        shell: bash
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-      - run: pnpm install --frozen-lockfile
       - name: Build checkout-pinned control CLI
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
+      - name: Bootstrap development environment
+        shell: bash
+        run: "${{ matrix.control }}" bootstrap --repo .
       - name: Pack, publish, and verify native full pack
         shell: bash
         env:

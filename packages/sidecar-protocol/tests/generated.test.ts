@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ProtocolDecodeError,
   decodeServerEvent,
   decodeSidecarLaunchEnvironment,
   decodeStatus,
   lifecycleMode,
   operations,
+  ProtocolDecodeError,
   presentation,
   sidecarEnvironment,
 } from "../src/index.js";
@@ -40,13 +40,16 @@ describe("generated sidecar protocol", () => {
   });
 
   it("rejects missing and unexpected launch fields", () => {
-    expect(() => decodeSidecarLaunchEnvironment({ ...validEnvironment, [sidecarEnvironment.app]: undefined }))
-      .toThrow(ProtocolDecodeError);
+    expect(() => decodeSidecarLaunchEnvironment({ ...validEnvironment, [sidecarEnvironment.app]: undefined })).toThrow(
+      ProtocolDecodeError,
+    );
     const control = JSON.parse(validEnvironment[sidecarEnvironment.control]) as Record<string, unknown>;
-    expect(() => decodeSidecarLaunchEnvironment({
-      ...validEnvironment,
-      [sidecarEnvironment.control]: JSON.stringify({ ...control, escaped: true }),
-    })).toThrow(/escaped/);
+    expect(() =>
+      decodeSidecarLaunchEnvironment({
+        ...validEnvironment,
+        [sidecarEnvironment.control]: JSON.stringify({ ...control, escaped: true }),
+      }),
+    ).toThrow(/escaped/);
   });
 
   it("derives HTTP and WebSocket schemes from TypeSpec operation metadata", () => {

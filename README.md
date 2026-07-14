@@ -11,14 +11,22 @@ Start with [AGENTS.md](./AGENTS.md) and the specifications under [`specs/`](./sp
 
 ## Day 0 development path
 
+Install the Go version declared by `go.mod` and a Node version satisfying the
+root `package.json` first. The repository does not install either runtime.
+
 ```sh
-pnpm install
 go install ./cmd/oc-control
+oc-control bootstrap
 oc-control doctor
 oc-control protocol check
 oc-control clean --scope temp
 oc-control dev
 ```
+
+`oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
+by `packageManager` when needed, performs a frozen workspace install, and enables
+the repository pre-commit hook. It never installs or replaces Node. The pinned
+package manager is always available through `./.oc-control/bin/pnpm` afterward.
 
 The current executable acceptance paths are:
 
@@ -113,7 +121,8 @@ Run repository checks with:
 
 ```sh
 go test ./...
-pnpm typecheck
-pnpm test
+./.oc-control/bin/pnpm build
+./.oc-control/bin/pnpm lint
+./.oc-control/bin/pnpm test
 oc-control protocol check
 ```

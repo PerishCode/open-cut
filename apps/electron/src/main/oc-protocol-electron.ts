@@ -1,11 +1,6 @@
 import { net, protocol } from "electron";
 
-import {
-  handleOcWebRequest,
-  normalizeWebRuntimeUrl,
-  OC_WEB_ENTRY_URL,
-  OC_WEB_SCHEME,
-} from "./oc-protocol.js";
+import { handleOcWebRequest, normalizeWebRuntimeUrl, OC_WEB_ENTRY_URL, OC_WEB_SCHEME } from "./oc-protocol.js";
 
 protocol.registerSchemesAsPrivileged([
   {

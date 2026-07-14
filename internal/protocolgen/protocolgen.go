@@ -49,13 +49,13 @@ func Run(ctx context.Context, repositoryRoot string, mode Mode, stdout, stderr i
 	}
 	defer os.RemoveAll(outputRoot)
 
-	pnpm, err := tool.Resolve("pnpm")
+	pnpm, err := tool.ResolveRepository(root, "pnpm")
 	if err != nil {
 		return Result{}, err
 	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: pnpm,
-		Args:       []string{"exec", "tsp", "compile", filepath.Dir(source), "--output-dir", outputRoot},
+		Executable: pnpm.Executable,
+		Args:       pnpm.Arguments("exec", "tsp", "compile", filepath.Dir(source), "--output-dir", outputRoot),
 		Directory:  root,
 		Stdout:     stdout,
 		Stderr:     stderr,

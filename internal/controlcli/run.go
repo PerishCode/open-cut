@@ -15,6 +15,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/cleaner"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/delivery"
+	"github.com/PerishCode/open-cut/internal/devbootstrap"
 	"github.com/PerishCode/open-cut/internal/devsession"
 	"github.com/PerishCode/open-cut/internal/harness"
 	"github.com/PerishCode/open-cut/internal/layout"
@@ -43,7 +44,9 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
 	case "doctor":
-		return runDoctor(ctx, stdout)
+		return runDoctor(ctx, args[1:], stdout, stderr)
+	case "bootstrap":
+		return runBootstrap(ctx, args[1:], stdout, stderr)
 	case "clean":
 		return runClean(args[1:], stdout, stderr)
 	case "dev":
@@ -78,7 +81,8 @@ func printHelp(writer io.Writer) {
 
 Usage:
   oc-control version [--json]
-  oc-control doctor
+  oc-control doctor [--repo <path>]
+  oc-control bootstrap [--repo <path>]
   oc-control clean [--repo <path>] [--scope temp|build|all] [--dry-run]
   oc-control dev [--repo <path>] [--workspace <path>] [--skip-build]
   oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
@@ -203,12 +207,38 @@ type doctorCheck struct {
 	OK      bool   `json:"ok"`
 }
 
-func runDoctor(ctx context.Context, stdout io.Writer) int {
+func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	set := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	repository := set.String("repo", ".", "open-cut repository root")
+	if err := set.Parse(args); err != nil {
+		return 2
+	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control doctor [--repo <path>]")
+		return 2
+	}
+	root, err := filepath.Abs(*repository)
+	if err != nil {
+		fmt.Fprintf(stderr, "doctor: %v\n", err)
+		return 1
+	}
 	checks := make([]doctorCheck, 0, 3)
 	passed := true
 	for _, toolName := range []string{"go", "node", "pnpm"} {
-		info, err := tool.Inspect(ctx, toolName)
-		check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: err == nil}
+		var info tool.Info
+		var inspectErr error
+		if toolName == "go" {
+			info, inspectErr = tool.Inspect(ctx, toolName)
+		} else {
+			command, resolveErr := tool.ResolveRepository(root, toolName)
+			if resolveErr != nil {
+				info, inspectErr = tool.Info{Name: toolName}, resolveErr
+			} else {
+				info, inspectErr = tool.InspectCommand(ctx, toolName, command)
+			}
+		}
+		check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: inspectErr == nil}
 		if !check.OK {
 			passed = false
 		}
@@ -219,6 +249,29 @@ func runDoctor(ctx context.Context, stdout io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runBootstrap(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	set := flag.NewFlagSet("bootstrap", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	repository := set.String("repo", ".", "open-cut repository root")
+	if err := set.Parse(args); err != nil {
+		return 2
+	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control bootstrap [--repo <path>]")
+		return 2
+	}
+	result, err := devbootstrap.Run(ctx, devbootstrap.Options{
+		RepositoryRoot: *repository,
+		Stdout:         stderr,
+		Stderr:         stderr,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "bootstrap: %v\n", err)
+		return 1
+	}
+	return writeOutput(stdout, stderr, result)
 }
 
 func runPack(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -535,13 +588,13 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			return 1
 		}
 		if !*skipBuild {
-			pnpm, resolveErr := tool.Resolve("pnpm")
+			pnpm, resolveErr := tool.ResolveRepository(repositoryRoot, "pnpm")
 			if resolveErr != nil {
 				fmt.Fprintln(stderr, resolveErr)
 				return 1
 			}
 			if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-				Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+				Executable: pnpm.Executable, Args: pnpm.Arguments("-r", "--if-present", "run", "build"), Directory: repositoryRoot,
 				Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
 			}); err != nil {
 				fmt.Fprintf(stderr, "workspace build: %v\n", err)

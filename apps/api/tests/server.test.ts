@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { startApiServer, type ApiServer } from "../src/server.js";
+import { type ApiServer, startApiServer } from "../src/server.js";
 
 let server: ApiServer | undefined;
 

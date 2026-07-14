@@ -49,12 +49,20 @@ local policy to justify one.
 
 ## Hot development and operations path
 
-After a fresh checkout or a change under `cmd/`, `internal/`, `sidecar/`, or
-`protocol/`, install the current control CLI:
+Go (at the version declared by `go.mod`) and Node `~24` are the only cold-start
+external dependencies. The repository never installs or replaces either runtime.
+After a fresh checkout, install the current control CLI and initialize the
+development surface:
 
 ```sh
 go install ./cmd/oc-control
+oc-control bootstrap
 ```
+
+`oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
+by the root `packageManager` when needed, runs `pnpm install --frozen-lockfile`,
+and configures `core.hooksPath` for the repository pre-commit gate. It has no
+Node-install option. Rerun it after the root toolchain or lockfile changes.
 
 Then use the installed binary for lifecycle, packaging, fixtures, releases, and
 harnesses:
@@ -75,8 +83,13 @@ repository-guarded and deliberately excludes source, dependencies, and arbitrary
 
 ## Workspace workflow
 
-- Node is `~24`; pnpm is pinned by root `package.json`.
-- Use package-scoped pnpm scripts for app and package checks.
+- Node is `~24`; pnpm is pinned by root `package.json` and exposed after bootstrap
+  through `.oc-control/bin/pnpm`.
+- Root `package.json` exposes only `build`, `format`, `lint`, and `test`; each is
+  `pnpm -r --if-present run <name>`. Use package-scoped pnpm scripts for narrower checks.
+- Biome is the sole formatter, linter, and import organizer for handwritten
+  TypeScript across `apps/*` and `packages/*`. Its version comes only from the
+  workspace catalog. Generated protocol bindings remain generator-owned.
 - Go formatting and tests are repository-wide: `gofmt` and `go test ./...`.
 - `oc-control pack` may invoke pinned pnpm build scripts, but archive creation,
   verification, and extraction stay implemented in Go.

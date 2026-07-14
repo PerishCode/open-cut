@@ -10,11 +10,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json --noEmit",
+    "format": "biome check --write src tests",
+    "lint": "biome check src tests",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@biomejs/biome": "catalog:",
     "vitest": "4.1.10"
   }
 }

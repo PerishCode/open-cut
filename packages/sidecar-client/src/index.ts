@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-
-import WebSocket from "ws";
-
 import {
+  type ClientEvent,
+  type ControlCommand,
   controlCommand,
   decodeControlResponse,
   decodeRenewResponse,
@@ -10,19 +9,18 @@ import {
   decodeSidecarLaunchEnvironment,
   decodeStatus,
   eventType,
-  operations,
-  type ClientEvent,
-  type ControlCommand,
   type LifecycleMode,
+  operations,
   type RenewResponse,
   type ServerEvent,
-  type SidecarLaunch,
   type SessionStatus,
+  type SidecarLaunch,
   type Status,
 } from "@open-cut/sidecar-protocol";
+import WebSocket from "ws";
 
-export { controlCommand, lifecycleMode, presentation } from "@open-cut/sidecar-protocol";
 export type { ControlCommand, LifecycleMode, Presentation, SessionStatus } from "@open-cut/sidecar-protocol";
+export { controlCommand, lifecycleMode, presentation } from "@open-cut/sidecar-protocol";
 
 export type ConnectOptions = {
   heartbeatIntervalMs?: number;
@@ -54,7 +52,10 @@ export class SidecarConnection {
   private constructor(options: ConnectOptions, launch: SidecarLaunch) {
     this.#options = options;
     this.#launch = launch;
-    this.#heartbeat = setInterval(() => this.#send({ type: eventType.heartbeat }), options.heartbeatIntervalMs ?? 5_000);
+    this.#heartbeat = setInterval(
+      () => this.#send({ type: eventType.heartbeat }),
+      options.heartbeatIntervalMs ?? 5_000,
+    );
     this.#heartbeat.unref();
     this.#reconcile = setInterval(() => void this.#pollStatus(), options.reconcileIntervalMs ?? 2_000);
     this.#reconcile.unref();
@@ -80,7 +81,10 @@ export class SidecarConnection {
 
   watchApp(app: string, listener: AppStatusListener): () => void {
     return this.subscribe((status) => {
-      listener(status.sessions.find((session) => session.app === app), status);
+      listener(
+        status.sessions.find((session) => session.app === app),
+        status,
+      );
     });
   }
 
@@ -156,9 +160,12 @@ export class SidecarConnection {
 
   async #open(): Promise<void> {
     const launch = this.#launch;
-    const socket = new WebSocket(`${operations.registerSession.scheme}://${launch.control.address}${operations.registerSession.path}`, {
-      headers: { Authorization: `Bearer ${launch.token}` },
-    });
+    const socket = new WebSocket(
+      `${operations.registerSession.scheme}://${launch.control.address}${operations.registerSession.path}`,
+      {
+        headers: { Authorization: `Bearer ${launch.token}` },
+      },
+    );
     this.#socket = socket;
 
     await new Promise<void>((resolve, reject) => {
@@ -168,7 +175,8 @@ export class SidecarConnection {
         if (acknowledged) return;
         acknowledged = true;
         clearTimeout(timeout);
-        if (error) reject(error); else resolve();
+        if (error) reject(error);
+        else resolve();
       };
       socket.on("message", (raw) => {
         let event: ServerEvent;
@@ -182,22 +190,24 @@ export class SidecarConnection {
         if (event.type === eventType.status) this.#acceptStatus(event.status);
         if (event.type === eventType.command && this.#options.onCommand) {
           void Promise.resolve(this.#options.onCommand(event.command)).catch((error: unknown) => {
-            console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+            console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
           });
         }
       });
       socket.once("open", () => {
-        socket.send(JSON.stringify({
-          type: eventType.register,
-          channel: launch.channel,
-          namespace: launch.namespace,
-          sessionId: launch.control.sessionId,
-          generation: launch.control.generation,
-          app: launch.app,
-          instanceId: this.#instanceId,
-          mode: launch.mode,
-          source: launch.source,
-        }));
+        socket.send(
+          JSON.stringify({
+            type: eventType.register,
+            channel: launch.channel,
+            namespace: launch.namespace,
+            sessionId: launch.control.sessionId,
+            generation: launch.control.generation,
+            app: launch.app,
+            instanceId: this.#instanceId,
+            mode: launch.mode,
+            source: launch.source,
+          }),
+        );
       });
       socket.once("error", (error) => finish(error));
       socket.once("close", () => finish(new Error("sidecar connection closed before registration acknowledgement")));
@@ -254,7 +264,8 @@ export class SidecarConnection {
   }
 
   #acceptStatus(status: Status): void {
-    if (status.sessionId !== this.#launch.control.sessionId || status.generation !== this.#launch.control.generation) return;
+    if (status.sessionId !== this.#launch.control.sessionId || status.generation !== this.#launch.control.generation)
+      return;
     if (this.#status && status.revision < this.#status.revision) return;
     this.#status = status;
     this.#notify(status);
@@ -271,7 +282,7 @@ export class SidecarConnection {
       try {
         listener(status);
       } catch (error) {
-        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+        console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       }
     }
   }
@@ -298,29 +309,35 @@ async function getBrokerStatus(launch: SidecarLaunch): Promise<Status> {
 }
 
 async function renewCapability(launch: SidecarLaunch, ttlSeconds: number): Promise<RenewResponse> {
-  const response = await fetch(`${operations.renewCapability.scheme}://${launch.control.address}${operations.renewCapability.path}`, {
-    method: operations.renewCapability.method,
-    headers: {
-      Authorization: `Bearer ${launch.token}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${operations.renewCapability.scheme}://${launch.control.address}${operations.renewCapability.path}`,
+    {
+      method: operations.renewCapability.method,
+      headers: {
+        Authorization: `Bearer ${launch.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ttlSeconds }),
+      signal: AbortSignal.timeout(5_000),
     },
-    body: JSON.stringify({ ttlSeconds }),
-    signal: AbortSignal.timeout(5_000),
-  });
+  );
   if (!response.ok) throw new Error(`sidecar capability renewal returned ${response.status}`);
   return decodeRenewResponse(await response.json());
 }
 
 async function controlCell(launch: SidecarLaunch, command: ControlCommand): Promise<number> {
-  const response = await fetch(`${operations.broadcastControl.scheme}://${launch.control.address}${operations.broadcastControl.path}`, {
-    method: operations.broadcastControl.method,
-    headers: {
-      Authorization: `Bearer ${launch.token}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${operations.broadcastControl.scheme}://${launch.control.address}${operations.broadcastControl.path}`,
+    {
+      method: operations.broadcastControl.method,
+      headers: {
+        Authorization: `Bearer ${launch.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ command }),
+      signal: AbortSignal.timeout(5_000),
     },
-    body: JSON.stringify({ command }),
-    signal: AbortSignal.timeout(5_000),
-  });
+  );
   if (!response.ok) throw new Error(`sidecar lifecycle control returned ${response.status}`);
   return decodeControlResponse(await response.json()).accepted;
 }

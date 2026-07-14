@@ -15,6 +15,7 @@ import (
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 type childProcess struct {
@@ -65,6 +66,10 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 			child.log.Close()
 		}
 	}()
+	node, err := tool.ResolveRepository(repositoryRoot, "node")
+	if !check("resolve-node", err) {
+		return finish(report, started)
+	}
 
 	for _, app := range []string{"api", "web"} {
 		token, tokenErr := cellBroker.MintSidecarToken(app, time.Minute)
@@ -89,7 +94,7 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 			return finish(report, started)
 		}
 		process, startErr := lifecycle.Start(ctx, lifecycle.ProcessSpec{
-			Executable: "node", Args: []string{entry}, Directory: appRoot,
+			Executable: node.Executable, Args: node.Arguments(entry), Directory: appRoot,
 			Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileHarness,
 			Presentation: lifecycle.PresentationHeadless,
 			Env:          launchEnvironment,

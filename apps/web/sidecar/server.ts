@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { extname, join, relative, resolve, sep } from "node:path";
 
-import { lifecycleMode, type LifecycleMode } from "@open-cut/sidecar-client";
+import { type LifecycleMode, lifecycleMode } from "@open-cut/sidecar-client";
 import type { ViteDevServer } from "vite";
 
 export type WebServer = {
@@ -79,7 +79,7 @@ async function startStaticServer(distRoot: string, host: string, port: number): 
         response.writeHead(404).end();
         return;
       }
-      const asset = await regularFile(candidate) ? candidate : indexPath;
+      const asset = (await regularFile(candidate)) ? candidate : indexPath;
       await sendFile(asset, request.method === "HEAD", response);
     } catch {
       if (!response.headersSent) response.writeHead(500);
@@ -104,7 +104,7 @@ function listen(server: Server, host: string, port: number): Promise<void> {
 
 function closeServer(server: Server): Promise<void> {
   return new Promise<void>((resolveClose, reject) => {
-    server.close((error) => error ? reject(error) : resolveClose());
+    server.close((error) => (error ? reject(error) : resolveClose()));
   });
 }
 
@@ -138,17 +138,27 @@ async function sendFile(filename: string, head: boolean, response: ServerRespons
 
 function contentType(filename: string): string {
   switch (extname(filename).toLowerCase()) {
-    case ".css": return "text/css; charset=utf-8";
-    case ".html": return "text/html; charset=utf-8";
-    case ".ico": return "image/x-icon";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".ico":
+      return "image/x-icon";
     case ".jpg":
-    case ".jpeg": return "image/jpeg";
-    case ".js": return "text/javascript; charset=utf-8";
-    case ".json": return "application/json; charset=utf-8";
-    case ".png": return "image/png";
-    case ".svg": return "image/svg+xml";
-    case ".webp": return "image/webp";
-    default: return "application/octet-stream";
+    case ".jpeg":
+      return "image/jpeg";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
   }
 }
 

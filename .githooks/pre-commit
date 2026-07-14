@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+pnpm="$root/.oc-control/bin/pnpm"
+
+if [ ! -x "$pnpm" ]; then
+	echo "Open Cut development environment is not initialized; run: go install ./cmd/oc-control && oc-control bootstrap" >&2
+	exit 1
+fi
+
+exec "$pnpm" --dir "$root" lint

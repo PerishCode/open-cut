@@ -24,6 +24,6 @@ export async function startApiServer(host = "127.0.0.1", port = 0): Promise<ApiS
   if (!address || typeof address === "string") throw new Error("API server did not bind TCP");
   return {
     url: `http://${host}:${address.port}`,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }
