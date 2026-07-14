@@ -12,7 +12,8 @@ func TestLaunchEnvironmentUsesGeneratedBindings(t *testing.T) {
 			Schema: 1, Protocol: Version, Address: "127.0.0.1:4321", PID: 7,
 			SessionID: "session", Generation: 2, StartedAt: time.Unix(1, 0).UTC(),
 		},
-		Token: "token", Channel: "beta", Namespace: "test", Mode: "harness", Source: "test",
+		App: "web", Token: "token", Channel: "beta", Namespace: "test",
+		Mode: LifecycleModeHarness, Presentation: PresentationHeadless, Source: "test",
 	}
 	values, err := LaunchEnvironmentMap(launch)
 	if err != nil {
@@ -36,7 +37,8 @@ func TestLaunchEnvironmentUsesGeneratedBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Control.SessionID != launch.Control.SessionID || loaded.Namespace != launch.Namespace {
+	if loaded.Control.SessionID != launch.Control.SessionID || loaded.Namespace != launch.Namespace ||
+		loaded.App != launch.App || loaded.Presentation != launch.Presentation {
 		t.Fatalf("loaded=%+v", loaded)
 	}
 }

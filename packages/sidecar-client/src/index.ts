@@ -4,25 +4,27 @@ import WebSocket from "ws";
 
 import {
   controlCommand,
+  decodeControlResponse,
+  decodeRenewResponse,
+  decodeServerEvent,
+  decodeSidecarLaunchEnvironment,
+  decodeStatus,
   eventType,
-  protocolVersion,
   operations,
-  sidecarEnvironment,
   type ClientEvent,
   type ControlCommand,
-  type ControlResponse,
+  type LifecycleMode,
   type RenewResponse,
   type ServerEvent,
   type SidecarLaunch,
   type SessionStatus,
   type Status,
-} from "./generated.js";
+} from "@open-cut/sidecar-protocol";
 
-export { controlCommand } from "./generated.js";
-export type { ControlCommand, SessionStatus } from "./generated.js";
+export { controlCommand, lifecycleMode, presentation } from "@open-cut/sidecar-protocol";
+export type { ControlCommand, LifecycleMode, Presentation, SessionStatus } from "@open-cut/sidecar-protocol";
 
 export type ConnectOptions = {
-  app: string;
   heartbeatIntervalMs?: number;
   reconcileIntervalMs?: number;
   capabilityRenewIntervalMs?: number;
@@ -31,24 +33,6 @@ export type ConnectOptions = {
 
 type StatusListener = (status: Status) => void;
 type AppStatusListener = (status: SessionStatus | undefined, broker: Status) => void;
-
-function loadSidecarLaunch(env: NodeJS.ProcessEnv = process.env): SidecarLaunch {
-  for (const name of Object.values(sidecarEnvironment)) {
-    if (!env[name]) throw new Error(`${name} is required for sidecar startup`);
-  }
-  const control = JSON.parse(env[sidecarEnvironment.control]!) as SidecarLaunch["control"];
-  if (control.schema !== 1 || control.protocol !== protocolVersion || !control.address || !control.sessionId) {
-    throw new Error(`${sidecarEnvironment.control} is not a valid ${protocolVersion} descriptor`);
-  }
-  return {
-    control,
-    token: env[sidecarEnvironment.token]!,
-    channel: env[sidecarEnvironment.channel]!,
-    namespace: env[sidecarEnvironment.namespace]!,
-    mode: env[sidecarEnvironment.mode]!,
-    source: env[sidecarEnvironment.source]!,
-  };
-}
 
 export class SidecarConnection {
   readonly #launch: SidecarLaunch;
@@ -82,7 +66,7 @@ export class SidecarConnection {
   }
 
   static async connect(options: ConnectOptions): Promise<SidecarConnection> {
-    const connection = new SidecarConnection(options, loadSidecarLaunch());
+    const connection = new SidecarConnection(options, decodeSidecarLaunchEnvironment(process.env));
     await connection.#ensureConnected();
     await connection.#pollStatus();
     return connection;
@@ -100,8 +84,12 @@ export class SidecarConnection {
     });
   }
 
-  get mode(): string {
+  get mode(): LifecycleMode {
     return this.#launch.mode;
+  }
+
+  get presentation(): SidecarLaunch["presentation"] {
+    return this.#launch.presentation;
   }
 
   async shutdownCell(): Promise<number> {
@@ -168,7 +156,7 @@ export class SidecarConnection {
 
   async #open(): Promise<void> {
     const launch = this.#launch;
-    const socket = new WebSocket(`ws://${launch.control.address}${operations.registerSession.path}`, {
+    const socket = new WebSocket(`${operations.registerSession.scheme}://${launch.control.address}${operations.registerSession.path}`, {
       headers: { Authorization: `Bearer ${launch.token}` },
     });
     this.#socket = socket;
@@ -185,7 +173,7 @@ export class SidecarConnection {
       socket.on("message", (raw) => {
         let event: ServerEvent;
         try {
-          event = JSON.parse(raw.toString()) as ServerEvent;
+          event = decodeServerEvent(JSON.parse(raw.toString()) as unknown);
         } catch {
           socket.close();
           return;
@@ -205,7 +193,7 @@ export class SidecarConnection {
           namespace: launch.namespace,
           sessionId: launch.control.sessionId,
           generation: launch.control.generation,
-          app: this.#options.app,
+          app: launch.app,
           instanceId: this.#instanceId,
           mode: launch.mode,
           source: launch.source,
@@ -290,13 +278,13 @@ export class SidecarConnection {
 }
 
 async function getBrokerStatus(launch: SidecarLaunch): Promise<Status> {
-  const response = await fetch(`http://${launch.control.address}${operations.status.path}`, {
+  const response = await fetch(`${operations.status.scheme}://${launch.control.address}${operations.status.path}`, {
     method: operations.status.method,
     headers: { Authorization: `Bearer ${launch.token}` },
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar status returned ${response.status}`);
-  const status = await response.json() as Status;
+  const status = decodeStatus(await response.json());
   if (
     status.schema !== 1 ||
     !Number.isSafeInteger(status.revision) ||
@@ -310,7 +298,7 @@ async function getBrokerStatus(launch: SidecarLaunch): Promise<Status> {
 }
 
 async function renewCapability(launch: SidecarLaunch, ttlSeconds: number): Promise<RenewResponse> {
-  const response = await fetch(`http://${launch.control.address}${operations.renewCapability.path}`, {
+  const response = await fetch(`${operations.renewCapability.scheme}://${launch.control.address}${operations.renewCapability.path}`, {
     method: operations.renewCapability.method,
     headers: {
       Authorization: `Bearer ${launch.token}`,
@@ -320,13 +308,11 @@ async function renewCapability(launch: SidecarLaunch, ttlSeconds: number): Promi
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar capability renewal returned ${response.status}`);
-  const renewed = await response.json() as RenewResponse;
-  if (!renewed.token || !renewed.expiresAt) throw new Error("broker returned an invalid renewed capability");
-  return renewed;
+  return decodeRenewResponse(await response.json());
 }
 
 async function controlCell(launch: SidecarLaunch, command: ControlCommand): Promise<number> {
-  const response = await fetch(`http://${launch.control.address}${operations.broadcastControl.path}`, {
+  const response = await fetch(`${operations.broadcastControl.scheme}://${launch.control.address}${operations.broadcastControl.path}`, {
     method: operations.broadcastControl.method,
     headers: {
       Authorization: `Bearer ${launch.token}`,
@@ -336,11 +322,7 @@ async function controlCell(launch: SidecarLaunch, command: ControlCommand): Prom
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar lifecycle control returned ${response.status}`);
-  const result = await response.json() as ControlResponse;
-  if (!Number.isSafeInteger(result.accepted) || (result.accepted as number) < 0) {
-    throw new Error("broker returned an invalid lifecycle response");
-  }
-  return result.accepted as number;
+  return decodeControlResponse(await response.json()).accepted;
 }
 
 function delay(milliseconds: number): Promise<void> {

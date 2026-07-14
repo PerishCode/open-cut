@@ -7,36 +7,45 @@ import "time"
 const Version = "sidecar.v1"
 
 const (
+	SidecarEnvApp           = "OC_SIDECAR_APP"
 	SidecarEnvChannel       = "OC_SIDECAR_CHANNEL"
 	SidecarEnvControl       = "OC_SIDECAR_CONTROL"
 	SidecarEnvMode          = "OC_SIDECAR_MODE"
 	SidecarEnvNamespace     = "OC_SIDECAR_NAMESPACE"
+	SidecarEnvPresentation  = "OC_SIDECAR_PRESENTATION"
 	SidecarEnvSource        = "OC_SIDECAR_SOURCE"
 	SidecarEnvToken         = "OC_SIDECAR_TOKEN"
-	SidecarEnvironmentCount = 6
+	SidecarEnvironmentCount = 8
 )
 
 const (
 	RouteBroadcastControl            = "/v1/control"
 	MethodBroadcastControl           = "POST"
+	SchemeBroadcastControl           = "http"
 	PatternBroadcastControl          = "POST /v1/control"
 	RouteDelegateSidecarCapability   = "/v1/capabilities/sidecar"
 	MethodDelegateSidecarCapability  = "POST"
+	SchemeDelegateSidecarCapability  = "http"
 	PatternDelegateSidecarCapability = "POST /v1/capabilities/sidecar"
 	RouteHealth                      = "/v1/health"
 	MethodHealth                     = "GET"
+	SchemeHealth                     = "http"
 	PatternHealth                    = "GET /v1/health"
 	RoutePrepareLatestUpdate         = "/v1/update/transition"
 	MethodPrepareLatestUpdate        = "POST"
+	SchemePrepareLatestUpdate        = "http"
 	PatternPrepareLatestUpdate       = "POST /v1/update/transition"
 	RouteRegisterSession             = "/v1/sessions/register"
 	MethodRegisterSession            = "GET"
+	SchemeRegisterSession            = "ws"
 	PatternRegisterSession           = "GET /v1/sessions/register"
 	RouteRenewCapability             = "/v1/capabilities/renew"
 	MethodRenewCapability            = "POST"
+	SchemeRenewCapability            = "http"
 	PatternRenewCapability           = "POST /v1/capabilities/renew"
 	RouteStatus                      = "/v1/status"
 	MethodStatus                     = "GET"
+	SchemeStatus                     = "http"
 	PatternStatus                    = "GET /v1/status"
 )
 
@@ -70,6 +79,22 @@ const (
 	ControlCommandShutdown ControlCommand = "shutdown"
 )
 
+type LifecycleMode string
+
+const (
+	LifecycleModeProduction LifecycleMode = "production"
+	LifecycleModePackaged   LifecycleMode = "packaged"
+	LifecycleModeDev        LifecycleMode = "dev"
+	LifecycleModeHarness    LifecycleMode = "harness"
+)
+
+type Presentation string
+
+const (
+	PresentationInteractive Presentation = "interactive"
+	PresentationHeadless    Presentation = "headless"
+)
+
 type Role string
 
 const (
@@ -93,19 +118,19 @@ const (
 )
 
 type ClientEvent struct {
-	App        string    `json:"app,omitempty"`
-	Channel    string    `json:"channel,omitempty"`
-	Code       int       `json:"code,omitempty"`
-	Generation uint64    `json:"generation,omitempty"`
-	InstanceID string    `json:"instanceId,omitempty"`
-	Mode       string    `json:"mode,omitempty"`
-	Name       string    `json:"name,omitempty"`
-	Namespace  string    `json:"namespace,omitempty"`
-	Ready      *bool     `json:"ready,omitempty"`
-	SessionID  string    `json:"sessionId,omitempty"`
-	Source     string    `json:"source,omitempty"`
-	Type       EventType `json:"type"`
-	URL        string    `json:"url,omitempty"`
+	App        string        `json:"app,omitempty"`
+	Channel    string        `json:"channel,omitempty"`
+	Code       int           `json:"code,omitempty"`
+	Generation uint64        `json:"generation,omitempty"`
+	InstanceID string        `json:"instanceId,omitempty"`
+	Mode       LifecycleMode `json:"mode,omitempty"`
+	Name       string        `json:"name,omitempty"`
+	Namespace  string        `json:"namespace,omitempty"`
+	Ready      *bool         `json:"ready,omitempty"`
+	SessionID  string        `json:"sessionId,omitempty"`
+	Source     string        `json:"source,omitempty"`
+	Type       EventType     `json:"type"`
+	URL        string        `json:"url,omitempty"`
 }
 
 type CommandEvent struct {
@@ -175,15 +200,15 @@ type HeartbeatEvent struct {
 }
 
 type RegisterEvent struct {
-	App        string    `json:"app"`
-	Channel    string    `json:"channel"`
-	Generation uint64    `json:"generation"`
-	InstanceID string    `json:"instanceId"`
-	Mode       string    `json:"mode"`
-	Namespace  string    `json:"namespace"`
-	SessionID  string    `json:"sessionId"`
-	Source     string    `json:"source"`
-	Type       EventType `json:"type"`
+	App        string        `json:"app"`
+	Channel    string        `json:"channel"`
+	Generation uint64        `json:"generation"`
+	InstanceID string        `json:"instanceId"`
+	Mode       LifecycleMode `json:"mode"`
+	Namespace  string        `json:"namespace"`
+	SessionID  string        `json:"sessionId"`
+	Source     string        `json:"source"`
+	Type       EventType     `json:"type"`
 }
 
 type RegisteredEvent struct {
@@ -207,15 +232,15 @@ type ServerEvent struct {
 }
 
 type SessionStatus struct {
-	App           string     `json:"app"`
-	ConnectedAt   time.Time  `json:"connectedAt"`
-	Endpoints     []Endpoint `json:"endpoints,omitempty"`
-	InstanceID    string     `json:"instanceId"`
-	LastHeartbeat time.Time  `json:"lastHeartbeat"`
-	Mode          string     `json:"mode"`
-	Ready         bool       `json:"ready"`
-	Source        string     `json:"source"`
-	Subject       string     `json:"subject"`
+	App           string        `json:"app"`
+	ConnectedAt   time.Time     `json:"connectedAt"`
+	Endpoints     []Endpoint    `json:"endpoints,omitempty"`
+	InstanceID    string        `json:"instanceId"`
+	LastHeartbeat time.Time     `json:"lastHeartbeat"`
+	Mode          LifecycleMode `json:"mode"`
+	Ready         bool          `json:"ready"`
+	Source        string        `json:"source"`
+	Subject       string        `json:"subject"`
 }
 
 type SidecarEvent struct {
@@ -225,7 +250,7 @@ type SidecarEvent struct {
 	Command    ControlCommand `json:"command,omitempty"`
 	Generation uint64         `json:"generation,omitempty"`
 	InstanceID string         `json:"instanceId,omitempty"`
-	Mode       string         `json:"mode,omitempty"`
+	Mode       LifecycleMode  `json:"mode,omitempty"`
 	Name       string         `json:"name,omitempty"`
 	Namespace  string         `json:"namespace,omitempty"`
 	Ready      *bool          `json:"ready,omitempty"`
@@ -237,12 +262,14 @@ type SidecarEvent struct {
 }
 
 type SidecarLaunch struct {
-	Channel   string            `json:"channel"`
-	Control   ControlDescriptor `json:"control"`
-	Mode      string            `json:"mode"`
-	Namespace string            `json:"namespace"`
-	Source    string            `json:"source"`
-	Token     string            `json:"token"`
+	App          string            `json:"app"`
+	Channel      string            `json:"channel"`
+	Control      ControlDescriptor `json:"control"`
+	Mode         LifecycleMode     `json:"mode"`
+	Namespace    string            `json:"namespace"`
+	Presentation Presentation      `json:"presentation"`
+	Source       string            `json:"source"`
+	Token        string            `json:"token"`
 }
 
 type StateEvent struct {

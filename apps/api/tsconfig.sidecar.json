@@ -3,7 +3,8 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": ".",
-    "tsBuildInfoFile": "dist/tsconfig.sidecar.tsbuildinfo"
+    "tsBuildInfoFile": "dist/tsconfig.sidecar.tsbuildinfo",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "sidecar/**/*.ts"]
 }

@@ -18,7 +18,7 @@ func main() {
 	}
 	session, err := client.DialSession(context.Background(), launch.Control, launch.Token, client.Registration{
 		Channel: launch.Channel, Namespace: launch.Namespace,
-		App: "fixture-runtime", Mode: launch.Mode, Source: launch.Source,
+		App: launch.App, Mode: launch.Mode, Source: launch.Source,
 	})
 	if err != nil {
 		fatal(err)

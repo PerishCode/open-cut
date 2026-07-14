@@ -80,8 +80,9 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		return finish(report, started)
 	}
 	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
-		Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
-		Namespace: identity.Namespace, Mode: string(lifecycle.ProfileHarness), Source: "oc-control",
+		App: "runtime", Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
+		Namespace: identity.Namespace, Mode: protocol.LifecycleModeHarness,
+		Presentation: protocol.PresentationHeadless, Source: "oc-control",
 	})
 	if !check("encode-sidecar-launch-envelope", err) {
 		return finish(report, started)
@@ -97,11 +98,12 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	}
 	defer logFile.Close()
 	command, startErr := lifecycle.Start(ctx, lifecycle.VersionedProcess(launcherEntry, manifestPath, lifecycle.ProcessSpec{
-		Directory: versionRoot,
-		Stdout:    logFile,
-		Stderr:    logFile,
-		Profile:   lifecycle.ProfileHarness,
-		Env:       append(launchEnvironment, "OC_DELIVERY_HEADLESS=1"),
+		Directory:    versionRoot,
+		Stdout:       logFile,
+		Stderr:       logFile,
+		Profile:      lifecycle.ProfileHarness,
+		Presentation: lifecycle.PresentationHeadless,
+		Env:          launchEnvironment,
 	}))
 	if !check("start-versioned-runtime-runner", startErr) {
 		return finish(report, started)

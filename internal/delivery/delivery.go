@@ -188,12 +188,12 @@ func Run(ctx context.Context, options RunOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	environment := os.Environ()
+	presentation := lifecycle.PresentationInteractive
 	if options.Headless {
-		environment = append(environment, "OC_DELIVERY_HEADLESS=1")
+		presentation = lifecycle.PresentationHeadless
 	}
 	process, err := lifecycle.Start(ctx, lifecycle.ProcessSpec{
-		Executable: receipt.HostPath, Directory: receipt.InstallRoot, Env: environment,
+		Executable: receipt.HostPath, Directory: receipt.InstallRoot, Env: os.Environ(), Presentation: presentation,
 		Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileProduction, Detached: true,
 	})
 	if err != nil {

@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "build": "vite build && tsc -p tsconfig.sidecar.json",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json --noEmit"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-cut/contracts": "workspace:*",
     "@open-cut/sidecar-client": "workspace:*"
   },
   "devDependencies": {
-    "vite": "^8.1.4"
+    "@types/node": "24.13.3",
+    "vite": "^8.1.4",
+    "vitest": "4.1.10"
   }
 }

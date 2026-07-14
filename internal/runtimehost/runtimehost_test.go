@@ -69,7 +69,8 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 	go func() {
 		done <- Run(ctx, Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
-			Channel: identity.Channel, Namespace: identity.Namespace, Mode: "test", Source: "harness",
+			Channel: identity.Channel, Namespace: identity.Namespace, App: "runtime",
+			Mode: protocol.LifecycleModeHarness, Presentation: protocol.PresentationHeadless, Source: "harness",
 			Plan: plan, ReadyTimeout: 5 * time.Second,
 		}, ready)
 	}()
@@ -130,7 +131,8 @@ func TestRuntimeHostHelperProcess(t *testing.T) {
 	}
 	session, err := client.DialSession(context.Background(), descriptor, os.Getenv(protocol.SidecarEnvToken), client.Registration{
 		Channel: os.Getenv(protocol.SidecarEnvChannel), Namespace: os.Getenv(protocol.SidecarEnvNamespace),
-		App: "recovering-peer", Mode: os.Getenv(protocol.SidecarEnvMode), Source: os.Getenv(protocol.SidecarEnvSource),
+		App: os.Getenv(protocol.SidecarEnvApp), Mode: protocol.LifecycleMode(os.Getenv(protocol.SidecarEnvMode)),
+		Source: os.Getenv(protocol.SidecarEnvSource),
 	})
 	if err != nil {
 		os.Exit(92)

@@ -111,6 +111,15 @@
       ],
       "type": "object"
     },
+    "LifecycleMode": {
+      "enum": [
+        "production",
+        "packaged",
+        "dev",
+        "harness"
+      ],
+      "type": "string"
+    },
     "RegisterEvent": {
       "properties": {
         "app": {
@@ -130,8 +139,7 @@
           "type": "string"
         },
         "mode": {
-          "minLength": 1,
-          "type": "string"
+          "$ref": "#/$defs/LifecycleMode"
         },
         "namespace": {
           "minLength": 1,
@@ -213,8 +221,7 @@
           "type": "string"
         },
         "mode": {
-          "minLength": 1,
-          "type": "string"
+          "$ref": "#/$defs/LifecycleMode"
         },
         "ready": {
           "type": "boolean"

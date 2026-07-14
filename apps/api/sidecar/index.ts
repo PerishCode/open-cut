@@ -1,4 +1,5 @@
 import { SidecarConnection, controlCommand } from "@open-cut/sidecar-client";
+import { runtimePeer } from "@open-cut/contracts";
 import { startApiServer, type ApiServer } from "../src/server.js";
 
 let api: ApiServer | undefined;
@@ -14,13 +15,12 @@ function stop(code = 0): Promise<void> {
 }
 
 sidecar = await SidecarConnection.connect({
-  app: "api",
   onCommand: async (command) => {
     if (command === controlCommand.shutdown) await stop();
   },
 });
 api = await startApiServer();
-sidecar.publishEndpoint("http", api.url);
+sidecar.publishEndpoint(runtimePeer.api.httpEndpoint, api.url);
 sidecar.ready();
 
 process.once("SIGINT", () => void stop());

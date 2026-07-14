@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 const (
@@ -54,7 +55,72 @@ func Load(repositoryRoot string) (Config, error) {
 	if info, err := os.Stat(filepath.Join(repositoryRoot, "apps", config.PayloadWorkspace)); err != nil || !info.IsDir() {
 		return Config{}, fmt.Errorf("payload workspace apps/%s does not exist", config.PayloadWorkspace)
 	}
+	if err := ValidateTestLayout(repositoryRoot); err != nil {
+		return Config{}, err
+	}
 	return config, nil
+}
+
+func ValidateTestLayout(repositoryRoot string) error {
+	var misplaced []string
+	for _, kind := range []string{"apps", "packages"} {
+		workspaces, err := os.ReadDir(filepath.Join(repositoryRoot, kind))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read %s workspaces: %w", kind, err)
+		}
+		for _, candidate := range workspaces {
+			if !candidate.IsDir() {
+				continue
+			}
+			workspaceRoot := filepath.Join(repositoryRoot, kind, candidate.Name())
+			err := filepath.WalkDir(workspaceRoot, func(filename string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if entry.IsDir() && filename != workspaceRoot {
+					switch entry.Name() {
+					case "dist", "node_modules":
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if entry.IsDir() || !isTypeScriptTestFile(entry.Name()) {
+					return nil
+				}
+				relative, err := filepath.Rel(workspaceRoot, filename)
+				if err != nil {
+					return err
+				}
+				parts := strings.Split(filepath.ToSlash(relative), "/")
+				if len(parts) < 2 || parts[0] != "tests" {
+					misplaced = append(misplaced, filepath.ToSlash(filepath.Join(kind, candidate.Name(), relative)))
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("validate %s/%s test layout: %w", kind, candidate.Name(), err)
+			}
+		}
+	}
+	if len(misplaced) > 0 {
+		sort.Strings(misplaced)
+		return fmt.Errorf("app and package tests must live under sibling tests directories: %v", misplaced)
+	}
+	return nil
+}
+
+func isTypeScriptTestFile(name string) bool {
+	extension := filepath.Ext(name)
+	switch extension {
+	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs":
+	default:
+		return false
+	}
+	base := strings.TrimSuffix(name, extension)
+	return strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".spec")
 }
 
 func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {

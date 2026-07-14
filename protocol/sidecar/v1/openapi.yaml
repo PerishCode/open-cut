@@ -152,6 +152,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+      x-transport: websocket
   /v1/status:
     get:
       operationId: status
@@ -413,6 +414,18 @@ components:
           type: string
           enum:
             - heartbeat
+    LifecycleMode:
+      type: string
+      enum:
+        - production
+        - packaged
+        - dev
+        - harness
+    Presentation:
+      type: string
+      enum:
+        - interactive
+        - headless
     RegisterEvent:
       type: object
       required:
@@ -450,8 +463,7 @@ components:
           type: string
           minLength: 1
         mode:
-          type: string
-          minLength: 1
+          $ref: '#/components/schemas/LifecycleMode'
         source:
           type: string
           minLength: 1
@@ -520,8 +532,7 @@ components:
           type: string
           minLength: 1
         mode:
-          type: string
-          minLength: 1
+          $ref: '#/components/schemas/LifecycleMode'
         source:
           type: string
           minLength: 1
@@ -544,13 +555,19 @@ components:
     SidecarLaunch:
       type: object
       required:
+        - app
         - control
         - token
         - channel
         - namespace
         - mode
+        - presentation
         - source
       properties:
+        app:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_APP
         control:
           allOf:
             - $ref: '#/components/schemas/ControlDescriptor'
@@ -568,9 +585,13 @@ components:
           minLength: 1
           x-environment: OC_SIDECAR_NAMESPACE
         mode:
-          type: string
-          minLength: 1
+          allOf:
+            - $ref: '#/components/schemas/LifecycleMode'
           x-environment: OC_SIDECAR_MODE
+        presentation:
+          allOf:
+            - $ref: '#/components/schemas/Presentation'
+          x-environment: OC_SIDECAR_PRESENTATION
         source:
           type: string
           minLength: 1

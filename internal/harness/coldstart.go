@@ -308,7 +308,8 @@ func runLauncher(ctx context.Context, launcherPath, bootstrapPath, logPath strin
 	launchContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return lifecycle.Run(launchContext, lifecycle.BootstrapProcess(launcherPath, bootstrapPath, lifecycle.ProcessSpec{
-		Stdout: logFile, Stderr: logFile, Env: append(os.Environ(), extraEnv...), Profile: lifecycle.ProfileHarness,
+		Stdout: logFile, Stderr: logFile, Env: append(os.Environ(), extraEnv...),
+		Profile: lifecycle.ProfileHarness, Presentation: lifecycle.PresentationHeadless,
 	}))
 }
 

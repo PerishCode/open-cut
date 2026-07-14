@@ -1,9 +1,9 @@
 import { createReadStream, readFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { extname, join, relative, resolve, sep } from "node:path";
 
+import { lifecycleMode, type LifecycleMode } from "@open-cut/sidecar-client";
 import type { ViteDevServer } from "vite";
 
 export type WebServer = {
@@ -11,9 +11,9 @@ export type WebServer = {
   close(): Promise<void>;
 };
 
-export async function startWebServer(mode: string, host = "127.0.0.1", port = 0): Promise<WebServer> {
+export async function startWebServer(mode: LifecycleMode, host = "127.0.0.1", port = 0): Promise<WebServer> {
   const webRoot = resolveWebRoot();
-  if (mode === "dev") return startViteServer(webRoot, host, port);
+  if (mode === lifecycleMode.dev) return startViteServer(webRoot, host, port);
   return startStaticServer(join(webRoot, "dist", "web"), host, port);
 }
 
@@ -152,18 +152,15 @@ function contentType(filename: string): string {
   }
 }
 
-function resolveWebRoot(): string {
-  let current = dirname(fileURLToPath(import.meta.url));
-  for (let depth = 0; depth < 8; depth += 1) {
-    try {
-      const manifest = JSON.parse(readFileSync(join(current, "package.json"), "utf8")) as { name?: unknown };
-      if (manifest.name === "@open-cut/web") return current;
-    } catch {
-      // Continue from source sidecar/ and compiled dist/sidecar/ layouts.
-    }
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
+export function resolveWebRoot(directory = process.cwd()): string {
+  let manifest: { name?: unknown };
+  try {
+    manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name?: unknown };
+  } catch (error) {
+    throw new Error(`runtime topology directory has no readable package.json: ${directory}`, { cause: error });
   }
-  throw new Error("failed to resolve @open-cut/web package root");
+  if (manifest.name !== "@open-cut/web") {
+    throw new Error(`runtime topology directory is not @open-cut/web: ${directory}`);
+  }
+  return directory;
 }

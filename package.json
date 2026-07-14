@@ -13,12 +13,12 @@
     "test": "pnpm -r --if-present run test"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@types/node": "24.13.3",
     "@typespec/compiler": "1.13.0",
     "@typespec/http": "1.13.0",
     "@typespec/json-schema": "1.13.0",
     "@typespec/openapi": "1.13.0",
     "@typespec/openapi3": "1.13.0",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }

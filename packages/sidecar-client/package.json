@@ -11,12 +11,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "ws": "8.18.3"
+    "@open-cut/sidecar-protocol": "workspace:*",
+    "ws": "8.21.0"
   },
   "devDependencies": {
-    "@types/ws": "8.18.1"
+    "@types/node": "24.13.3",
+    "@types/ws": "8.18.1",
+    "vitest": "4.1.10"
   }
 }

@@ -97,7 +97,7 @@ func Run(ctx context.Context, repositoryRoot string, mode Mode, stdout, stderr i
 		filepath.Join("protocol", "sidecar", "v1", "openapi.yaml"):         openAPIYAML,
 		filepath.Join("protocol", "sidecar", "v1", "events.schema.json"):   eventSchema,
 		filepath.Join("sidecar", "protocol", "zz_generated.go"):            goBindings,
-		filepath.Join("packages", "sidecar-client", "src", "generated.ts"): typeScriptBindings,
+		filepath.Join("packages", "sidecar-protocol", "src", "generated.ts"): typeScriptBindings,
 	}
 	files := make([]string, 0, len(outputs))
 	for relative := range outputs {

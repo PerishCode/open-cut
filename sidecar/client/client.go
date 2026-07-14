@@ -48,7 +48,7 @@ func New(descriptor protocol.ControlDescriptor, token string) *Client {
 
 func (client *Client) Status(ctx context.Context) (protocol.Status, error) {
 	var status protocol.Status
-	if err := client.request(ctx, protocol.MethodStatus, protocol.RouteStatus, nil, &status); err != nil {
+	if err := client.request(ctx, protocol.SchemeStatus, protocol.MethodStatus, protocol.RouteStatus, nil, &status); err != nil {
 		return protocol.Status{}, err
 	}
 	return status, nil
@@ -56,7 +56,7 @@ func (client *Client) Status(ctx context.Context) (protocol.Status, error) {
 
 func (client *Client) Control(ctx context.Context, command protocol.ControlCommand) (protocol.ControlResponse, error) {
 	var response protocol.ControlResponse
-	if err := client.request(ctx, protocol.MethodBroadcastControl, protocol.RouteBroadcastControl, protocol.ControlRequest{Command: command}, &response); err != nil {
+	if err := client.request(ctx, protocol.SchemeBroadcastControl, protocol.MethodBroadcastControl, protocol.RouteBroadcastControl, protocol.ControlRequest{Command: command}, &response); err != nil {
 		return protocol.ControlResponse{}, err
 	}
 	return response, nil
@@ -73,7 +73,7 @@ func (client *Client) DelegateSidecar(
 		Subject: subject, TTLSeconds: int64(ttl / time.Second),
 		Capabilities: append([]protocol.Capability(nil), capabilities...),
 	}
-	if err := client.request(ctx, protocol.MethodDelegateSidecarCapability, protocol.RouteDelegateSidecarCapability, request, &response); err != nil {
+	if err := client.request(ctx, protocol.SchemeDelegateSidecarCapability, protocol.MethodDelegateSidecarCapability, protocol.RouteDelegateSidecarCapability, request, &response); err != nil {
 		return protocol.DelegateResponse{}, err
 	}
 	return response, nil
@@ -82,7 +82,7 @@ func (client *Client) DelegateSidecar(
 func (client *Client) PrepareLatest(ctx context.Context) (protocol.UpdateTransitionResponse, error) {
 	var response protocol.UpdateTransitionResponse
 	request := protocol.UpdateTransitionRequest{Action: protocol.UpdateActionPrepareLatest}
-	if err := client.request(ctx, protocol.MethodPrepareLatestUpdate, protocol.RoutePrepareLatestUpdate, request, &response); err != nil {
+	if err := client.request(ctx, protocol.SchemePrepareLatestUpdate, protocol.MethodPrepareLatestUpdate, protocol.RoutePrepareLatestUpdate, request, &response); err != nil {
 		return protocol.UpdateTransitionResponse{}, err
 	}
 	return response, nil
@@ -91,7 +91,7 @@ func (client *Client) PrepareLatest(ctx context.Context) (protocol.UpdateTransit
 func (client *Client) Renew(ctx context.Context, ttl time.Duration) (protocol.RenewResponse, error) {
 	var response protocol.RenewResponse
 	request := protocol.RenewRequest{TTLSeconds: int64(ttl / time.Second)}
-	if err := client.request(ctx, protocol.MethodRenewCapability, protocol.RouteRenewCapability, request, &response); err != nil {
+	if err := client.request(ctx, protocol.SchemeRenewCapability, protocol.MethodRenewCapability, protocol.RouteRenewCapability, request, &response); err != nil {
 		return protocol.RenewResponse{}, err
 	}
 	client.setToken(response.Token)
@@ -104,7 +104,7 @@ func (client *Client) setToken(token string) {
 	client.tokenMu.Unlock()
 }
 
-func (client *Client) request(ctx context.Context, method, requestPath string, body, output any) error {
+func (client *Client) request(ctx context.Context, scheme, method, requestPath string, body, output any) error {
 	var encoded []byte
 	var err error
 	if body != nil {
@@ -113,7 +113,7 @@ func (client *Client) request(ctx context.Context, method, requestPath string, b
 			return err
 		}
 	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://"+client.descriptor.Address+requestPath, bytes.NewReader(encoded))
+	request, err := http.NewRequestWithContext(ctx, method, scheme+"://"+client.descriptor.Address+requestPath, bytes.NewReader(encoded))
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ type Registration struct {
 	Namespace  string
 	App        string
 	InstanceID string
-	Mode       string
+	Mode       protocol.LifecycleMode
 	Source     string
 }
 
@@ -369,7 +369,7 @@ func dialConnection(
 	token string,
 	registration Registration,
 ) (*websocket.Conn, error) {
-	endpoint := url.URL{Scheme: "ws", Host: descriptor.Address, Path: protocol.RouteRegisterSession}
+	endpoint := url.URL{Scheme: protocol.SchemeRegisterSession, Host: descriptor.Address, Path: protocol.RouteRegisterSession}
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+token)
 	connection, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint.String(), headers)

@@ -27,7 +27,9 @@ type Options struct {
 	Token        string
 	Channel      string
 	Namespace    string
-	Mode         string
+	App          string
+	Mode         protocol.LifecycleMode
+	Presentation protocol.Presentation
 	Source       string
 	Plan         runtimetopology.Plan
 	ReadyTimeout time.Duration
@@ -66,7 +68,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 		return err
 	}
 	if options.Descriptor.Protocol != protocol.Version || options.Token == "" || options.Channel == "" ||
-		options.Namespace == "" || options.Mode == "" || options.Source == "" {
+		options.Namespace == "" || options.App == "" || !options.Mode.Valid() || !options.Presentation.Valid() || options.Source == "" {
 		return fmt.Errorf("runtime host requires a complete sidecar launch envelope")
 	}
 	if options.ReadyTimeout <= 0 {
@@ -80,7 +82,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 	}
 
 	session, err := client.DialSession(ctx, options.Descriptor, options.Token, client.Registration{
-		Channel: options.Channel, Namespace: options.Namespace, App: "runtime", Mode: options.Mode, Source: options.Source,
+		Channel: options.Channel, Namespace: options.Namespace, App: options.App, Mode: options.Mode, Source: options.Source,
 	})
 	if err != nil {
 		return fmt.Errorf("register aggregate runtime: %w", err)
@@ -223,13 +225,17 @@ func startProcess(
 	exits chan<- processExit,
 ) error {
 	definition := managed.definition
+	profile, err := lifecycleProfile(options.Mode)
+	if err != nil {
+		return err
+	}
 	delegated, err := control.DelegateSidecar(ctx, definition.App, sessionCapabilityTTL, definition.Capabilities)
 	if err != nil {
 		return fmt.Errorf("delegate capability: %w", err)
 	}
 	launchEnvironment, err := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
-		Control: options.Descriptor, Token: delegated.Token, Channel: options.Channel,
-		Namespace: options.Namespace, Mode: options.Mode, Source: options.Source,
+		App: definition.App, Control: options.Descriptor, Token: delegated.Token, Channel: options.Channel,
+		Namespace: options.Namespace, Mode: options.Mode, Presentation: options.Presentation, Source: options.Source,
 	})
 	if err != nil {
 		return err
@@ -240,7 +246,7 @@ func startProcess(
 		Directory:  definition.WorkingDirectory,
 		Stdout:     options.Stdout,
 		Stderr:     options.Stderr,
-		Profile:    lifecycle.Profile(options.Mode),
+		Profile:    profile,
 		Sandbox:    definition.Sandbox,
 		Env:        environment.Merge(os.Environ(), definition.UnsetEnv, definition.Env, launchEnvironment),
 	})
@@ -255,6 +261,21 @@ func startProcess(
 		exits <- processExit{app: app, generation: generation, err: command.Wait()}
 	}(definition.App, command)
 	return nil
+}
+
+func lifecycleProfile(mode protocol.LifecycleMode) (lifecycle.Profile, error) {
+	switch mode {
+	case protocol.LifecycleModeProduction:
+		return lifecycle.ProfileProduction, nil
+	case protocol.LifecycleModePackaged:
+		return lifecycle.ProfilePackaged, nil
+	case protocol.LifecycleModeDev:
+		return lifecycle.ProfileDevelopment, nil
+	case protocol.LifecycleModeHarness:
+		return lifecycle.ProfileHarness, nil
+	default:
+		return "", fmt.Errorf("unsupported runtime lifecycle mode %q", mode)
+	}
 }
 
 func scheduleRestart(managed *managedProcess, restarts chan<- restartRequest) {

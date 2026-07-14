@@ -42,6 +42,18 @@ enum UpdateStatus {
   prepared: "prepared",
 }
 
+enum LifecycleMode {
+  production: "production",
+  packaged: "packaged",
+  development: "dev",
+  harness: "harness",
+}
+
+enum Presentation {
+  interactive: "interactive",
+  headless: "headless",
+}
+
 model ControlDescriptor {
   schema: 1;
   protocol: "sidecar.v1";
@@ -53,6 +65,9 @@ model ControlDescriptor {
 }
 
 model SidecarLaunch {
+  @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_APP")
+  @minLength(1) app: string;
+
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_CONTROL")
   control: ControlDescriptor;
 
@@ -66,7 +81,10 @@ model SidecarLaunch {
   @minLength(1) `namespace`: string;
 
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_MODE")
-  @minLength(1) mode: string;
+  mode: LifecycleMode;
+
+  @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_PRESENTATION")
+  presentation: Presentation;
 
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_SOURCE")
   @minLength(1) source: string;
@@ -88,7 +106,7 @@ model SessionStatus {
   @minLength(1) subject: string;
   @minLength(1) app: string;
   @minLength(1) instanceId: string;
-  @minLength(1) mode: string;
+  mode: LifecycleMode;
   @minLength(1) source: string;
   ready: boolean;
   connectedAt: utcDateTime;
@@ -158,7 +176,7 @@ model RegisterEvent {
   @minValue(0) generation: safeint;
   @minLength(1) app: string;
   @minLength(1) instanceId: string;
-  @minLength(1) mode: string;
+  mode: LifecycleMode;
   @minLength(1) source: string;
 }
 
@@ -237,6 +255,7 @@ op status(): BodyResponse<200, Status> | BodyResponse<401, ErrorResponse>;
 
 @route("/v1/sessions/register")
 @get
+@TypeSpec.OpenAPI.extension("x-transport", "websocket")
 @operationId("registerSession")
 @doc("Upgrade to WebSocket; the first frame must be a register event.")
 op registerSession(): EmptyResponse<101> | BodyResponse<401, ErrorResponse>;

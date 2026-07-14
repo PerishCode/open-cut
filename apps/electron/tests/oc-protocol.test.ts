@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 
 import {
   handleOcWebRequest,
   normalizeWebRuntimeUrl,
   OC_WEB_ENTRY_URL,
   toWebRuntimeUrl,
-} from "../src/main/oc-protocol.ts";
+} from "../src/main/oc-protocol.js";
 
 describe("oc:// Web protocol", () => {
   it("keeps one stable renderer entry URL", () => {

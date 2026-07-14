@@ -13,6 +13,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
+	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
 type Check struct {
@@ -77,7 +78,7 @@ func RunBroker(ctx context.Context, workspace string) Report {
 		return finish(report, started)
 	}
 	session, err := client.DialSession(ctx, cellBroker.Descriptor(), token, client.Registration{
-		Channel: identity.Channel, Namespace: identity.Namespace, App: "web", Mode: "harness", Source: "oc-control",
+		Channel: identity.Channel, Namespace: identity.Namespace, App: "web", Mode: protocol.LifecycleModeHarness, Source: "oc-control",
 	})
 	if !check("websocket-register", err) {
 		return finish(report, started)

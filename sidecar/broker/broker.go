@@ -526,7 +526,7 @@ func (broker *Broker) readSession(subject string, registered *session) error {
 
 func (broker *Broker) validRegistration(claims auth.Claims, event protocol.ClientEvent) bool {
 	appMatches := event.App == claims.Subject || claims.Role == protocol.RoleRuntime
-	return event.Type == protocol.EventRegister && event.App != "" && event.InstanceID != "" && appMatches && event.Mode != "" && event.Source != "" &&
+	return event.Type == protocol.EventRegister && event.App != "" && event.InstanceID != "" && appMatches && event.Mode.Valid() && event.Source != "" &&
 		event.Channel == broker.identity.Channel && event.Namespace == broker.identity.Namespace &&
 		event.SessionID == broker.descriptor.SessionID && event.Generation == broker.descriptor.Generation
 }

@@ -41,7 +41,7 @@ func TestBrokerRegistrationReadyAndSingleInstance(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, err := client.DialSession(context.Background(), cellBroker.Descriptor(), token, client.Registration{
-		Channel: "beta", Namespace: "test", App: "web", Mode: "test", Source: "harness",
+		Channel: "beta", Namespace: "test", App: "web", Mode: protocol.LifecycleModeHarness, Source: "harness",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestBrokerStreamsReversibleRevisionedPeerState(t *testing.T) {
 
 	webToken, _ := cellBroker.MintSidecarToken("web", time.Minute)
 	web, err := client.DialSession(context.Background(), cellBroker.Descriptor(), webToken, client.Registration{
-		Channel: "beta", Namespace: "stream", App: "web", InstanceID: "web-instance-1", Mode: "test", Source: "harness",
+		Channel: "beta", Namespace: "stream", App: "web", InstanceID: "web-instance-1", Mode: protocol.LifecycleModeHarness, Source: "harness",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestBrokerStreamsReversibleRevisionedPeerState(t *testing.T) {
 	defer web.Close(0)
 	observerToken, _ := cellBroker.MintSidecarToken("electron", time.Minute)
 	observer, err := client.DialSession(context.Background(), cellBroker.Descriptor(), observerToken, client.Registration{
-		Channel: "beta", Namespace: "stream", App: "electron", InstanceID: "electron-instance-1", Mode: "test", Source: "harness",
+		Channel: "beta", Namespace: "stream", App: "electron", InstanceID: "electron-instance-1", Mode: protocol.LifecycleModeHarness, Source: "harness",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestGoSessionReconnectsAndReplaysDesiredState(t *testing.T) {
 	defer cellBroker.Close()
 	token, _ := cellBroker.MintSidecarToken("api", time.Minute)
 	session, err := client.DialSession(context.Background(), cellBroker.Descriptor(), token, client.Registration{
-		Channel: "beta", Namespace: "reconnect", App: "api", InstanceID: "api-instance-1", Mode: "test", Source: "harness",
+		Channel: "beta", Namespace: "reconnect", App: "api", InstanceID: "api-instance-1", Mode: protocol.LifecycleModeHarness, Source: "harness",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -300,7 +300,7 @@ func TestRuntimeDelegatesAppBoundChildCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, err := client.DialSession(context.Background(), cellBroker.Descriptor(), delegated.Token, client.Registration{
-		Channel: "beta", Namespace: "delegation", App: "api", Mode: "test", Source: "payload",
+		Channel: "beta", Namespace: "delegation", App: "api", Mode: protocol.LifecycleModeHarness, Source: "payload",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestRuntimeDelegatesAppBoundChildCapability(t *testing.T) {
 		t.Fatal("delegated child capability delegated again")
 	}
 	if _, err := client.DialSession(context.Background(), cellBroker.Descriptor(), delegated.Token, client.Registration{
-		Channel: "beta", Namespace: "delegation", App: "web", Mode: "test", Source: "payload",
+		Channel: "beta", Namespace: "delegation", App: "web", Mode: protocol.LifecycleModeHarness, Source: "payload",
 	}); err == nil {
 		t.Fatal("api-bound child token registered as web")
 	}

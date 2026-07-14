@@ -27,6 +27,9 @@ local policy to justify one.
   `oc-control protocol generate` owns OpenAPI, JSON Schema, Go, and TypeScript
   artifacts; never edit generated protocol files directly. CI uses
   `oc-control protocol check` to reject drift.
+- Generated TypeScript protocol types, constants, schemas, and decoders live in
+  `packages/sidecar-protocol`; transport and reconciliation mechanics live in
+  `packages/sidecar-client`.
 - `apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
   `apps/api/sidecar/index.ts` are the sole sidecar-mode source entries for those apps.
 - They compile to `dist/sidecar/index.js`. Development, packaged execution, and

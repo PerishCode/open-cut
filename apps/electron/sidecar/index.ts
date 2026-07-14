@@ -1,4 +1,5 @@
-import { SidecarConnection, controlCommand, type SessionStatus } from "@open-cut/sidecar-client";
+import { runtimePeer } from "@open-cut/contracts";
+import { SidecarConnection, controlCommand, presentation, type SessionStatus } from "@open-cut/sidecar-client";
 import { app } from "electron";
 import { startElectronApp, type ElectronApp } from "../src/main/app.js";
 import { registerOcWebProtocol, type OcWebProtocol } from "../src/main/oc-protocol-electron.js";
@@ -10,7 +11,6 @@ let unsubscribe: (() => void) | undefined;
 let stopping: Promise<void> | undefined;
 let webLease: string | undefined;
 let reconciliation = Promise.resolve();
-const headless = process.env.OC_DELIVERY_HEADLESS === "1";
 
 function stop(code = 0, requestCellShutdown = false): Promise<void> {
   stopping ??= (async () => {
@@ -32,7 +32,9 @@ function stop(code = 0, requestCellShutdown = false): Promise<void> {
 
 async function reconcileWeb(web: SessionStatus | undefined): Promise<void> {
   if (stopping) return;
-  const endpoint = web?.ready ? web.endpoints?.find((candidate) => candidate.name === "http")?.url : undefined;
+  const endpoint = web?.ready
+    ? web.endpoints?.find((candidate) => candidate.name === runtimePeer.web.httpEndpoint)?.url
+    : undefined;
   if (!web?.ready || !endpoint) {
     if (webLease === undefined) return;
     webLease = undefined;
@@ -59,20 +61,19 @@ async function reconcileWeb(web: SessionStatus | undefined): Promise<void> {
 
 async function main(): Promise<void> {
   sidecar = await SidecarConnection.connect({
-    app: "electron",
     onCommand: async (command) => {
       if (command === controlCommand.show) electron?.show();
       if (command === controlCommand.shutdown) await stop();
     },
   });
 
-  if (headless) {
+  if (sidecar.presentation === presentation.headless) {
     await app.whenReady();
     headlessWeb = registerOcWebProtocol();
   } else {
     electron = await startElectronApp();
   }
-  unsubscribe = sidecar.watchApp("web", (web) => {
+  unsubscribe = sidecar.watchApp(runtimePeer.web.app, (web) => {
     reconciliation = reconciliation
       .then(() => reconcileWeb(web))
       .catch(async (error: unknown) => {

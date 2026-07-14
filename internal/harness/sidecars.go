@@ -72,13 +72,15 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 			return finish(report, started)
 		}
 		launchEnvironment, launchErr := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
-			Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
-			Namespace: identity.Namespace, Mode: string(lifecycle.ProfileHarness), Source: "oc-control",
+			App: app, Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
+			Namespace: identity.Namespace, Mode: protocol.LifecycleModeHarness,
+			Presentation: protocol.PresentationHeadless, Source: "oc-control",
 		})
 		if !check("encode-"+app+"-launch-envelope", launchErr) {
 			return finish(report, started)
 		}
 		entry := filepath.Join(repositoryRoot, "apps", app, "dist", "sidecar", "index.js")
+		appRoot := filepath.Join(repositoryRoot, "apps", app)
 		if _, statErr := os.Stat(entry); !check(app+"-entry-exists", statErr) {
 			return finish(report, started)
 		}
@@ -87,9 +89,10 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 			return finish(report, started)
 		}
 		process, startErr := lifecycle.Start(ctx, lifecycle.ProcessSpec{
-			Executable: "node", Args: []string{entry}, Directory: repositoryRoot,
+			Executable: "node", Args: []string{entry}, Directory: appRoot,
 			Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileHarness,
-			Env: launchEnvironment,
+			Presentation: lifecycle.PresentationHeadless,
+			Env:          launchEnvironment,
 		})
 		if !check("start-"+app+"-entry", startErr) {
 			logFile.Close()

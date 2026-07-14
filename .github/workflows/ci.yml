@@ -36,6 +36,7 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: pnpm typecheck
+      - run: pnpm test
 
   native-delivery:
     name: ${{ matrix.target }} delivery

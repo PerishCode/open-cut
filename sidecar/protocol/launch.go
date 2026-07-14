@@ -12,7 +12,8 @@ func (launch SidecarLaunch) Validate() error {
 	if launch.Control.Schema != 1 || launch.Control.Protocol != Version || launch.Control.Address == "" || launch.Control.SessionID == "" {
 		return fmt.Errorf("invalid %s control descriptor", Version)
 	}
-	if launch.Token == "" || launch.Channel == "" || launch.Namespace == "" || launch.Mode == "" || launch.Source == "" {
+	if launch.App == "" || launch.Token == "" || launch.Channel == "" || launch.Namespace == "" ||
+		!launch.Mode.Valid() || !launch.Presentation.Valid() || launch.Source == "" {
 		return fmt.Errorf("incomplete %s launch envelope", Version)
 	}
 	return nil
@@ -27,12 +28,14 @@ func LaunchEnvironmentMap(launch SidecarLaunch) (map[string]string, error) {
 		return nil, err
 	}
 	return map[string]string{
-		SidecarEnvControl:   string(descriptor),
-		SidecarEnvToken:     launch.Token,
-		SidecarEnvChannel:   launch.Channel,
-		SidecarEnvNamespace: launch.Namespace,
-		SidecarEnvMode:      launch.Mode,
-		SidecarEnvSource:    launch.Source,
+		SidecarEnvApp:          launch.App,
+		SidecarEnvControl:      string(descriptor),
+		SidecarEnvToken:        launch.Token,
+		SidecarEnvChannel:      launch.Channel,
+		SidecarEnvNamespace:    launch.Namespace,
+		SidecarEnvMode:         string(launch.Mode),
+		SidecarEnvPresentation: string(launch.Presentation),
+		SidecarEnvSource:       launch.Source,
 	}, nil
 }
 
@@ -50,12 +53,27 @@ func LoadLaunchEnvironment() (SidecarLaunch, error) {
 		return SidecarLaunch{}, fmt.Errorf("decode sidecar control descriptor: %w", err)
 	}
 	launch := SidecarLaunch{
-		Control:   descriptor,
-		Token:     os.Getenv(SidecarEnvToken),
-		Channel:   os.Getenv(SidecarEnvChannel),
-		Namespace: os.Getenv(SidecarEnvNamespace),
-		Mode:      os.Getenv(SidecarEnvMode),
-		Source:    os.Getenv(SidecarEnvSource),
+		App:          os.Getenv(SidecarEnvApp),
+		Control:      descriptor,
+		Token:        os.Getenv(SidecarEnvToken),
+		Channel:      os.Getenv(SidecarEnvChannel),
+		Namespace:    os.Getenv(SidecarEnvNamespace),
+		Mode:         LifecycleMode(os.Getenv(SidecarEnvMode)),
+		Presentation: Presentation(os.Getenv(SidecarEnvPresentation)),
+		Source:       os.Getenv(SidecarEnvSource),
 	}
 	return launch, launch.Validate()
+}
+
+func (mode LifecycleMode) Valid() bool {
+	switch mode {
+	case LifecycleModeProduction, LifecycleModePackaged, LifecycleModeDev, LifecycleModeHarness:
+		return true
+	default:
+		return false
+	}
+}
+
+func (presentation Presentation) Valid() bool {
+	return presentation == PresentationInteractive || presentation == PresentationHeadless
 }

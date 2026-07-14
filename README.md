@@ -48,7 +48,8 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   unexpectedly exited peers without changing ownership boundaries.
 - The sidecar wire contract is authored only in `protocol/sidecar/v1/main.tsp`.
   `oc-control protocol generate` produces OpenAPI, JSON Schema, and the Go/TypeScript
-  bindings; `oc-control protocol check` rejects generated drift.
+  bindings and decoders in `packages/sidecar-protocol`; transport and reconciliation
+  stay in `packages/sidecar-client`. `oc-control protocol check` rejects generated drift.
 - `pack` discovers every app sidecar from its unique source entry, deploys their
   production trees, generates a platform-resolved generic runtime topology,
   builds the Electron full pack, and archives it with the versioned launcher.
@@ -113,5 +114,6 @@ Run repository checks with:
 ```sh
 go test ./...
 pnpm typecheck
+pnpm test
 oc-control protocol check
 ```

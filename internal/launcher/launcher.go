@@ -60,6 +60,10 @@ func RunB0(ctx context.Context, options B0Options) error {
 	if options.Stderr == nil {
 		options.Stderr = io.Discard
 	}
+	presentation, err := lifecycle.ResolvePresentation(os.Environ())
+	if err != nil {
+		return err
+	}
 
 	bootstrap, err := config.LoadBootstrap(options.BootstrapPath)
 	if err != nil {
@@ -129,7 +133,7 @@ func RunB0(ctx context.Context, options B0Options) error {
 			}
 			continue
 		}
-		if err := runManagedRelease(ctx, options, bootstrap, identity, paths, cellBroker, runtimeState, selected, isCandidate); err != nil {
+		if err := runManagedRelease(ctx, options, bootstrap, identity, paths, cellBroker, runtimeState, selected, isCandidate, presentation); err != nil {
 			return err
 		}
 		next, err := state.Load(paths.StateFile, identity.Channel)
@@ -159,6 +163,7 @@ func runManagedRelease(
 	runtimeState state.Runtime,
 	selected string,
 	isCandidate bool,
+	presentation lifecycle.Presentation,
 ) error {
 	versionRoot := filepath.Join(paths.Versions, selected)
 	manifestPath := filepath.Join(versionRoot, "manifest.json")
@@ -181,8 +186,9 @@ func runManagedRelease(
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
 	}
 	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
-		Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
-		Namespace: identity.Namespace, Mode: string(lifecycle.ProfilePackaged), Source: "launcher",
+		App: "runtime", Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
+		Namespace: identity.Namespace, Mode: protocol.LifecycleModePackaged,
+		Presentation: sidecarPresentation(presentation), Source: "launcher",
 	})
 	if err != nil {
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
@@ -258,6 +264,13 @@ func runManagedRelease(
 	return <-exited
 }
 
+func sidecarPresentation(value lifecycle.Presentation) protocol.Presentation {
+	if value == lifecycle.PresentationHeadless {
+		return protocol.PresentationHeadless
+	}
+	return protocol.PresentationInteractive
+}
+
 type L1Options struct {
 	ManifestPath string
 	Stdout       io.Writer
@@ -291,7 +304,7 @@ func RunL1(ctx context.Context, options L1Options) error {
 	return runtimehost.Run(ctx, runtimehost.Options{
 		Descriptor: launch.Control, Token: launch.Token,
 		Channel: launch.Channel, Namespace: launch.Namespace,
-		Mode: launch.Mode, Source: launch.Source,
+		App: launch.App, Mode: launch.Mode, Presentation: launch.Presentation, Source: launch.Source,
 		Plan: plan, Stdout: options.Stdout, Stderr: options.Stderr,
 	}, nil)
 }

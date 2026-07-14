@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.sidecar.json",
-    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@open-cut/contracts": "workspace:*",
     "@open-cut/sidecar-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "vitest": "4.1.10"
   }
 }

@@ -13,6 +13,9 @@ type openAPIDocument struct {
 	Info struct {
 		Version string `json:"version"`
 	} `json:"info"`
+	Servers []struct {
+		URL string `json:"url"`
+	} `json:"servers"`
 	Paths      map[string]map[string]json.RawMessage `json:"paths"`
 	Components struct {
 		Schemas map[string]schema `json:"schemas"`
@@ -21,27 +24,34 @@ type openAPIDocument struct {
 
 type operation struct {
 	OperationID string `json:"operationId"`
+	Transport   string `json:"x-transport"`
 }
 
 type schema struct {
-	Ref         string            `json:"$ref"`
-	Type        string            `json:"type"`
-	Format      string            `json:"format"`
-	Enum        []any             `json:"enum"`
-	AnyOf       []schema          `json:"anyOf"`
-	OneOf       []schema          `json:"oneOf"`
-	AllOf       []schema          `json:"allOf"`
-	Properties  map[string]schema `json:"properties"`
-	Required    []string          `json:"required"`
-	Items       *schema           `json:"items"`
-	Minimum     *float64          `json:"minimum"`
-	Environment string            `json:"x-environment"`
+	Ref                  string            `json:"$ref,omitempty"`
+	Type                 string            `json:"type,omitempty"`
+	Format               string            `json:"format,omitempty"`
+	Enum                 []any             `json:"enum,omitempty"`
+	AnyOf                []schema          `json:"anyOf,omitempty"`
+	OneOf                []schema          `json:"oneOf,omitempty"`
+	AllOf                []schema          `json:"allOf,omitempty"`
+	Properties           map[string]schema `json:"properties,omitempty"`
+	Required             []string          `json:"required,omitempty"`
+	Items                *schema           `json:"items,omitempty"`
+	Minimum              *float64          `json:"minimum,omitempty"`
+	Maximum              *float64          `json:"maximum,omitempty"`
+	MinLength            *int              `json:"minLength,omitempty"`
+	MaxLength            *int              `json:"maxLength,omitempty"`
+	UniqueItems          bool              `json:"uniqueItems,omitempty"`
+	Environment          string            `json:"x-environment,omitempty"`
+	AdditionalProperties any               `json:"additionalProperties,omitempty"`
 }
 
 type route struct {
 	OperationID string
 	Method      string
 	Path        string
+	Scheme      string
 }
 
 type environmentBinding struct {
@@ -113,6 +123,10 @@ func rewriteBundledReferences(value any, definitions map[string]any) {
 }
 
 func (document openAPIDocument) routes() ([]route, error) {
+	requestScheme, err := document.requestScheme()
+	if err != nil {
+		return nil, err
+	}
 	routes := make([]route, 0, len(document.Paths))
 	for routePath, item := range document.Paths {
 		for method, raw := range item {
@@ -126,11 +140,34 @@ func (document openAPIDocument) routes() ([]route, error) {
 			if candidate.OperationID == "" {
 				return nil, fmt.Errorf("%s %s has no operationId", method, routePath)
 			}
-			routes = append(routes, route{OperationID: candidate.OperationID, Method: strings.ToUpper(method), Path: routePath})
+			scheme := requestScheme
+			switch candidate.Transport {
+			case "":
+			case "websocket":
+				if requestScheme == "https" {
+					scheme = "wss"
+				} else {
+					scheme = "ws"
+				}
+			default:
+				return nil, fmt.Errorf("%s %s has unsupported x-transport %q", method, routePath, candidate.Transport)
+			}
+			routes = append(routes, route{OperationID: candidate.OperationID, Method: strings.ToUpper(method), Path: routePath, Scheme: scheme})
 		}
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].OperationID < routes[j].OperationID })
 	return routes, nil
+}
+
+func (document openAPIDocument) requestScheme() (string, error) {
+	if len(document.Servers) == 0 {
+		return "", fmt.Errorf("generated OpenAPI has no server URL")
+	}
+	scheme, _, found := strings.Cut(document.Servers[0].URL, "://")
+	if !found || scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("generated OpenAPI has unsupported server URL %q", document.Servers[0].URL)
+	}
+	return scheme, nil
 }
 
 func (document openAPIDocument) schemaNames() []string {

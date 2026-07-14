@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
+
+	"github.com/PerishCode/open-cut/utils/environment"
 )
 
 type Profile string
@@ -24,16 +27,25 @@ const (
 	SandboxChromium SandboxPolicy = "chromium"
 )
 
+type Presentation string
+
+const (
+	PresentationInteractive Presentation = "interactive"
+	PresentationHeadless    Presentation = "headless"
+	presentationEnvironment              = "OC_LIFECYCLE_PRESENTATION"
+)
+
 type ProcessSpec struct {
-	Executable string
-	Args       []string
-	Directory  string
-	Env        []string
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Profile    Profile
-	Sandbox    SandboxPolicy
-	Detached   bool
+	Executable   string
+	Args         []string
+	Directory    string
+	Env          []string
+	Stdout       io.Writer
+	Stderr       io.Writer
+	Profile      Profile
+	Presentation Presentation
+	Sandbox      SandboxPolicy
+	Detached     bool
 }
 
 type Process struct {
@@ -113,6 +125,16 @@ func resolveProcessSpec(spec ProcessSpec) (ProcessSpec, error) {
 	if spec.Env == nil {
 		spec.Env = os.Environ()
 	}
+	inheritedPresentation, err := ResolvePresentation(spec.Env)
+	if err != nil {
+		return ProcessSpec{}, err
+	}
+	if spec.Presentation == "" {
+		spec.Presentation = inheritedPresentation
+	} else if spec.Presentation != PresentationInteractive && spec.Presentation != PresentationHeadless {
+		return ProcessSpec{}, fmt.Errorf("unsupported presentation %q", spec.Presentation)
+	}
+	spec.Env = environment.Merge(spec.Env, nil, map[string]string{presentationEnvironment: string(spec.Presentation)})
 	if spec.Stdout == nil {
 		spec.Stdout = io.Discard
 	}
@@ -120,4 +142,18 @@ func resolveProcessSpec(spec ProcessSpec) (ProcessSpec, error) {
 		spec.Stderr = io.Discard
 	}
 	return applyPlatformProcessPolicy(spec), nil
+}
+
+func ResolvePresentation(values []string) (Presentation, error) {
+	presentation := PresentationInteractive
+	for _, entry := range values {
+		name, value, found := strings.Cut(entry, "=")
+		if found && strings.EqualFold(name, presentationEnvironment) {
+			presentation = Presentation(value)
+		}
+	}
+	if presentation != PresentationInteractive && presentation != PresentationHeadless {
+		return "", fmt.Errorf("unsupported presentation %q", presentation)
+	}
+	return presentation, nil
 }

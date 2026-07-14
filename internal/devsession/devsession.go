@@ -86,7 +86,8 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	go func() {
 		done <- runtimehost.Run(ctx, runtimehost.Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
-			Channel: identity.Channel, Namespace: identity.Namespace, Mode: "dev", Source: "oc-control",
+			Channel: identity.Channel, Namespace: identity.Namespace, App: "runtime",
+			Mode: protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
 			Plan: plan, Stdout: stdout, Stderr: stderr,
 		}, runtimeReady)
 	}()
