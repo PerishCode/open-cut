@@ -98,6 +98,9 @@ func (installer Installer) Recover(bootstrap config.Bootstrap, paths layout.Cell
 	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
 		return fmt.Errorf("recover runtime topology: %w", err)
 	}
+	if _, err := release.ResolveCLI(installedRoot, manifest); err != nil {
+		return fmt.Errorf("recover product CLI: %w", err)
+	}
 	prepared, err := state.Prepare(runtimeState, bootstrap.Channel, entry.Version)
 	if err != nil {
 		return err

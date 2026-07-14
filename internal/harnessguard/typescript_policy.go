@@ -61,6 +61,7 @@ func inspectWebSource(path string, tokens []sourceToken) []Violation {
 	var violations []Violation
 	library := strings.HasPrefix(path, "apps/web/src/lib/")
 	business := strings.HasPrefix(path, "apps/web/src/components/") || strings.HasPrefix(path, "apps/web/src/views/")
+	application := strings.HasPrefix(path, "apps/web/src/")
 	if library && (filepath.Ext(path) == ".tsx" || filepath.Ext(path) == ".jsx") {
 		violations = append(violations, Violation{Rule: "web-layout", Path: path, Detail: "apps/web/src/lib must use .ts and contain no JSX"})
 	}
@@ -76,10 +77,16 @@ func inspectWebSource(path string, tokens []sourceToken) []Violation {
 				if strings.HasPrefix(specifier, "styled-components") || strings.HasPrefix(specifier, "@emotion/") || strings.HasPrefix(specifier, "tailwindcss") {
 					violations = append(violations, Violation{Rule: "style-boundary", Path: path, Detail: "Web source imports styling runtime " + specifier})
 				}
-				if specifier == "@open-cut/openapi" && !library {
-					violations = append(violations, Violation{Rule: "web-api-boundary", Path: path, Detail: "Only apps/web/src/lib may import @open-cut/openapi"})
+				if application && specifier == "@open-cut/openapi" {
+					violations = append(violations, Violation{Rule: "web-contracts", Path: path, Detail: "Web application source must consume packages/contracts instead of @open-cut/openapi"})
 				}
 			}
+		}
+		if application && token.kind == identifierToken && token.text == "fetch" && callAt(tokens, index) {
+			violations = append(violations, Violation{Rule: "web-contracts", Path: path, Detail: "Web application source must not own fetch transport"})
+		}
+		if application && token.kind == identifierToken && token.text == "EventSource" && callAt(tokens, index) {
+			violations = append(violations, Violation{Rule: "web-contracts", Path: path, Detail: "Web application source must not own EventSource transport"})
 		}
 		if token.kind == identifierToken && (token.text == "css" || token.text == "styled") && taggedTemplateAt(tokens, index) {
 			violations = append(violations, Violation{Rule: "style-boundary", Path: path, Detail: "Web source contains a CSS-in-JS tagged template"})
@@ -102,6 +109,10 @@ func inspectWebSource(path string, tokens []sourceToken) []Violation {
 		}
 	}
 	return violations
+}
+
+func callAt(tokens []sourceToken, index int) bool {
+	return index+1 < len(tokens) && tokens[index+1].text == "("
 }
 
 func inspectAtomicProps(path string, tokens []sourceToken) []Violation {

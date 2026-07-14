@@ -1,4 +1,4 @@
-import { runtimePeer } from "@open-cut/contracts";
+import { runtimePeer } from "@open-cut/contracts/runtime-peer";
 import { controlCommand, SidecarConnection } from "@open-cut/sidecar-client";
 import { startWebServer, type WebServer } from "./server.js";
 

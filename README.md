@@ -3,9 +3,10 @@
 Open Cut is a pnpm application workspace built on a product-independent Go
 cold-start, release, and sidecar-control substrate.
 
-The installer contains only the bootstrap launcher. A launcher-managed release
-is one atomic `launcher + payload` bundle, where the payload is currently a full
-Electron pack but remains opaque to launcher code.
+The installed bootstrap surface contains the platform host, launcher, and a
+stable product-CLI resolver. A launcher-managed release is one atomic
+`launcher + payload` bundle; the opaque payload contains the app runtime and the
+versioned product CLI at `payload/bin/open-cut[.exe]`.
 
 Start with [AGENTS.md](./AGENTS.md) and the specifications under [`specs/`](./specs/).
 
@@ -23,11 +24,17 @@ oc-control clean --scope temp
 oc-control dev
 ```
 
-`oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
-by `packageManager` when needed, performs a frozen workspace install, builds a
-source-fingerprinted checkout CLI, and enables the repository pre-commit hook.
-It never installs or replaces Node. The pinned tools are available through
-`./.oc-control/bin/pnpm` and `./.oc-control/bin/oc-control` afterward.
+`oc-control bootstrap` validates the installed Node and pnpm versions, performs
+a frozen workspace install, and enables the repository pre-commit hook. It never
+installs or replaces development tools. After control source changes, rerun
+`go install ./cmd/oc-control`.
+
+By default `oc-control dev` owns
+`<repo>/.tmp/oc-control/dev/dev/default`; the final two segments are the cell's
+channel and namespace. `--base-dir` may select another clean absolute path with
+the same suffix. The runner passes that final path unchanged, each sidecar
+derives its app directory, and the API stores SQLite at
+`<base-dir>/api/database/open-cut.db`.
 
 The current executable acceptance paths are:
 
@@ -42,7 +49,8 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
 - `broker` exercises the real cell lock, TCP rendezvous, capabilities, WebSocket,
   endpoint publication, READY, and authenticated status.
 - `sidecars` builds and executes the unique web/API sidecar entries against the
-  Go broker, then verifies shared shutdown and clean process exit.
+  Go broker, verifies that API migrations and SQLite initialization finish before
+  READY, then verifies shared shutdown and clean process exit.
 - `cold-start` builds real B0/L1 and fixture payload binaries, performs genesis
   confirmation, rotates the trust root, executes a broker-mediated v1→v2
   steady-state handoff, proves offline last-good boot, and proves pre-READY rollback.
@@ -62,7 +70,8 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   stay in `packages/sidecar-client`. `oc-control protocol check` rejects generated drift.
 - `pack` discovers every app sidecar from its language-neutral manifest, deploys their
   production trees, generates a platform-resolved generic runtime topology,
-  builds the Electron full pack, and archives it with the versioned launcher.
+  builds the Electron full pack and `cmd/cli`, and archives them with the
+  versioned launcher.
 - `full-pack` extracts that real archive and invokes the versioned L1 launcher,
   proving that the same runner starts independent Electron/web/API peers,
   aggregates READY, publishes endpoints, broadcasts lifecycle control, and exits
@@ -98,12 +107,16 @@ oc-control harness install mac --arch arm64 --workspace "$workspace" \
   --origin .tmp/delivery/origin --origin-url http://127.0.0.1:41000 \
   --key .tmp/delivery/key.json --headless
 oc-control inspect --receipt "$receipt"
+"$(jq -r .cliPath "$receipt")" status --receipt "$receipt"
 oc-control harness run --workspace "$workspace" --receipt "$receipt" --headless
 oc-control harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
 ```
 
 The receipt lives outside the installed application so uninstall is repeatable.
 `harness run` executes the installed platform host, not a source-tree shortcut.
+The installed CLI resolver reads `runtime.json.active`, dispatches to the fixed
+CLI path in that version, and uses the broker's observe-only token; it neither
+calls nor inherits lifecycle from the product API.
 The public CI builds and verifies native `mac-arm64`, `win-x64`, and `linux-x64`
 full packs; macOS additionally runs the install/offline-relaunch/uninstall loop.
 
@@ -123,10 +136,10 @@ Run repository checks with:
 
 ```sh
 go test ./...
-./.oc-control/bin/pnpm build
-./.oc-control/bin/pnpm format
-./.oc-control/bin/pnpm lint
-./.oc-control/bin/pnpm test
-./.oc-control/bin/oc-control protocol check
-./.oc-control/bin/oc-control harness guard
+pnpm build
+pnpm format
+pnpm lint
+pnpm test
+oc-control protocol check
+oc-control harness guard
 ```

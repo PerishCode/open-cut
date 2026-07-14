@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isAbsolute, join, normalize, relative } from "node:path";
 import {
   type ClientEvent,
   type ControlCommand,
@@ -32,9 +33,25 @@ export type ConnectOptions = {
 type StatusListener = (status: Status) => void;
 type AppStatusListener = (status: SessionStatus | undefined, broker: Status) => void;
 
+const appSegment = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+export function resolveSidecarDataDir(launch: Pick<SidecarLaunch, "app" | "dataDir">): string {
+  if (!isAbsolute(launch.dataDir) || normalize(launch.dataDir) !== launch.dataDir) {
+    throw new Error("sidecar dataDir must be a clean absolute path");
+  }
+  if (!appSegment.test(launch.app)) throw new Error("sidecar app must be a safe path segment");
+  const resolved = join(launch.dataDir, launch.app);
+  const child = relative(launch.dataDir, resolved);
+  if (child === "" || child === ".." || child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
+    throw new Error("sidecar data directory escapes its base path");
+  }
+  return resolved;
+}
+
 export class SidecarConnection {
   readonly #launch: SidecarLaunch;
   readonly #options: ConnectOptions;
+  readonly #dataDir: string;
   readonly #instanceId = randomUUID();
   readonly #listeners = new Set<StatusListener>();
   readonly #endpoints = new Map<string, string>();
@@ -52,6 +69,7 @@ export class SidecarConnection {
   private constructor(options: ConnectOptions, launch: SidecarLaunch) {
     this.#options = options;
     this.#launch = launch;
+    this.#dataDir = resolveSidecarDataDir(launch);
     this.#heartbeat = setInterval(
       () => this.#send({ type: eventType.heartbeat }),
       options.heartbeatIntervalMs ?? 5_000,
@@ -94,6 +112,10 @@ export class SidecarConnection {
 
   get presentation(): SidecarLaunch["presentation"] {
     return this.#launch.presentation;
+  }
+
+  get dataDir(): string {
+    return this.#dataDir;
   }
 
   async shutdownCell(): Promise<number> {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getHealth } from "../src/index.js";
+import { getHealth } from "../src/generated/index.js";
 
 describe("generated OpenAPI client", () => {
   it("keeps the manually selected API ingress", async () => {

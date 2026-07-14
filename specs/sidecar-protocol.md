@@ -63,7 +63,11 @@ The runner may request distinct child tokens from
 cannot delegate again, and never receive update capabilities.
 
 The runner consumes generated topology and performs one delegation request per
-peer subject. It passes only that peer's launch envelope to the process. No
+peer subject. It passes only that peer's launch envelope to the process. The
+envelope includes the required clean absolute `dataDir` received from launcher
+or `oc-control`; topology cannot set or override it. Every sidecar derives its
+sole app data directory as `<dataDir>/<app>` and only the app derives secondary
+paths beneath that directory. No
 cell-wide token is placed in the payload tree or shared between Electron, web,
 API, and the aggregate runtime session. App sidecars never spawn or own peers.
 Base delegated capabilities are READY/lifecycle/observe. A topology process may

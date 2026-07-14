@@ -22,6 +22,7 @@ type InstallLayout struct {
 	InstallRoot         string
 	HostPath            string
 	LauncherPath        string
+	CLIPath             string
 	InternalReceiptPath string
 }
 
@@ -43,6 +44,7 @@ func PrepareNativeInstall(buildTarget target.Target, workspace string, product I
 		InstallRoot:         installRoot,
 		HostPath:            filepath.Join(installRoot, "Contents", "MacOS", product.ExecutableName),
 		LauncherPath:        filepath.Join(installRoot, "Contents", "Resources", "launcher"),
+		CLIPath:             filepath.Join(installRoot, "Contents", "MacOS", "open-cut"),
 		InternalReceiptPath: filepath.Join(installRoot, "Contents", "Resources", "install-receipt.json"),
 	}
 	if _, err := os.Lstat(layout.InstallRoot); err == nil {

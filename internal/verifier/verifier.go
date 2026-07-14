@@ -27,6 +27,7 @@ type Report struct {
 	Size          int64  `json:"size"`
 	LauncherEntry string `json:"launcherEntry"`
 	PayloadEntry  string `json:"payloadEntry"`
+	CLIEntry      string `json:"cliEntry"`
 	OriginRoot    string `json:"originRoot,omitempty"`
 }
 
@@ -65,6 +66,13 @@ func VerifyBundle(path string, expected target.Target) (Report, error) {
 	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
 		return Report{}, err
 	}
+	cliEntry, err := release.CLIEntry(actual)
+	if err != nil {
+		return Report{}, err
+	}
+	if _, err := release.ResolveCLI(tree, manifest); err != nil {
+		return Report{}, err
+	}
 	digest, size, err := bundle.SHA256(absolute)
 	if err != nil {
 		return Report{}, err
@@ -72,6 +80,7 @@ func VerifyBundle(path string, expected target.Target) (Report, error) {
 	return Report{
 		Schema: 1, OK: true, Version: manifest.Version, Target: actual.String(), Bundle: absolute,
 		SHA256: digest, Size: size, LauncherEntry: manifest.Launcher.Entry, PayloadEntry: manifest.Payload.Entry,
+		CLIEntry: cliEntry,
 	}, nil
 }
 

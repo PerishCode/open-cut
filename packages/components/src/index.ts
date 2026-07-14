@@ -1,3 +1,4 @@
+export { Button, type ButtonProps } from "./primitives/button.js";
 export { Heading, type HeadingProps } from "./primitives/heading.js";
 export { Stack, type StackProps } from "./primitives/stack.js";
 export { Status, type StatusProps } from "./primitives/status.js";

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/PerishCode/open-cut/utils/environment"
 )
@@ -13,6 +14,7 @@ func (launch SidecarLaunch) Validate() error {
 		return fmt.Errorf("invalid %s control descriptor", Version)
 	}
 	if launch.App == "" || launch.Token == "" || launch.Channel == "" || launch.Namespace == "" ||
+		!filepath.IsAbs(launch.DataDir) || filepath.Clean(launch.DataDir) != launch.DataDir ||
 		!launch.Mode.Valid() || !launch.Presentation.Valid() || launch.Source == "" {
 		return fmt.Errorf("incomplete %s launch envelope", Version)
 	}
@@ -33,6 +35,7 @@ func LaunchEnvironmentMap(launch SidecarLaunch) (map[string]string, error) {
 		SidecarEnvToken:        launch.Token,
 		SidecarEnvChannel:      launch.Channel,
 		SidecarEnvNamespace:    launch.Namespace,
+		SidecarEnvDataDir:      launch.DataDir,
 		SidecarEnvMode:         string(launch.Mode),
 		SidecarEnvPresentation: string(launch.Presentation),
 		SidecarEnvSource:       launch.Source,
@@ -58,6 +61,7 @@ func LoadLaunchEnvironment() (SidecarLaunch, error) {
 		Token:        os.Getenv(SidecarEnvToken),
 		Channel:      os.Getenv(SidecarEnvChannel),
 		Namespace:    os.Getenv(SidecarEnvNamespace),
+		DataDir:      os.Getenv(SidecarEnvDataDir),
 		Mode:         LifecycleMode(os.Getenv(SidecarEnvMode)),
 		Presentation: Presentation(os.Getenv(SidecarEnvPresentation)),
 		Source:       os.Getenv(SidecarEnvSource),

@@ -14,7 +14,10 @@ import (
 )
 
 func TestHealthContract(t *testing.T) {
-	mux, api := controller.NewRouter(service.NewHealth(repository.StaticHealth{}))
+	mux, api := controller.NewRouter(
+		service.NewHealth(repository.StaticHealth{}),
+		service.NewProjects(repository.NewMemoryProjects()),
+	)
 	request := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)

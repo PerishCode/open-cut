@@ -5,16 +5,16 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/generated/index.d.ts",
+      "default": "./dist/generated/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json --noEmit",
     "check": "node scripts/check.ts",
-    "format": "biome check --write scripts src/index.ts tests",
+    "format": "biome check --write scripts tests",
     "generate": "node scripts/generate.ts",
-    "lint": "biome check scripts src/index.ts tests",
+    "lint": "biome check scripts tests",
     "test": "node scripts/check.ts && vitest run"
   },
   "devDependencies": {

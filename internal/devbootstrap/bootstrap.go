@@ -14,9 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PerishCode/open-cut/internal/sourcefingerprint"
 	"github.com/PerishCode/open-cut/lifecycle"
-	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
 )
 
@@ -35,24 +33,13 @@ type ToolResult struct {
 	Version string `json:"version"`
 }
 
-type PackageManagerResult struct {
-	ToolResult
-	Managed bool `json:"managed"`
-}
-
-type ControlResult struct {
-	Path              string `json:"path"`
-	SourceFingerprint string `json:"sourceFingerprint"`
-}
-
 type Result struct {
-	Schema       int                  `json:"schema"`
-	Repository   string               `json:"repository"`
-	Node         ToolResult           `json:"node"`
-	Pnpm         PackageManagerResult `json:"pnpm"`
-	Control      ControlResult        `json:"control"`
-	HooksPath    string               `json:"hooksPath"`
-	Dependencies string               `json:"dependencies"`
+	Schema       int        `json:"schema"`
+	Repository   string     `json:"repository"`
+	Node         ToolResult `json:"node"`
+	Pnpm         ToolResult `json:"pnpm"`
+	HooksPath    string     `json:"hooksPath"`
+	Dependencies string     `json:"dependencies"`
 }
 
 type manifest struct {
@@ -75,34 +62,25 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		stderr = io.Discard
 	}
 
-	nodePath, err := tool.Resolve("node")
+	nodeInfo, err := tool.Inspect(ctx, "node")
 	if err != nil {
-		return Result{}, fmt.Errorf("Node is a cold-start prerequisite: %w", err)
-	}
-	nodeCommand := tool.Command{Executable: nodePath}
-	nodeInfo, err := tool.InspectCommand(ctx, "node", nodeCommand)
-	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("Node is a development prerequisite: %w", err)
 	}
 	if !satisfiesNodeRequirement(nodeInfo.Version, requirements.NodeRequirement) {
 		return Result{}, fmt.Errorf("Node %s does not satisfy package.json engines.node %q", nodeInfo.Version, requirements.NodeRequirement)
 	}
 
-	pnpmCommand, pnpmManaged, err := ensurePnpm(ctx, root, nodeCommand, requirements.PnpmVersion, stdout, stderr)
+	pnpmInfo, err := tool.Inspect(ctx, "pnpm")
 	if err != nil {
-		return Result{}, err
-	}
-	pnpmInfo, err := tool.InspectCommand(ctx, "pnpm", pnpmCommand)
-	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("pnpm is a development prerequisite: %w", err)
 	}
 	if strings.TrimPrefix(pnpmInfo.Version, "v") != requirements.PnpmVersion {
 		return Result{}, fmt.Errorf("pnpm %s does not match packageManager pnpm@%s", pnpmInfo.Version, requirements.PnpmVersion)
 	}
 
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: pnpmCommand.Executable,
-		Args:       pnpmCommand.Arguments("install", "--frozen-lockfile"),
+		Executable: pnpmInfo.Path,
+		Args:       []string{"install", "--frozen-lockfile"},
 		Directory:  root,
 		Stdout:     stdout,
 		Stderr:     stderr,
@@ -110,94 +88,18 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	}); err != nil {
 		return Result{}, fmt.Errorf("install workspace dependencies: %w", err)
 	}
-	controlCommand, fingerprint, err := buildRepositoryControl(ctx, root, stdout, stderr)
-	if err != nil {
-		return Result{}, err
-	}
-	if err := tool.WriteRepositoryShims(root, map[string]tool.Command{
-		"oc-control": controlCommand,
-		"pnpm":       pnpmCommand,
-	}); err != nil {
-		return Result{}, err
-	}
-	repositoryPnpmCommand, err := tool.RepositoryShimCommand(root, "pnpm")
-	if err != nil {
-		return Result{}, err
-	}
-	repositoryControlCommand, err := tool.RepositoryShimCommand(root, "oc-control")
-	if err != nil {
-		return Result{}, err
-	}
 	if err := configureHooks(ctx, root); err != nil {
-		return Result{}, err
-	}
-	if err := tool.SaveRepositoryState(root, tool.RepositoryState{
-		Schema: tool.RepositoryStateSchema,
-		Tools: map[string]tool.Command{
-			"oc-control": repositoryControlCommand,
-			"pnpm":       repositoryPnpmCommand,
-		},
-	}); err != nil {
 		return Result{}, err
 	}
 
 	return Result{
-		Schema:     ResultSchema,
-		Repository: root,
-		Node:       ToolResult{Path: nodeInfo.Path, Version: nodeInfo.Version},
-		Pnpm: PackageManagerResult{
-			ToolResult: ToolResult{Path: pnpmInfo.Path, Version: pnpmInfo.Version},
-			Managed:    pnpmManaged,
-		},
-		Control:      ControlResult{Path: repositoryControlCommand.Executable, SourceFingerprint: fingerprint},
+		Schema:       ResultSchema,
+		Repository:   root,
+		Node:         ToolResult{Path: nodeInfo.Path, Version: nodeInfo.Version},
+		Pnpm:         ToolResult{Path: pnpmInfo.Path, Version: pnpmInfo.Version},
 		HooksPath:    ".githooks",
 		Dependencies: "installed",
 	}, nil
-}
-
-func buildRepositoryControl(
-	ctx context.Context,
-	root string,
-	stdout, stderr io.Writer,
-) (tool.Command, string, error) {
-	fingerprint, err := sourcefingerprint.Calculate(root)
-	if err != nil {
-		return tool.Command{}, "", err
-	}
-	toolRoot := filepath.Join(root, ".oc-control", "tools", "oc-control", fingerprint)
-	artifact := filepath.Join(toolRoot, target.Host().ExecutableName("oc-control"))
-	if info, statErr := os.Stat(artifact); statErr == nil && info.Mode().IsRegular() {
-		return tool.Command{Executable: artifact}, fingerprint, nil
-	}
-	goPath, err := tool.Resolve("go")
-	if err != nil {
-		return tool.Command{}, "", fmt.Errorf("Go is a cold-start prerequisite: %w", err)
-	}
-	parent := filepath.Dir(toolRoot)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return tool.Command{}, "", fmt.Errorf("create control tool root: %w", err)
-	}
-	staging, err := os.MkdirTemp(parent, ".oc-control-bootstrap-")
-	if err != nil {
-		return tool.Command{}, "", fmt.Errorf("create control tool staging directory: %w", err)
-	}
-	defer os.RemoveAll(staging)
-	stagedArtifact := filepath.Join(staging, target.Host().ExecutableName("oc-control"))
-	linkerValue := "github.com/PerishCode/open-cut/internal/buildinfo.DevelopmentSourceFingerprint=" + fingerprint
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: goPath,
-		Args:       []string{"build", "-trimpath", "-ldflags", "-X " + linkerValue, "-o", stagedArtifact, "./cmd/oc-control"},
-		Directory:  root,
-		Stdout:     stdout,
-		Stderr:     stderr,
-		Profile:    lifecycle.ProfileDevelopment,
-	}); err != nil {
-		return tool.Command{}, "", fmt.Errorf("build checkout-pinned oc-control: %w", err)
-	}
-	if err := os.Rename(staging, toolRoot); err != nil {
-		return tool.Command{}, "", fmt.Errorf("activate checkout-pinned oc-control: %w", err)
-	}
-	return tool.Command{Executable: artifact}, fingerprint, nil
 }
 
 type requirements struct {
@@ -248,68 +150,6 @@ func satisfiesNodeRequirement(actual, requirement string) bool {
 	}
 	required := exactVersionPattern.FindStringSubmatch(requirement)
 	return required != nil && match[1] == required[1] && match[2] == required[2] && match[3] == required[3]
-}
-
-func ensurePnpm(
-	ctx context.Context,
-	root string,
-	nodeCommand tool.Command,
-	version string,
-	stdout, stderr io.Writer,
-) (tool.Command, bool, error) {
-	if pnpmPath, err := tool.Resolve("pnpm"); err == nil {
-		candidate := tool.Command{Executable: pnpmPath}
-		if info, inspectErr := tool.InspectCommand(ctx, "pnpm", candidate); inspectErr == nil && strings.TrimPrefix(info.Version, "v") == version {
-			return candidate, false, nil
-		}
-	}
-
-	destination := filepath.Join(root, ".oc-control", "tools", "pnpm-"+version)
-	pnpmEntry := filepath.Join(destination, "node_modules", "pnpm", "bin", "pnpm.cjs")
-	if info, err := os.Stat(pnpmEntry); err == nil && info.Mode().IsRegular() {
-		candidate := tool.Command{Executable: nodeCommand.Executable, Prefix: []string{pnpmEntry}}
-		if inspected, inspectErr := tool.InspectCommand(ctx, "pnpm", candidate); inspectErr == nil && strings.TrimPrefix(inspected.Version, "v") == version {
-			return candidate, true, nil
-		}
-	}
-	if err := os.RemoveAll(destination); err != nil {
-		return tool.Command{}, false, fmt.Errorf("remove incomplete pnpm tool: %w", err)
-	}
-	parent := filepath.Dir(destination)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return tool.Command{}, false, fmt.Errorf("create pnpm tool root: %w", err)
-	}
-	staging, err := os.MkdirTemp(parent, ".pnpm-bootstrap-")
-	if err != nil {
-		return tool.Command{}, false, fmt.Errorf("create pnpm staging directory: %w", err)
-	}
-	defer os.RemoveAll(staging)
-
-	npmPath, err := tool.Resolve("npm")
-	if err != nil {
-		return tool.Command{}, false, fmt.Errorf("npm is required to provision pinned pnpm: %w", err)
-	}
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: npmPath,
-		Args: []string{
-			"install", "--prefix", staging, "--ignore-scripts", "--no-save", "--package-lock=false",
-			"--no-audit", "--no-fund", "pnpm@" + version,
-		},
-		Directory: root,
-		Stdout:    stdout,
-		Stderr:    stderr,
-		Profile:   lifecycle.ProfileDevelopment,
-	}); err != nil {
-		return tool.Command{}, false, fmt.Errorf("provision pnpm %s: %w", version, err)
-	}
-	stagedEntry := filepath.Join(staging, "node_modules", "pnpm", "bin", "pnpm.cjs")
-	if info, err := os.Stat(stagedEntry); err != nil || !info.Mode().IsRegular() {
-		return tool.Command{}, false, fmt.Errorf("provisioned pnpm entry is missing at %s", stagedEntry)
-	}
-	if err := os.Rename(staging, destination); err != nil {
-		return tool.Command{}, false, fmt.Errorf("activate pnpm tool: %w", err)
-	}
-	return tool.Command{Executable: nodeCommand.Executable, Prefix: []string{pnpmEntry}}, true, nil
 }
 
 func configureHooks(ctx context.Context, root string) error {

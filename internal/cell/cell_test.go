@@ -10,7 +10,7 @@ func TestIdentitySuffix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join("channels", "beta", "namespaces", "alice-1")
+	want := filepath.Join("beta", "alice-1")
 	if got := identity.Suffix(); got != want {
 		t.Fatalf("Suffix() = %q, want %q", got, want)
 	}

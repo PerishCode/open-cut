@@ -8,8 +8,9 @@ The cold-start substrate launches one user-scoped application cell from an
 installer containing only B0. It owns cell identity, roots, a shared loopback TCP
 broker, signed release discovery, atomic activation, handoff, readiness, and
 rollback. It does not own product data, app HTTP ports, Electron behavior, or
-application dependency semantics. Its runtime runner understands only a generic
-command topology.
+application dependency semantics. The embedding lifecycle resolves one opaque,
+cell-scoped product data directory and the cold-start chain only authenticates
+and forwards it. Its runtime runner understands only a generic command topology.
 
 ## Identity and roots
 
@@ -27,11 +28,25 @@ type RootSet struct {
 ```
 
 All roots are clean absolute paths supplied by the embedding/install layer. The
-core has no product-aware OS fallback. Mutable roots append:
+core has no product-aware OS fallback. Mutable roots append the direct cell
+suffix:
 
 ```text
-channels/<channel>/namespaces/<namespace>
+<channel>/<namespace>
 ```
+
+`bootstrap.json` separately contains the final clean absolute `dataDir`. The
+packaged lifecycle resolves it as:
+
+```text
+<OS user-data-root>/<stable-product-id>/<channel>/<namespace>
+```
+
+Installer choices such as a Windows custom base path and registry persistence
+are absorbed before this contract. They do not add platform concepts downstream.
+`dataDir` contains no version, architecture, PID, session, runtime mode, or
+sidecar instance dimension, so updates and launcher rollback keep addressing the
+same product data.
 
 Logical layout:
 
@@ -82,6 +97,8 @@ silently bypasses the state machine.
 - The payload exposes one opaque runtime-topology entry. The versioned launcher
   and `oc-control dev` invoke the same generic Go runner against packaged and
   workspace-resolved topology respectively.
+- B0 forwards the bootstrap `dataDir` to L1, and L1 forwards it to every sidecar
+  launch envelope. Runtime topology cannot provide or override it.
 - The runner starts peer sidecar processes, aggregates their READY state into the
   broker-visible `payload` session, and independently restarts peers after
   unexpected exits with bounded exponential backoff.
@@ -104,6 +121,9 @@ an explicit retry.
 Signed release versions are monotonic within a cell. A valid signature on an
 older canonical version does not authorize downgrade or reinstall.
 
+Launcher rollback changes binaries only. It never rolls back product data or
+schema. A binary downgrade receives no availability guarantee.
+
 ## App sidecar isolation
 
 Each `apps/*/sidecar/manifest.json` is a symmetric, language-neutral sidecar
@@ -111,6 +131,14 @@ entry contract. Electron and Web point at independently compiled TypeScript
 entries; API points at its native Go artifact. Business code has zero knowledge
 of the control plane. Dev, packaged, and harness execution all consume those
 same declared artifacts through the generic runtime plan.
+
+Each sidecar derives its app directory as `<dataDir>/<app>`. The API sidecar is
+the sole SQLite owner and derives `database/open-cut.db` beneath its app
+directory. It applies the single forward-only migration sequence before
+publishing an endpoint or READY. Applied migration names and checksums are
+immutable; branching and down migrations are unsupported. Migration failure or
+database corruption aborts API startup before endpoint publication. Cold start
+does not silently replace, restore, or downgrade the database.
 
 Electron is not a sidecar supervisor. It observes the web sidecar's READY state
 and published endpoint continuously through the shared cell TCP broker, then

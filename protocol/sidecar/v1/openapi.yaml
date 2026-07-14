@@ -560,6 +560,7 @@ components:
         - token
         - channel
         - namespace
+        - dataDir
         - mode
         - presentation
         - source
@@ -584,6 +585,10 @@ components:
           type: string
           minLength: 1
           x-environment: OC_SIDECAR_NAMESPACE
+        dataDir:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_DATA_DIR
         mode:
           allOf:
             - $ref: '#/components/schemas/LifecycleMode'

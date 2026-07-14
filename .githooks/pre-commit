@@ -2,13 +2,13 @@
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
-pnpm="$root/.oc-control/bin/pnpm"
-control="$root/.oc-control/bin/oc-control"
 
-if [[ ! -x "$pnpm" || ! -x "$control" ]]; then
-	echo "Open Cut development environment is not initialized; run: go install ./cmd/oc-control && oc-control bootstrap" >&2
-	exit 1
-fi
+for command in pnpm oc-control; do
+	if ! command -v "$command" >/dev/null 2>&1; then
+		echo "required command is unavailable: $command" >&2
+		exit 1
+	fi
+done
 
 cd "$root"
 
@@ -28,12 +28,12 @@ mapfile -t go_files < <(git ls-files '*.go')
 if ((${#go_files[@]} > 0)); then
 	gofmt -w "${go_files[@]}"
 fi
-"$pnpm" --dir "$root" format
+pnpm --dir "$root" format
 after_format=$(git diff --binary --no-ext-diff | git hash-object --stdin)
 if [[ "$before_format" != "$after_format" ]]; then
 	echo "pre-commit formatting changed the working tree; review and stage the formatted files, then commit again" >&2
 	exit 1
 fi
 
-"$control" harness guard --repo "$root"
-"$pnpm" --dir "$root" lint
+oc-control harness guard --repo "$root"
+pnpm --dir "$root" lint

@@ -1,12 +1,16 @@
-import { type IncomingMessage, request as requestHttp, type ServerResponse } from "node:http";
+import { type ClientRequest, type IncomingMessage, request as requestHttp, type ServerResponse } from "node:http";
 
 const apiPrefix = "/api";
 
 export class ApiProxy {
+  readonly #active = new Set<ClientRequest>();
   #endpoint: string | undefined;
 
   setRuntime(raw: string | undefined): void {
-    this.#endpoint = raw === undefined ? undefined : normalizeApiRuntimeUrl(raw);
+    const endpoint = raw === undefined ? undefined : normalizeApiRuntimeUrl(raw);
+    if (endpoint === this.#endpoint) return;
+    this.#endpoint = endpoint;
+    for (const request of this.#active) request.destroy(new Error("API runtime endpoint changed"));
   }
 
   handle(request: IncomingMessage, response: ServerResponse): boolean {
@@ -43,6 +47,8 @@ export class ApiProxy {
           });
         },
       );
+      this.#active.add(upstream);
+      upstream.once("close", () => this.#active.delete(upstream));
       upstream.once("error", (error) => {
         if (!response.headersSent) writeProxyError(response, 502, "OC_API_PROXY_FAILED", error.message);
         else response.destroy(error);

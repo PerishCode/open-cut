@@ -14,12 +14,32 @@ local policy to justify one.
   handoff, activation state, and the cell TCP broker.
 - `cmd/oc-control` is the only development and operations control CLI. Do not
   recreate `tools/*`, `tools-*`, or `apps/packaged` orchestration layers.
+- `cmd/cli` is the independently versioned product CLI. It is packaged at the
+  fixed payload path `payload/bin/open-cut[.exe]`; an installed stable resolver
+  dispatches to `runtime.json.active` and attaches to the cell with the
+  observe-only token. It never depends on `apps/api` or joins runtime topology.
 - The launcher and `oc-control dev` consume the same generic runtime-topology
   contract. They execute declared commands but do not model Electron, web, API,
   product identity, application dependencies, or business startup semantics.
 - `apps/api` is a product API. It does not host or proxy the sidecar control plane.
+- The API sidecar is the sole owner of the product SQLite database. It receives
+  its app data directory from the generic sidecar launch envelope; API repository
+  code alone derives database and migration paths below that directory.
 - B0 is the only writer of activation state. Tools and children request live-cell
   transitions through the loopback TCP broker.
+
+## Product communication boundary
+
+- `packages/openapi` is a completely generated package whose root export points
+  directly at the Orval output. Do not add handwritten re-export files.
+- `packages/contracts` owns stable product read/write ports, runtime validation,
+  EventBus reconciliation, SSE transport, and React Provider/hooks. Generated
+  OpenAPI operations are an internal adapter, not the Web-facing contract.
+- `apps/web/src` imports product communication only from `packages/contracts`.
+  It must not import `packages/openapi` or own `fetch`/`EventSource` transport.
+- `apps/api` owns product OpenAPI endpoints and the SSE stream. Transport can be
+  optimized inside a layer, but Web → Contracts → transport/proxy → API remains
+  the fixed logical chain.
 
 ## Sidecar entry contract
 
@@ -49,11 +69,30 @@ local policy to justify one.
   heartbeat, READY, or packaged-mode concepts.
 - Sidecar entries may import normal app startup primitives and shared
   `packages/sidecar-client` mechanics. The dependency direction never reverses.
+- `SidecarLaunch.dataDir` is a required clean absolute, cell-scoped base path.
+  The runner forwards it outside runtime topology; each sidecar appends only its
+  validated app identity. Topology and business source never select or override it.
+
+## Persistent data path
+
+- Installer/lifecycle adapters resolve packaged data as
+  `<OS-user-data-root>/<stable-product-id>/<channel>/<namespace>` and persist the
+  final clean absolute path in bootstrap configuration. Platform defaults,
+  Windows custom paths, registry state, repair, and uninstall are absorbed there.
+- `oc-control dev` defaults to
+  `<repo>/.tmp/oc-control/dev/<channel>/<namespace>`. Other runtime harnesses use
+  their canonical subcommand directory under `.tmp/oc-control` and the same
+  direct cell suffix. Do not restore `channels/` or `namespaces/` label layers.
+- Paths never include release version, architecture, PID, session, mode, or
+  process instance. Runtime topology, sidecars, and API code never infer an OS path.
+- SQLite migrations are an immutable, strictly ordered forward sequence. There
+  is no down migration or old-binary availability guarantee after schema advance.
 
 ## Hot development and operations path
 
-Go (at the version declared by `go.mod`) and Node `~24` are the only cold-start
-external dependencies. The repository never installs or replaces either runtime.
+Go (at the version declared by `go.mod`), Node `~24`, and the exact pnpm version
+pinned by the root `packageManager` are development prerequisites. The repository
+never installs or replaces these tools.
 After a fresh checkout, install the current control CLI and initialize the
 development surface:
 
@@ -62,11 +101,11 @@ go install ./cmd/oc-control
 oc-control bootstrap
 ```
 
-`oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
-by the root `packageManager` when needed, runs `pnpm install --frozen-lockfile`,
-builds a source-fingerprinted checkout CLI under `.oc-control/bin`, and configures
-`core.hooksPath` for the repository pre-commit gate. It has no Node-install
-option. Rerun it after control source, the root toolchain, or lockfile changes.
+`oc-control bootstrap` validates Node and pnpm, runs
+`pnpm install --frozen-lockfile`, and configures `core.hooksPath` for the
+repository pre-commit gate. It never installs or replaces development tools.
+Rerun it after root toolchain or lockfile changes; rerun `go install
+./cmd/oc-control` after control source changes.
 
 Then use the installed binary for lifecycle, packaging, fixtures, releases, and
 harnesses:
@@ -77,9 +116,9 @@ oc-control <subcommand>
 
 After changing the sidecar wire contract, run `oc-control protocol generate`.
 
-Do not add pnpm wrappers around `oc-control`, use `go run` as a documented hot
-path, or mutate `runtime.json` from scripts. CI may build a checkout-pinned
-binary instead of relying on a machine-global installation.
+Do not add local wrappers around `oc-control`, Node, or pnpm, use `go run` as a
+documented hot path, or mutate `runtime.json` from scripts. CI and other isolated
+workflows may `go build` a temporary control binary and execute that path directly.
 
 Use `oc-control clean --scope temp|build|all` for generated workspace cleanup.
 Do not use shell-recursive deletion as the normal cleanup path. The command is
@@ -87,8 +126,7 @@ repository-guarded and deliberately excludes source, dependencies, and arbitrary
 
 ## Workspace workflow
 
-- Node is `~24`; pnpm is pinned by root `package.json` and exposed after bootstrap
-  through `.oc-control/bin/pnpm`.
+- Node is `~24`; pnpm is pinned by root `package.json` and invoked directly.
 - Root `package.json` exposes only `build`, `format`, `lint`, and `test`; each is
   `pnpm -r --if-present run <name>`. Use package-scoped pnpm scripts for narrower checks.
 - Biome is the sole formatter, linter, and import organizer for handwritten
@@ -96,7 +134,7 @@ repository-guarded and deliberately excludes source, dependencies, and arbitrary
   workspace catalog. Generated protocol bindings remain generator-owned.
 - Go formatting and tests are repository-wide: `gofmt` and `go test ./...`.
 - `oc-control harness guard` enforces app/package directory boundaries, Web
-  zero-CSS policy, shared atom ownership, API layer imports, sibling test
+  Contracts-only communication and zero-CSS policy, shared atom ownership, API layer imports, sibling test
   directories, the 50 KiB resource limit, and the 800-line file limit.
 - Pre-commit rejects partially staged files, runs gofmt and recursive Biome
   formatting transactionally, then requires guard and recursive lint to pass.

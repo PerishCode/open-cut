@@ -57,17 +57,17 @@ type Broker struct {
 	server           *http.Server
 	heartbeatTimeout time.Duration
 
-	mu         sync.RWMutex
-	sessions   map[string]*session
-	revision   uint64
-	changed    chan struct{}
-	registered chan string
-	ready      chan string
-	closed     chan struct{}
-	close      sync.Once
-	ownerMu    sync.Mutex
-	updateMu   sync.Mutex
-	update     func(context.Context, protocol.UpdateTransitionRequest) (protocol.UpdateTransitionResponse, error)
+	mu            sync.RWMutex
+	sessions      map[string]*session
+	revision      uint64
+	changed       chan struct{}
+	registered    chan string
+	ready         chan string
+	closed        chan struct{}
+	close         sync.Once
+	stableTokenMu sync.Mutex
+	updateMu      sync.Mutex
+	update        func(context.Context, protocol.UpdateTransitionRequest) (protocol.UpdateTransitionResponse, error)
 }
 
 func Start(options Options) (*Broker, error) {
@@ -130,6 +130,21 @@ func Start(options Options) (*Broker, error) {
 		os.Remove(options.Paths.ControlFile)
 		return fail(err)
 	}
+	observerToken, err := manager.Mint("cli", protocol.RoleObserver, []protocol.Capability{
+		protocol.CapabilityObserve,
+	}, options.OwnerTokenTTL)
+	if err != nil {
+		listener.Close()
+		os.Remove(options.Paths.ControlFile)
+		os.Remove(options.Paths.OwnerTokenFile)
+		return fail(err)
+	}
+	if err := atomicfile.Write(options.Paths.ObserverTokenFile, []byte(observerToken+"\n"), 0o600); err != nil {
+		listener.Close()
+		os.Remove(options.Paths.ControlFile)
+		os.Remove(options.Paths.OwnerTokenFile)
+		return fail(err)
+	}
 
 	broker := &Broker{
 		identity: options.Identity, paths: options.Paths, descriptor: descriptor,
@@ -157,7 +172,7 @@ func Start(options Options) (*Broker, error) {
 		}
 	}()
 	go broker.broadcastStatusChanges()
-	go broker.renewOwnerCapability(options.OwnerTokenTTL)
+	go broker.renewStableCapabilities(options.OwnerTokenTTL)
 	return broker, nil
 }
 
@@ -255,9 +270,10 @@ func (broker *Broker) Close() error {
 		broker.sessions = make(map[string]*session)
 		broker.mu.Unlock()
 		os.Remove(broker.paths.ControlFile)
-		broker.ownerMu.Lock()
+		broker.stableTokenMu.Lock()
 		os.Remove(broker.paths.OwnerTokenFile)
-		broker.ownerMu.Unlock()
+		os.Remove(broker.paths.ObserverTokenFile)
+		broker.stableTokenMu.Unlock()
 		if err := broker.lock.Unlock(); result == nil && err != nil {
 			result = err
 		}
@@ -583,7 +599,7 @@ func (broker *Broker) broadcastStatusChanges() {
 	}
 }
 
-func (broker *Broker) renewOwnerCapability(ttl time.Duration) {
+func (broker *Broker) renewStableCapabilities(ttl time.Duration) {
 	interval := ttl / 2
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -592,10 +608,10 @@ func (broker *Broker) renewOwnerCapability(ttl time.Duration) {
 		case <-broker.closed:
 			return
 		case <-ticker.C:
-			broker.ownerMu.Lock()
+			broker.stableTokenMu.Lock()
 			select {
 			case <-broker.closed:
-				broker.ownerMu.Unlock()
+				broker.stableTokenMu.Unlock()
 				return
 			default:
 			}
@@ -605,7 +621,13 @@ func (broker *Broker) renewOwnerCapability(ttl time.Duration) {
 			if err == nil {
 				_ = atomicfile.Write(broker.paths.OwnerTokenFile, []byte(token+"\n"), 0o600)
 			}
-			broker.ownerMu.Unlock()
+			observer, err := broker.manager.Mint("cli", protocol.RoleObserver, []protocol.Capability{
+				protocol.CapabilityObserve,
+			}, ttl)
+			if err == nil {
+				_ = atomicfile.Write(broker.paths.ObserverTokenFile, []byte(observer+"\n"), 0o600)
+			}
+			broker.stableTokenMu.Unlock()
 		}
 	}
 }

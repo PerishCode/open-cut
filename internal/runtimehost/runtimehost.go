@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
@@ -27,6 +28,7 @@ type Options struct {
 	Token        string
 	Channel      string
 	Namespace    string
+	DataDir      string
 	App          string
 	Mode         protocol.LifecycleMode
 	Presentation protocol.Presentation
@@ -68,7 +70,8 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 		return err
 	}
 	if options.Descriptor.Protocol != protocol.Version || options.Token == "" || options.Channel == "" ||
-		options.Namespace == "" || options.App == "" || !options.Mode.Valid() || !options.Presentation.Valid() || options.Source == "" {
+		options.Namespace == "" || options.App == "" || !filepath.IsAbs(options.DataDir) || filepath.Clean(options.DataDir) != options.DataDir ||
+		!options.Mode.Valid() || !options.Presentation.Valid() || options.Source == "" {
 		return fmt.Errorf("runtime host requires a complete sidecar launch envelope")
 	}
 	if options.ReadyTimeout <= 0 {
@@ -235,7 +238,8 @@ func startProcess(
 	}
 	launchEnvironment, err := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
 		App: definition.App, Control: options.Descriptor, Token: delegated.Token, Channel: options.Channel,
-		Namespace: options.Namespace, Mode: options.Mode, Presentation: options.Presentation, Source: options.Source,
+		Namespace: options.Namespace, DataDir: options.DataDir, Mode: options.Mode,
+		Presentation: options.Presentation, Source: options.Source,
 	})
 	if err != nil {
 		return err

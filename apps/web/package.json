@@ -12,7 +12,6 @@
   "dependencies": {
     "@open-cut/components": "workspace:*",
     "@open-cut/contracts": "workspace:*",
-    "@open-cut/openapi": "workspace:*",
     "@open-cut/sidecar-client": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

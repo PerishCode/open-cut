@@ -45,6 +45,7 @@ type Result struct {
 	Size             int64  `json:"size"`
 	LauncherEntry    string `json:"launcherEntry"`
 	PayloadEntry     string `json:"payloadEntry"`
+	CLIEntry         string `json:"cliEntry"`
 	PayloadWorkspace string `json:"payloadWorkspace"`
 	WorkRoot         string `json:"workRoot,omitempty"`
 }
@@ -173,6 +174,20 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := copyFile(launcherArtifact, filepath.Join(releaseTree, "launcher", launcherName), 0o755); err != nil {
 		return Result{}, err
 	}
+	cliEntry, err := release.CLIEntry(options.Target)
+	if err != nil {
+		return Result{}, err
+	}
+	cliArtifact := filepath.Join(workRoot, options.Target.ExecutableName(release.CLIBaseName))
+	if err := run(
+		ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
+		"go", "build", "-trimpath", "-o", cliArtifact, "./cmd/cli",
+	); err != nil {
+		return Result{}, fmt.Errorf("build product CLI: %w", err)
+	}
+	if err := copyFile(cliArtifact, filepath.Join(releaseTree, filepath.FromSlash(cliEntry)), 0o755); err != nil {
+		return Result{}, err
+	}
 	if err := copyTree(
 		packRoot,
 		filepath.Join(releaseTree, "payload", "app"),
@@ -212,7 +227,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	succeeded = true
 	result = Result{
 		Schema: 1, Version: version.String(), Target: options.Target.String(), Bundle: output, SHA256: digest, Size: size,
-		LauncherEntry: manifest.Launcher.Entry, PayloadEntry: manifest.Payload.Entry,
+		LauncherEntry: manifest.Launcher.Entry, PayloadEntry: manifest.Payload.Entry, CLIEntry: cliEntry,
 		PayloadWorkspace: controlConfig.PayloadWorkspace,
 	}
 	if options.KeepWork {
@@ -326,12 +341,12 @@ func pathWithin(root, candidate string) bool {
 }
 
 func run(ctx context.Context, directory string, stdout, stderr io.Writer, environment []string, name string, arguments ...string) error {
-	command, err := tool.ResolveRepository(directory, name)
+	command, err := tool.Resolve(name)
 	if err != nil {
 		return err
 	}
 	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: command.Executable, Args: command.Arguments(arguments...), Directory: directory, Env: environment,
+		Executable: command, Args: arguments, Directory: directory, Env: environment,
 		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileProduction,
 	})
 }

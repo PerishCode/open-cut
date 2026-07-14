@@ -44,6 +44,30 @@ describe("Web sidecar API proxy", () => {
     proxy.setRuntime(second);
     await expect(fetch(`${web}/api/v1/health`).then((response) => response.text())).resolves.toBe("second:/v1/health");
   });
+
+  it("closes an active event stream when its leased endpoint is replaced", async () => {
+    let resolveClosed: () => void = () => undefined;
+    const firstClosed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    const first = await listen((_request, response) => {
+      response.once("close", resolveClosed);
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write("event: project.snapshot\ndata: {}\n\n");
+    });
+    const second = await listen((_request, response) => response.end("replacement"));
+    const proxy = new ApiProxy();
+    proxy.setRuntime(first);
+    const web = await listen((request, response) => {
+      if (!proxy.handle(request, response)) response.writeHead(404).end();
+    });
+
+    const stream = await fetch(`${web}/api/v1/events`);
+    await stream.body?.getReader().read();
+    proxy.setRuntime(second);
+    await withTimeout(firstClosed);
+    await expect(fetch(`${web}/api/v1/events`).then((response) => response.text())).resolves.toBe("replacement");
+  });
 });
 
 async function listen(handler: RequestListener): Promise<string> {
@@ -56,4 +80,15 @@ async function listen(handler: RequestListener): Promise<string> {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server did not bind TCP");
   return `http://127.0.0.1:${address.port}`;
+}
+
+async function withTimeout(promise: Promise<void>): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    promise,
+    new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("timed out waiting for stream closure")), 1000);
+    }),
+  ]);
+  clearTimeout(timeout);
 }

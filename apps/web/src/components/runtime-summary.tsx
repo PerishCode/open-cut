@@ -1,33 +1,32 @@
-import { Heading, Stack, Status, Text } from "@open-cut/components";
-import { useEffect, useState } from "react";
-
-import { readApiHealth } from "../lib/api.js";
-
-type ApiState = "pending" | "ready" | "unavailable";
+import { Button, Heading, Stack, Status, Text } from "@open-cut/components";
+import { useProjects, usePutProject } from "@open-cut/contracts";
 
 export function RuntimeSummary() {
-  const [api, setApi] = useState<ApiState>("pending");
-
-  useEffect(() => {
-    const request = new AbortController();
-    void readApiHealth(request.signal).then(
-      (health) => setApi(health.ok ? "ready" : "unavailable"),
-      (error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) setApi("unavailable");
-      },
-    );
-    return () => request.abort();
-  }, []);
+  const projects = useProjects();
+  const write = usePutProject();
+  const status = projects.status === "connecting" ? "pending" : projects.status;
+  const names = projects.projects.map((project) => project.name).join(", ");
 
   return (
     <Stack>
       <Text tone="eyebrow">OPEN CUT · DAY 0</Text>
       <Heading>Peer sidecars, one control plane.</Heading>
       <Text>
-        React is running behind the Web sidecar. Product API traffic uses one stable generated client while peer
-        endpoints remain continuously leased by the control plane.
+        React consumes product read and write ports from Contracts. OpenAPI and the reconnecting event stream stay
+        encapsulated behind that boundary.
       </Text>
-      <Status state={api}>{api === "ready" ? "API runtime ready" : `API runtime ${api}`}</Status>
+      <Status state={status}>
+        {projects.status === "ready" ? `Projects synchronized at revision ${projects.revision}` : `Projects ${status}`}
+      </Status>
+      <Text>{names ? `Projects: ${names}` : "No projects yet."}</Text>
+      <Button
+        disabled={write.pending}
+        onPress={() =>
+          void write.put({ id: "day-0", name: "Day 0", description: "Contracts cold-start validation project" })
+        }
+      >
+        {write.pending ? "Saving…" : "Create Day 0 project"}
+      </Button>
     </Stack>
   );
 }

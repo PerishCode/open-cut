@@ -8,7 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
-func NewRouter(health service.Health) (*http.ServeMux, huma.API) {
+func NewRouter(health service.Health, projects service.Projects) (*http.ServeMux, huma.API) {
 	mux := http.NewServeMux()
 	config := huma.DefaultConfig("Open Cut API", "1.0.0")
 	config.OpenAPIPath = ""
@@ -19,5 +19,6 @@ func NewRouter(health service.Health) (*http.ServeMux, huma.API) {
 	config.CreateHooks = nil
 	api := humago.New(mux, config)
 	RegisterHealth(api, health)
+	RegisterProjects(api, projects)
 	return mux, api
 }

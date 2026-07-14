@@ -82,10 +82,10 @@ func printHelp(writer io.Writer) {
 
 Usage:
   oc-control version [--json]
-  oc-control doctor [--repo <path>]
+  oc-control doctor
   oc-control bootstrap [--repo <path>]
   oc-control clean [--repo <path>] [--scope temp|build|all] [--dry-run]
-  oc-control dev [--repo <path>] [--workspace <path>] [--skip-build]
+  oc-control dev [--repo <path>] [--base-dir <path>] [--skip-build]
   oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
   oc-control protocol generate [--repo <path>]
   oc-control protocol check [--repo <path>]
@@ -142,14 +142,26 @@ func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	set := flag.NewFlagSet("dev", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	repository := set.String("repo", ".", "open-cut repository root")
-	workspace := set.String("workspace", ".tmp/oc-control/dev", "isolated development cell workspace")
+	baseDir := set.String("base-dir", "", "development base directory; defaults below the repository")
 	skipBuild := set.Bool("skip-build", false, "use existing workspace build output")
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
+	repositoryRoot, err := filepath.Abs(*repository)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	selectedBaseDir, err := devsession.ResolveBaseDir(repositoryRoot, *baseDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	ready := make(chan devsession.Result, 1)
 	done := make(chan error, 1)
-	go func() { done <- devsession.Run(ctx, *repository, *workspace, stderr, stderr, *skipBuild, ready) }()
+	go func() {
+		done <- devsession.Run(ctx, repositoryRoot, selectedBaseDir, stderr, stderr, *skipBuild, ready)
+	}()
 	select {
 	case result := <-ready:
 		if writeOutput(stdout, stderr, result) != 0 {
@@ -212,34 +224,17 @@ type doctorCheck struct {
 func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	set := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
 	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control doctor [--repo <path>]")
+		fmt.Fprintln(stderr, "usage: oc-control doctor")
 		return 2
-	}
-	root, err := filepath.Abs(*repository)
-	if err != nil {
-		fmt.Fprintf(stderr, "doctor: %v\n", err)
-		return 1
 	}
 	checks := make([]doctorCheck, 0, 3)
 	passed := true
 	for _, toolName := range []string{"go", "node", "pnpm"} {
-		var info tool.Info
-		var inspectErr error
-		if toolName == "go" {
-			info, inspectErr = tool.Inspect(ctx, toolName)
-		} else {
-			command, resolveErr := tool.ResolveRepository(root, toolName)
-			if resolveErr != nil {
-				info, inspectErr = tool.Info{Name: toolName}, resolveErr
-			} else {
-				info, inspectErr = tool.InspectCommand(ctx, toolName, command)
-			}
-		}
+		info, inspectErr := tool.Inspect(ctx, toolName)
 		check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: inspectErr == nil}
 		if !check.OK {
 			passed = false
@@ -471,7 +466,7 @@ func runInspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	controlClient, code := loadClient(args, stderr)
+	controlClient, code := loadClient(args, stderr, true)
 	if code != 0 {
 		return code
 	}
@@ -484,7 +479,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 }
 
 func runControl(ctx context.Context, command protocol.ControlCommand, args []string, stdout, stderr io.Writer) int {
-	controlClient, code := loadClient(args, stderr)
+	controlClient, code := loadClient(args, stderr, false)
 	if code != 0 {
 		return code
 	}
@@ -496,7 +491,7 @@ func runControl(ctx context.Context, command protocol.ControlCommand, args []str
 	return writeOutput(stdout, stderr, response)
 }
 
-func loadClient(args []string, stderr io.Writer) (*client.Client, int) {
+func loadClient(args []string, stderr io.Writer, observer bool) (*client.Client, int) {
 	set := flag.NewFlagSet("cell", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	bootstrapPath := set.String("bootstrap", "", "bootstrap.json path")
@@ -518,7 +513,11 @@ func loadClient(args []string, stderr io.Writer) (*client.Client, int) {
 		fmt.Fprintln(stderr, err)
 		return nil, 1
 	}
-	controlClient, err := client.Load(paths.ControlFile, paths.OwnerTokenFile)
+	tokenFile := paths.OwnerTokenFile
+	if observer {
+		tokenFile = paths.ObserverTokenFile
+	}
+	controlClient, err := client.Load(paths.ControlFile, tokenFile)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return nil, 1
@@ -546,7 +545,7 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	scenario := args[0]
 	set := flag.NewFlagSet("harness "+scenario, flag.ContinueOnError)
 	set.SetOutput(stderr)
-	workspace := set.String("workspace", "", "preserved harness workspace; defaults to a temporary directory")
+	workspace := set.String("workspace", "", "harness workspace; defaults below the repository")
 	repository := set.String("repo", ".", "repository root for the sidecar-entry scenario")
 	skipBuild := set.Bool("skip-build", false, "use existing workspace build output")
 	bundlePath := set.String("bundle", "", "release-bundle.tar.zst for the full-pack scenario")
@@ -554,15 +553,13 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	selected := *workspace
-	cleanup := func() {}
 	if selected == "" {
-		temporary, err := os.MkdirTemp("", "oc-control-harness-*")
+		repositoryRoot, err := filepath.Abs(*repository)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		selected = temporary
-		cleanup = func() { os.RemoveAll(temporary) }
+		selected = filepath.Join(repositoryRoot, ".tmp", "oc-control", "harness-"+scenario)
 	} else {
 		absolute, err := filepath.Abs(selected)
 		if err != nil {
@@ -571,7 +568,6 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 		selected = absolute
 	}
-	defer cleanup()
 	var report harness.Report
 	if scenario == "broker" {
 		report = harness.RunBroker(ctx, selected)
@@ -593,13 +589,13 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			return 1
 		}
 		if !*skipBuild {
-			pnpm, resolveErr := tool.ResolveRepository(repositoryRoot, "pnpm")
+			pnpm, resolveErr := tool.Resolve("pnpm")
 			if resolveErr != nil {
 				fmt.Fprintln(stderr, resolveErr)
 				return 1
 			}
 			if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-				Executable: pnpm.Executable, Args: pnpm.Arguments("-r", "--if-present", "run", "build"), Directory: repositoryRoot,
+				Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
 				Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
 			}); err != nil {
 				fmt.Fprintf(stderr, "workspace build: %v\n", err)

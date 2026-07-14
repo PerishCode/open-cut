@@ -65,17 +65,17 @@ func BuildElectronPack(
 	if err := buildTarget.Validate(); err != nil {
 		return err
 	}
-	pnpm, err := tool.ResolveRepository(repositoryRoot, "pnpm")
+	pnpm, err := tool.Resolve("pnpm")
 	if err != nil {
 		return err
 	}
 	return Run(ctx, ProcessSpec{
-		Executable: pnpm.Executable,
-		Args: pnpm.Arguments(
+		Executable: pnpm,
+		Args: []string{
 			"--filter", packageName, "exec", "electron-builder", "--dir",
-			"--"+string(buildTarget.Platform), "--"+string(buildTarget.Arch),
+			"--" + string(buildTarget.Platform), "--" + string(buildTarget.Arch),
 			"--publish", "never", "--config", configPath,
-		),
+		},
 		Directory: repositoryRoot,
 		Env:       environment.Merge(os.Environ(), nil, map[string]string{"CSC_IDENTITY_AUTO_DISCOVERY": "false"}),
 		Stdout:    stdout,

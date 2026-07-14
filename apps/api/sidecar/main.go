@@ -27,8 +27,11 @@ func main() {
 }
 
 func run(args []string) error {
-	mux, api := controller.NewRouter(service.NewHealth(repository.StaticHealth{}))
 	if len(args) == 1 && args[0] == "openapi" {
+		_, api := controller.NewRouter(
+			service.NewHealth(repository.StaticHealth{}),
+			service.NewProjects(repository.NewMemoryProjects()),
+		)
 		document, err := api.OpenAPI().MarshalJSON()
 		if err != nil {
 			return fmt.Errorf("encode OpenAPI: %w", err)
@@ -46,6 +49,19 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	dataDir, err := sidecarclient.ResolveDataDir(launch)
+	if err != nil {
+		return fmt.Errorf("resolve API data directory: %w", err)
+	}
+	projects, err := repository.OpenSQLiteProjects(ctx, dataDir)
+	if err != nil {
+		return err
+	}
+	defer projects.Close()
+	mux, _ := controller.NewRouter(
+		service.NewHealth(repository.StaticHealth{}),
+		service.NewProjects(projects),
+	)
 	session, err := sidecarclient.DialSession(ctx, launch.Control, launch.Token, sidecarclient.Registration{
 		Channel: launch.Channel, Namespace: launch.Namespace, App: launch.App,
 		Mode: launch.Mode, Source: launch.Source,

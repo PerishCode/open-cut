@@ -6,7 +6,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "production": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./runtime-peer": {
+      "types": "./dist/runtime-peer.d.ts",
+      "development": "./src/runtime-peer.ts",
+      "production": "./dist/runtime-peer.js",
+      "default": "./dist/runtime-peer.js"
     }
   },
   "scripts": {
@@ -15,8 +23,20 @@
     "lint": "biome check src tests",
     "test": "vitest run"
   },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "dependencies": {
+    "@open-cut/openapi": "workspace:*"
+  },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "jsdom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "vitest": "4.1.10"
   }
 }

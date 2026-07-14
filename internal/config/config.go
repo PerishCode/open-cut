@@ -70,6 +70,7 @@ type Bootstrap struct {
 	Schema           int         `json:"schema"`
 	Channel          string      `json:"channel"`
 	Namespace        string      `json:"namespace"`
+	DataDir          string      `json:"dataDir"`
 	Roots            RootSet     `json:"roots"`
 	UpdateOrigins    []string    `json:"updateOrigins"`
 	ProtocolFloor    string      `json:"protocolFloor"`
@@ -100,6 +101,9 @@ func (bootstrap Bootstrap) Validate() error {
 	}
 	if err := bootstrap.Roots.Validate(); err != nil {
 		return err
+	}
+	if !filepath.IsAbs(bootstrap.DataDir) || filepath.Clean(bootstrap.DataDir) != bootstrap.DataDir {
+		return fmt.Errorf("dataDir must be a clean absolute path")
 	}
 	if bootstrap.ProtocolFloor == "" {
 		return fmt.Errorf("protocolFloor is required")

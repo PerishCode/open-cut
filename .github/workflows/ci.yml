@@ -20,16 +20,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Build checkout-pinned control CLI
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - name: Build control CLI from checkout
         run: |
           mkdir -p .tmp/ci
           go build -trimpath -o .tmp/ci/oc-control ./cmd/oc-control
       - name: Bootstrap development environment
         run: .tmp/ci/oc-control bootstrap --repo .
       - name: Check generated protocol artifacts
-        run: ./.oc-control/bin/oc-control protocol check --repo .
+        run: .tmp/ci/oc-control protocol check --repo .
       - name: Check repository harness policy
-        run: ./.oc-control/bin/oc-control harness guard --repo .
+        run: .tmp/ci/oc-control harness guard --repo .
       - name: Go format
         shell: bash
         run: |
@@ -37,13 +40,13 @@ jobs:
           test -z "$(gofmt -l "${go_files[@]}")"
       - name: Workspace format
         run: |
-          ./.oc-control/bin/pnpm format
+          pnpm format
           git diff --exit-code
       - run: go vet ./...
       - run: go test -race ./...
-      - run: ./.oc-control/bin/pnpm build
-      - run: ./.oc-control/bin/pnpm lint
-      - run: ./.oc-control/bin/pnpm test
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm test
 
   native-delivery:
     name: ${{ matrix.target }} delivery
@@ -76,7 +79,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Build checkout-pinned control CLI
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - name: Build control CLI from checkout
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
       - name: Bootstrap development environment

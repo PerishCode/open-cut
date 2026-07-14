@@ -62,10 +62,12 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	releaseTree := filepath.Join(workspace, "fixture-origin", "tree")
 	versionedLauncher := filepath.Join(releaseTree, "launcher", hostTarget.ExecutableName("launcher"))
 	payload := filepath.Join(releaseTree, "payload", hostTarget.ExecutableName("fixture-runtime"))
+	productCLI := filepath.Join(releaseTree, filepath.FromSlash(mustCLIEntry(hostTarget)))
 	topologyPath := filepath.Join(releaseTree, "payload", "runtime-topology.json")
 	if !check("install-bootstrap-launcher", copyExecutable(launcherArtifact, bootstrapLauncher)) ||
 		!check("stage-versioned-launcher", copyExecutable(launcherArtifact, versionedLauncher)) ||
 		!check("stage-fixture-payload", copyExecutable(payloadArtifact, payload)) ||
+		!check("stage-product-cli", copyExecutable(launcherArtifact, productCLI)) ||
 		!check("write-fixture-topology", writeFixtureTopology(topologyPath, payload)) {
 		return finish(report, started)
 	}
@@ -95,6 +97,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	steadyTree := filepath.Join(workspace, "fixture-origin", "tree-v2")
 	steadyLauncher := filepath.Join(steadyTree, "launcher", hostTarget.ExecutableName("launcher"))
 	steadyPayload := filepath.Join(steadyTree, "payload", hostTarget.ExecutableName("fixture-runtime"))
+	steadyCLI := filepath.Join(steadyTree, filepath.FromSlash(mustCLIEntry(hostTarget)))
 	steadyTopology := filepath.Join(steadyTree, "payload", "runtime-topology.json")
 	steadyManifest := manifest
 	steadyManifest.Version = steadyHarnessVersion
@@ -102,6 +105,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	steadyBundlePath := filepath.Join(workspace, "fixture-origin", "release-bundle-v2.tar.zst")
 	if !check("stage-steady-launcher", copyExecutable(launcherArtifact, steadyLauncher)) ||
 		!check("stage-steady-payload", copyExecutable(payloadArtifact, steadyPayload)) ||
+		!check("stage-steady-cli", copyExecutable(launcherArtifact, steadyCLI)) ||
 		!check("write-steady-topology", writeFixtureTopology(steadyTopology, steadyPayload)) ||
 		!check("write-steady-manifest", atomicfile.WriteJSON(filepath.Join(steadyTree, "manifest.json"), steadyManifest, 0o600)) ||
 		!check("pack-steady-bundle", bundle.Pack(steadyTree, steadyBundlePath)) {
@@ -161,7 +165,8 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		return finish(report, started)
 	}
 	bootstrap := config.Bootstrap{
-		Schema: 1, Channel: identity.Channel, Namespace: identity.Namespace, Roots: roots,
+		Schema: 1, Channel: identity.Channel, Namespace: identity.Namespace,
+		DataDir: filepath.Join(workspace, identity.Suffix()), Roots: roots,
 		ProtocolFloor: "bootstrap.v1", UpdateOrigins: []string{fixtureServer.URL},
 	}
 	bootstrap.InitialTrustRoot = config.TrustConfig{Threshold: 1, Keys: []config.TrustKey{{ID: "fixture", PublicKey: base64.StdEncoding.EncodeToString(publicKey)}}}
@@ -253,9 +258,11 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	failingRoot := filepath.Join(paths.Versions, failingHarnessVersion)
 	failingLauncher := filepath.Join(failingRoot, "launcher", filepath.Base(versionedLauncher))
 	failingPayload := filepath.Join(failingRoot, "payload", filepath.Base(payload))
+	failingCLI := filepath.Join(failingRoot, filepath.FromSlash(mustCLIEntry(hostTarget)))
 	failingTopology := filepath.Join(failingRoot, "payload", "runtime-topology.json")
 	if !check("install-failing-launcher", copyExecutable(launcherArtifact, failingLauncher)) ||
 		!check("install-failing-payload", copyExecutable(payloadArtifact, failingPayload)) ||
+		!check("install-failing-cli", copyExecutable(launcherArtifact, failingCLI)) ||
 		!check("write-failing-topology", writeFixtureTopology(failingTopology, failingPayload)) {
 		return finish(report, started)
 	}
@@ -290,6 +297,14 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		return nil
 	}())
 	return finish(report, started)
+}
+
+func mustCLIEntry(buildTarget target.Target) string {
+	entry, err := release.CLIEntry(buildTarget)
+	if err != nil {
+		panic(err)
+	}
+	return entry
 }
 
 func writeFixtureTopology(filename, payload string) error {

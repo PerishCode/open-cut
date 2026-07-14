@@ -25,6 +25,7 @@ func TestRecoverPromotedReleasePreparesCandidate(t *testing.T) {
 	publicKey, _, _ := ed25519.GenerateKey(rand.Reader)
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: "beta", Namespace: "recovery", ProtocolFloor: "bootstrap.v1",
+		DataDir: filepath.Join(root, "data", "beta", "recovery"),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),
@@ -56,6 +57,11 @@ func TestRecoverPromotedReleasePreparesCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(command, []byte("runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cliEntry, _ := release.CLIEntry(target.Host())
+	cliPath := filepath.Join(versionRoot, filepath.FromSlash(cliEntry))
+	if err := os.WriteFile(cliPath, []byte("cli"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtimetopology.Write(filepath.Join(versionRoot, "payload", "runtime-topology.json"), runtimetopology.Topology{
