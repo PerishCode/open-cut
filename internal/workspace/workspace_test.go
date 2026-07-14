@@ -6,23 +6,33 @@ import (
 	"testing"
 )
 
-func TestTopologyIsDerivedFromSidecarEntries(t *testing.T) {
+func TestTopologyIsDerivedFromSidecarManifests(t *testing.T) {
 	root := t.TempDir()
 	for _, app := range []string{"electron", "web", "api", "plain"} {
 		if err := os.MkdirAll(filepath.Join(root, "apps", app), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, app := range []string{"web", "api", "electron"} {
-		for _, entry := range []string{"sidecar/index.ts", "dist/sidecar/index.js"} {
-			path := filepath.Join(root, "apps", app, entry)
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(path, []byte("entry"), 0o644); err != nil {
-				t.Fatal(err)
-			}
+	manifests := map[string]string{
+		"electron": `{"schema":1,"command":"$payload"}`,
+		"web":      `{"schema":1,"command":"$node","args":["dist/sidecar/index.js"]}`,
+		"api":      `{"schema":1,"command":"dist/sidecar/api-sidecar.exe"}`,
+	}
+	for app, manifest := range manifests {
+		path := filepath.Join(root, "apps", app, "sidecar", SidecarManifestFilename)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
 		}
+		if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	artifact := filepath.Join(root, "apps", "api", "dist", "sidecar", "api-sidecar.exe")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifact, []byte("entry"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	topology, err := DiscoverTopology(root, Config{Schema: 1, PayloadWorkspace: "electron"})
 	if err != nil {
@@ -31,7 +41,31 @@ func TestTopologyIsDerivedFromSidecarEntries(t *testing.T) {
 	if len(topology.Sidecars) != 3 || topology.Sidecars[0].App != "api" || topology.Sidecars[1].App != "electron" || topology.Sidecars[2].App != "web" {
 		t.Fatalf("unexpected topology: %+v", topology)
 	}
-	if topology.Sidecars[0].Entry != "sidecars/api/dist/sidecar/index.js" {
-		t.Fatalf("unexpected derived entry: %s", topology.Sidecars[0].Entry)
+	if topology.Sidecars[0].Command != "dist/sidecar/api-sidecar.exe" || topology.Sidecars[2].Command != SidecarCommandNode {
+		t.Fatalf("unexpected declared commands: %+v", topology.Sidecars)
+	}
+}
+
+func TestTopologyRejectsPayloadCommandEscape(t *testing.T) {
+	root := t.TempDir()
+	for _, app := range []string{"electron", "api"} {
+		if err := os.MkdirAll(filepath.Join(root, "apps", app, "sidecar"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "apps", "electron", "sidecar", SidecarManifestFilename),
+		[]byte(`{"schema":1,"command":"$payload"}`), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "apps", "api", "sidecar", SidecarManifestFilename),
+		[]byte(`{"schema":1,"command":"$payload"}`), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DiscoverTopology(root, Config{Schema: 1, PayloadWorkspace: "electron"}); err == nil {
+		t.Fatal("non-payload app accepted the payload command")
 	}
 }

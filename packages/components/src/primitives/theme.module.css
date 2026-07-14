@@ -1,4 +1,4 @@
-:root {
+:global(:root) {
   color: #f4f1ea;
   background: #11120f;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -6,11 +6,11 @@
   text-rendering: optimizeLegibility;
 }
 
-* {
+:global(*) {
   box-sizing: border-box;
 }
 
-body {
+:global(body) {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
@@ -19,14 +19,18 @@ body {
     linear-gradient(145deg, #151711, #0c0d0b 72%);
 }
 
-#app {
-  display: grid;
+:global(#app) {
   min-height: 100vh;
-  place-items: center;
-  padding: 48px;
 }
 
-.shell {
+.surface {
+  display: grid;
+  min-height: 100vh;
+  padding: 48px;
+  place-items: center;
+}
+
+.panel {
   width: min(760px, 100%);
   padding: 64px;
   border: 1px solid rgb(244 241 234 / 12%);
@@ -35,8 +39,27 @@ body {
   backdrop-filter: blur(18px);
 }
 
+.stack,
+.stackCompact {
+  display: flex;
+  flex-direction: column;
+}
+
+.stack {
+  gap: 34px;
+}
+
+.stackCompact {
+  gap: 18px;
+}
+
+.eyebrow,
+.body,
+.heading {
+  margin: 0;
+}
+
 .eyebrow {
-  margin: 0 0 28px;
   color: #b5ff58;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
@@ -44,17 +67,15 @@ body {
   letter-spacing: 0.16em;
 }
 
-h1 {
-  margin: 0;
+.heading {
   font-size: clamp(48px, 8vw, 84px);
   font-weight: 590;
   letter-spacing: -0.065em;
   line-height: 0.92;
 }
 
-.summary {
+.body {
   max-width: 610px;
-  margin: 34px 0 42px;
   color: rgb(244 241 234 / 62%);
   font-size: 17px;
   line-height: 1.7;
@@ -69,21 +90,44 @@ h1 {
   font-size: 13px;
 }
 
-.pulse {
+.ready,
+.pending,
+.unavailable {
   width: 9px;
   height: 9px;
   border-radius: 999px;
+}
+
+.ready {
   background: #b5ff58;
   box-shadow: 0 0 0 0 rgb(181 255 88 / 55%);
   animation: pulse 2s infinite;
 }
 
+.pending {
+  background: #f4d35e;
+}
+
+.unavailable {
+  background: #ff6b6b;
+}
+
 @keyframes pulse {
-  70% { box-shadow: 0 0 0 9px rgb(181 255 88 / 0%); }
-  100% { box-shadow: 0 0 0 0 rgb(181 255 88 / 0%); }
+  70% {
+    box-shadow: 0 0 0 9px rgb(181 255 88 / 0%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(181 255 88 / 0%);
+  }
 }
 
 @media (max-width: 640px) {
-  #app { padding: 20px; }
-  .shell { padding: 36px 28px; }
+  .surface {
+    padding: 20px;
+  }
+
+  .panel {
+    padding: 36px 28px;
+  }
 }

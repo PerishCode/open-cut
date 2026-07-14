@@ -30,10 +30,13 @@ local policy to justify one.
 - Generated TypeScript protocol types, constants, schemas, and decoders live in
   `packages/sidecar-protocol`; transport and reconciliation mechanics live in
   `packages/sidecar-client`.
-- `apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
-  `apps/api/sidecar/index.ts` are the sole sidecar-mode source entries for those apps.
-- They compile to `dist/sidecar/index.js`. Development, packaged execution, and
-  harnesses consume those same outputs; do not add dev- or packaged-only entries.
+- Each `apps/*/sidecar/manifest.json` is the sole language-neutral declaration
+  of that app's runtime command and artifact. `$node` and `$payload` are generic
+  runner tokens; any other command is an app-relative native artifact.
+- Web and Electron compile their sole sidecar-mode source to
+  `dist/sidecar/index.js`; API builds its Go sidecar to
+  `dist/sidecar/api-sidecar.exe`. Development, packaged execution, and harnesses
+  consume those same outputs; do not add mode-specific entries.
 - App sidecars are peer processes. Electron must discover web state/endpoints
   through sidecar IPC and must never spawn, supervise, or stop web/API itself.
 - Cross-sidecar state is a continuous TCP subscription plus reconciliation
@@ -61,8 +64,9 @@ oc-control bootstrap
 
 `oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
 by the root `packageManager` when needed, runs `pnpm install --frozen-lockfile`,
-and configures `core.hooksPath` for the repository pre-commit gate. It has no
-Node-install option. Rerun it after the root toolchain or lockfile changes.
+builds a source-fingerprinted checkout CLI under `.oc-control/bin`, and configures
+`core.hooksPath` for the repository pre-commit gate. It has no Node-install
+option. Rerun it after control source, the root toolchain, or lockfile changes.
 
 Then use the installed binary for lifecycle, packaging, fixtures, releases, and
 harnesses:
@@ -91,6 +95,11 @@ repository-guarded and deliberately excludes source, dependencies, and arbitrary
   TypeScript across `apps/*` and `packages/*`. Its version comes only from the
   workspace catalog. Generated protocol bindings remain generator-owned.
 - Go formatting and tests are repository-wide: `gofmt` and `go test ./...`.
+- `oc-control harness guard` enforces app/package directory boundaries, Web
+  zero-CSS policy, shared atom ownership, API layer imports, sibling test
+  directories, the 50 KiB resource limit, and the 800-line file limit.
+- Pre-commit rejects partially staged files, runs gofmt and recursive Biome
+  formatting transactionally, then requires guard and recursive lint to pass.
 - `oc-control pack` may invoke pinned pnpm build scripts, but archive creation,
   verification, and extraction stay implemented in Go.
 - Public targets are always `<mac|win|linux>-<arm64|x64>`. Keep Go and Electron

@@ -1,0 +1,4 @@
+{
+  "schema": 1,
+  "command": "dist/sidecar/api-sidecar.exe"
+}

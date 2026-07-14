@@ -1,0 +1,26 @@
+{
+  "name": "@open-cut/openapi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json --noEmit",
+    "check": "node scripts/check.ts",
+    "format": "biome check --write scripts src/index.ts tests",
+    "generate": "node scripts/generate.ts",
+    "lint": "biome check scripts src/index.ts tests",
+    "test": "node scripts/check.ts && vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@types/node": "24.13.3",
+    "orval": "8.21.0",
+    "vitest": "4.1.10"
+  }
+}

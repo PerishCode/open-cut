@@ -24,9 +24,10 @@ oc-control dev
 ```
 
 `oc-control bootstrap` validates Node, provisions the exact pnpm version pinned
-by `packageManager` when needed, performs a frozen workspace install, and enables
-the repository pre-commit hook. It never installs or replaces Node. The pinned
-package manager is always available through `./.oc-control/bin/pnpm` afterward.
+by `packageManager` when needed, performs a frozen workspace install, builds a
+source-fingerprinted checkout CLI, and enables the repository pre-commit hook.
+It never installs or replaces Node. The pinned tools are available through
+`./.oc-control/bin/pnpm` and `./.oc-control/bin/oc-control` afterward.
 
 The current executable acceptance paths are:
 
@@ -49,8 +50,9 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   web, and API are peer sidecars; Electron discovers the web endpoint through the
   shared TCP broker and never owns the other processes. Its renderer always loads
   `oc://app/`; an Electron protocol adapter proxies that stable origin to the current
-  loopback Web lease. Web runs Vite in dev and serves the Vite production build
-  through the same thin sidecar wrapper in a release.
+  loopback Web lease. Web runs React through Vite in dev and serves the Vite
+  production build through the same thin sidecar wrapper in a release. Its
+  stable `/api` ingress continuously follows the native Go API sidecar lease.
 - Sidecar state is continuously reconciled over TCP. Revisioned WebSocket snapshots
   provide low-latency changes, status polling repairs gaps, and the runner restarts
   unexpectedly exited peers without changing ownership boundaries.
@@ -58,7 +60,7 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   `oc-control protocol generate` produces OpenAPI, JSON Schema, and the Go/TypeScript
   bindings and decoders in `packages/sidecar-protocol`; transport and reconciliation
   stay in `packages/sidecar-client`. `oc-control protocol check` rejects generated drift.
-- `pack` discovers every app sidecar from its unique source entry, deploys their
+- `pack` discovers every app sidecar from its language-neutral manifest, deploys their
   production trees, generates a platform-resolved generic runtime topology,
   builds the Electron full pack, and archives it with the versioned launcher.
 - `full-pack` extracts that real archive and invokes the versioned L1 launcher,
@@ -122,7 +124,9 @@ Run repository checks with:
 ```sh
 go test ./...
 ./.oc-control/bin/pnpm build
+./.oc-control/bin/pnpm format
 ./.oc-control/bin/pnpm lint
 ./.oc-control/bin/pnpm test
-oc-control protocol check
+./.oc-control/bin/oc-control protocol check
+./.oc-control/bin/oc-control harness guard
 ```

@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
+	"github.com/PerishCode/open-cut/internal/devsession"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/workspace"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
-	"github.com/PerishCode/open-cut/utils/tool"
+	"github.com/PerishCode/open-cut/utils/environment"
 )
 
 type childProcess struct {
@@ -25,7 +28,7 @@ type childProcess struct {
 	exited  chan error
 }
 
-func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
+func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Report {
 	started := time.Now()
 	report := Report{Schema: 1, Scenario: "web-api-sidecar-entries"}
 	check := func(name string, err error) bool {
@@ -42,9 +45,9 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		return finish(report, started)
 	}
 	paths, err := layout.Resolve(config.RootSet{
-		BootstrapRoot: filepath.Join(workspace, "bootstrap"), StoreRoot: filepath.Join(workspace, "roots", "store"),
-		CacheRoot: filepath.Join(workspace, "roots", "cache"), RuntimeRoot: filepath.Join(workspace, "roots", "runtime"),
-		LogRoot: filepath.Join(workspace, "roots", "logs"),
+		BootstrapRoot: filepath.Join(workspaceRoot, "bootstrap"), StoreRoot: filepath.Join(workspaceRoot, "roots", "store"),
+		CacheRoot: filepath.Join(workspaceRoot, "roots", "cache"), RuntimeRoot: filepath.Join(workspaceRoot, "roots", "runtime"),
+		LogRoot: filepath.Join(workspaceRoot, "roots", "logs"),
 	}, identity)
 	if !check("root-layout", err) {
 		return finish(report, started)
@@ -55,28 +58,41 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 	}
 	defer cellBroker.Close()
 
-	logRoot := filepath.Join(workspace, "reports", "logs")
+	logRoot := filepath.Join(workspaceRoot, "reports", "logs")
 	if !check("create-log-root", os.MkdirAll(logRoot, 0o700)) {
 		return finish(report, started)
 	}
-	children := make([]*childProcess, 0, 2)
+	controlConfig, err := workspace.Load(repositoryRoot)
+	if !check("load-workspace", err) {
+		return finish(report, started)
+	}
+	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
+	if !check("discover-sidecars", err) {
+		return finish(report, started)
+	}
+	selected, err := selectSidecars(topology, "api", "web")
+	if !check("select-sidecars", err) {
+		return finish(report, started)
+	}
+	plan, err := devsession.ResolvePlan(repositoryRoot, controlConfig, selected)
+	if !check("resolve-runtime-plan", err) {
+		return finish(report, started)
+	}
+
+	children := make([]*childProcess, 0, len(plan.Processes))
 	defer func() {
 		for _, child := range children {
 			_ = child.process.Kill()
 			child.log.Close()
 		}
 	}()
-	node, err := tool.ResolveRepository(repositoryRoot, "node")
-	if !check("resolve-node", err) {
-		return finish(report, started)
-	}
-
-	for _, app := range []string{"api", "web"} {
+	for _, definition := range plan.Processes {
+		app := definition.App
 		token, tokenErr := cellBroker.MintSidecarToken(app, time.Minute)
 		if !check("mint-"+app+"-capability", tokenErr) {
 			return finish(report, started)
 		}
-		launchEnvironment, launchErr := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
+		launchEnvironment, launchErr := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
 			App: app, Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
 			Namespace: identity.Namespace, Mode: protocol.LifecycleModeHarness,
 			Presentation: protocol.PresentationHeadless, Source: "oc-control",
@@ -84,9 +100,7 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		if !check("encode-"+app+"-launch-envelope", launchErr) {
 			return finish(report, started)
 		}
-		entry := filepath.Join(repositoryRoot, "apps", app, "dist", "sidecar", "index.js")
-		appRoot := filepath.Join(repositoryRoot, "apps", app)
-		if _, statErr := os.Stat(entry); !check(app+"-entry-exists", statErr) {
+		if _, statErr := os.Stat(definition.Command); !check(app+"-entry-exists", statErr) {
 			return finish(report, started)
 		}
 		logFile, logErr := os.OpenFile(filepath.Join(logRoot, app+".log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
@@ -94,10 +108,11 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 			return finish(report, started)
 		}
 		process, startErr := lifecycle.Start(ctx, lifecycle.ProcessSpec{
-			Executable: node.Executable, Args: node.Arguments(entry), Directory: appRoot,
+			Executable: definition.Command, Args: definition.Args, Directory: definition.WorkingDirectory,
 			Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileHarness,
 			Presentation: lifecycle.PresentationHeadless,
-			Env:          launchEnvironment,
+			Sandbox:      definition.Sandbox,
+			Env:          environment.Merge(os.Environ(), definition.UnsetEnv, definition.Env, launchEnvironment),
 		})
 		if !check("start-"+app+"-entry", startErr) {
 			logFile.Close()
@@ -144,6 +159,29 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		}
 	}
 	return finish(report, started)
+}
+
+func selectSidecars(topology workspace.Topology, apps ...string) (workspace.Topology, error) {
+	wanted := make(map[string]bool, len(apps))
+	for _, app := range apps {
+		wanted[app] = true
+	}
+	selected := workspace.Topology{Schema: topology.Schema}
+	for _, sidecar := range topology.Sidecars {
+		if wanted[sidecar.App] {
+			selected.Sidecars = append(selected.Sidecars, sidecar)
+			delete(wanted, sidecar.App)
+		}
+	}
+	if len(wanted) != 0 {
+		missing := make([]string, 0, len(wanted))
+		for app := range wanted {
+			missing = append(missing, app)
+		}
+		sort.Strings(missing)
+		return workspace.Topology{}, fmt.Errorf("runtime topology is missing sidecars %v", missing)
+	}
+	return selected, nil
 }
 
 func validateSidecarStatus(status protocol.Status) error {

@@ -9,8 +9,11 @@
     "includes": [
       "**/*.ts",
       "**/*.tsx",
+      "**/*.css",
+      "**/*.json",
       "!**/dist/**",
       "!**/node_modules/**",
+      "!**/openapi/src/generated/**",
       "!**/sidecar-protocol/src/generated.ts"
     ]
   },

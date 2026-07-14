@@ -27,13 +27,18 @@ jobs:
       - name: Bootstrap development environment
         run: .tmp/ci/oc-control bootstrap --repo .
       - name: Check generated protocol artifacts
-        run: |
-          .tmp/ci/oc-control protocol check --repo .
+        run: ./.oc-control/bin/oc-control protocol check --repo .
+      - name: Check repository harness policy
+        run: ./.oc-control/bin/oc-control harness guard --repo .
       - name: Go format
         shell: bash
         run: |
           mapfile -t go_files < <(git ls-files '*.go')
           test -z "$(gofmt -l "${go_files[@]}")"
+      - name: Workspace format
+        run: |
+          ./.oc-control/bin/pnpm format
+          git diff --exit-code
       - run: go vet ./...
       - run: go test -race ./...
       - run: ./.oc-control/bin/pnpm build

@@ -277,7 +277,10 @@ func generateTypeScript(document openAPIDocument) ([]byte, error) {
 		output.WriteString("};\n\n")
 	}
 
-	encodedSchemas, err := json.MarshalIndent(document.Components.Schemas, "", "  ")
+	// Keep the embedded runtime schema compact so generated bindings remain
+	// comfortably below the repository's single-file line limit. The schema is
+	// generator-owned data; human-readable OpenAPI remains under protocol/.
+	encodedSchemas, err := json.Marshal(document.Components.Schemas)
 	if err != nil {
 		return nil, fmt.Errorf("encode TypeScript protocol schemas: %w", err)
 	}

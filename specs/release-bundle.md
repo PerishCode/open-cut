@@ -14,11 +14,13 @@ For Open Cut the payload is assembled from `apps/web`, `apps/api`, and
 `apps/electron` into a full Electron pack. That source graph is build-plane
 knowledge and is absent from launcher state and release manifests.
 
-`oc-control pack` discovers every `apps/*/sidecar/index.ts`, including the
-carrier, requires its compiled `dist/sidecar/index.js`, production-deploys each
-app independently, and writes one generated `runtime-topology.json`. The shared
-Go runtime runner consumes that artifact; there is no second hand-maintained
-list of app entries and Electron never consumes or owns the topology.
+`oc-control pack` discovers every `apps/*/sidecar/manifest.json`, including the
+carrier, validates each declared compiled artifact, production-deploys each app
+independently, and writes one generated `runtime-topology.json`. A manifest may
+select the generic `$node` or `$payload` token, or an app-relative native
+command. The shared Go runtime runner consumes the resolved topology; there is
+no second hand-maintained list of app entries and Electron never consumes or
+owns the topology.
 
 The opaque payload currently contains this carrier-owned shape (platform wrapper
 details omitted):
@@ -29,7 +31,7 @@ payload/app/
   <Electron executable and frameworks>
   resources/app/                          # Electron app source + sidecar entry
   resources/payload/sidecars/<app>/
-    dist/sidecar/index.js                  # sole compiled sidecar entry
+    dist/sidecar/<declared artifact>       # JS or native app sidecar artifact
     node_modules/                          # app-scoped production dependencies
 ```
 

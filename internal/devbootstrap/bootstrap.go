@@ -14,7 +14,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/sourcefingerprint"
 	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
 )
 
@@ -38,11 +40,17 @@ type PackageManagerResult struct {
 	Managed bool `json:"managed"`
 }
 
+type ControlResult struct {
+	Path              string `json:"path"`
+	SourceFingerprint string `json:"sourceFingerprint"`
+}
+
 type Result struct {
 	Schema       int                  `json:"schema"`
 	Repository   string               `json:"repository"`
 	Node         ToolResult           `json:"node"`
 	Pnpm         PackageManagerResult `json:"pnpm"`
+	Control      ControlResult        `json:"control"`
 	HooksPath    string               `json:"hooksPath"`
 	Dependencies string               `json:"dependencies"`
 }
@@ -92,13 +100,6 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		return Result{}, fmt.Errorf("pnpm %s does not match packageManager pnpm@%s", pnpmInfo.Version, requirements.PnpmVersion)
 	}
 
-	if err := tool.WriteRepositoryShims(root, map[string]tool.Command{"pnpm": pnpmCommand}); err != nil {
-		return Result{}, err
-	}
-	repositoryPnpmCommand, err := tool.RepositoryShimCommand(root, "pnpm")
-	if err != nil {
-		return Result{}, err
-	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 		Executable: pnpmCommand.Executable,
 		Args:       pnpmCommand.Arguments("install", "--frozen-lockfile"),
@@ -109,12 +110,33 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	}); err != nil {
 		return Result{}, fmt.Errorf("install workspace dependencies: %w", err)
 	}
+	controlCommand, fingerprint, err := buildRepositoryControl(ctx, root, stdout, stderr)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := tool.WriteRepositoryShims(root, map[string]tool.Command{
+		"oc-control": controlCommand,
+		"pnpm":       pnpmCommand,
+	}); err != nil {
+		return Result{}, err
+	}
+	repositoryPnpmCommand, err := tool.RepositoryShimCommand(root, "pnpm")
+	if err != nil {
+		return Result{}, err
+	}
+	repositoryControlCommand, err := tool.RepositoryShimCommand(root, "oc-control")
+	if err != nil {
+		return Result{}, err
+	}
 	if err := configureHooks(ctx, root); err != nil {
 		return Result{}, err
 	}
 	if err := tool.SaveRepositoryState(root, tool.RepositoryState{
 		Schema: tool.RepositoryStateSchema,
-		Tools:  map[string]tool.Command{"pnpm": repositoryPnpmCommand},
+		Tools: map[string]tool.Command{
+			"oc-control": repositoryControlCommand,
+			"pnpm":       repositoryPnpmCommand,
+		},
 	}); err != nil {
 		return Result{}, err
 	}
@@ -127,9 +149,55 @@ func Run(ctx context.Context, options Options) (Result, error) {
 			ToolResult: ToolResult{Path: pnpmInfo.Path, Version: pnpmInfo.Version},
 			Managed:    pnpmManaged,
 		},
+		Control:      ControlResult{Path: repositoryControlCommand.Executable, SourceFingerprint: fingerprint},
 		HooksPath:    ".githooks",
 		Dependencies: "installed",
 	}, nil
+}
+
+func buildRepositoryControl(
+	ctx context.Context,
+	root string,
+	stdout, stderr io.Writer,
+) (tool.Command, string, error) {
+	fingerprint, err := sourcefingerprint.Calculate(root)
+	if err != nil {
+		return tool.Command{}, "", err
+	}
+	toolRoot := filepath.Join(root, ".oc-control", "tools", "oc-control", fingerprint)
+	artifact := filepath.Join(toolRoot, target.Host().ExecutableName("oc-control"))
+	if info, statErr := os.Stat(artifact); statErr == nil && info.Mode().IsRegular() {
+		return tool.Command{Executable: artifact}, fingerprint, nil
+	}
+	goPath, err := tool.Resolve("go")
+	if err != nil {
+		return tool.Command{}, "", fmt.Errorf("Go is a cold-start prerequisite: %w", err)
+	}
+	parent := filepath.Dir(toolRoot)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return tool.Command{}, "", fmt.Errorf("create control tool root: %w", err)
+	}
+	staging, err := os.MkdirTemp(parent, ".oc-control-bootstrap-")
+	if err != nil {
+		return tool.Command{}, "", fmt.Errorf("create control tool staging directory: %w", err)
+	}
+	defer os.RemoveAll(staging)
+	stagedArtifact := filepath.Join(staging, target.Host().ExecutableName("oc-control"))
+	linkerValue := "github.com/PerishCode/open-cut/internal/buildinfo.DevelopmentSourceFingerprint=" + fingerprint
+	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: goPath,
+		Args:       []string{"build", "-trimpath", "-ldflags", "-X " + linkerValue, "-o", stagedArtifact, "./cmd/oc-control"},
+		Directory:  root,
+		Stdout:     stdout,
+		Stderr:     stderr,
+		Profile:    lifecycle.ProfileDevelopment,
+	}); err != nil {
+		return tool.Command{}, "", fmt.Errorf("build checkout-pinned oc-control: %w", err)
+	}
+	if err := os.Rename(staging, toolRoot); err != nil {
+		return tool.Command{}, "", fmt.Errorf("activate checkout-pinned oc-control: %w", err)
+	}
+	return tool.Command{Executable: artifact}, fingerprint, nil
 }
 
 type requirements struct {

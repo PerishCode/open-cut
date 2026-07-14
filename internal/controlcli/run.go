@@ -18,6 +18,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/devbootstrap"
 	"github.com/PerishCode/open-cut/internal/devsession"
 	"github.com/PerishCode/open-cut/internal/harness"
+	"github.com/PerishCode/open-cut/internal/harnessguard"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/originserver"
 	"github.com/PerishCode/open-cut/internal/packager"
@@ -98,13 +99,14 @@ Usage:
   oc-control status --bootstrap <bootstrap.json>
   oc-control show --bootstrap <bootstrap.json>
   oc-control shutdown --bootstrap <bootstrap.json>
-	oc-control harness broker [--workspace <path>]
-	oc-control harness sidecars [--repo <path>] [--workspace <path>] [--skip-build]
-	oc-control harness cold-start [--repo <path>] [--workspace <path>]
-	oc-control harness full-pack --bundle <release-bundle.tar.zst> [--workspace <path>]
-	oc-control harness install <mac|win|linux> --arch <arch> --workspace <path> --origin <dir> --origin-url <url> --key <key.json>
-	oc-control harness run --workspace <path> --receipt <install-receipt.json> [--headless]
-	oc-control harness uninstall --workspace <path> --receipt <install-receipt.json> [--purge]
+  oc-control harness guard [--repo <path>]
+  oc-control harness broker [--workspace <path>]
+  oc-control harness sidecars [--repo <path>] [--workspace <path>] [--skip-build]
+  oc-control harness cold-start [--repo <path>] [--workspace <path>]
+  oc-control harness full-pack --bundle <release-bundle.tar.zst> [--workspace <path>]
+  oc-control harness install <mac|win|linux> --arch <arch> --workspace <path> --origin <dir> --origin-url <url> --key <key.json>
+  oc-control harness run --workspace <path> --receipt <install-receipt.json> [--headless]
+  oc-control harness uninstall --workspace <path> --receipt <install-receipt.json> [--purge]
 `)
 }
 
@@ -525,6 +527,9 @@ func loadClient(args []string, stderr io.Writer) (*client.Client, int) {
 }
 
 func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "guard" {
+		return runHarnessGuard(ctx, args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "install" {
 		return runHarnessInstall(ctx, args[1:], stdout, stderr)
 	}
@@ -535,7 +540,7 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return runHarnessRun(ctx, args[1:], stdout, stderr)
 	}
 	if len(args) == 0 || (args[0] != "broker" && args[0] != "sidecars" && args[0] != "cold-start" && args[0] != "full-pack") {
-		fmt.Fprintln(stderr, "usage: oc-control harness <broker|sidecars|cold-start|full-pack|install|run|uninstall> [options]")
+		fmt.Fprintln(stderr, "usage: oc-control harness <guard|broker|sidecars|cold-start|full-pack|install|run|uninstall> [options]")
 		return 2
 	}
 	scenario := args[0]
@@ -635,6 +640,24 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		report = harness.RunColdStart(ctx, selected, launcherArtifact, payloadArtifact)
 	}
 	if writeOutput(stdout, stderr, report) != 0 || !report.Passed {
+		return 1
+	}
+	return 0
+}
+
+func runHarnessGuard(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	set := flag.NewFlagSet("harness guard", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	repository := set.String("repo", ".", "open-cut repository root")
+	if err := set.Parse(args); err != nil {
+		return 2
+	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control harness guard [--repo <path>]")
+		return 2
+	}
+	result := harnessguard.Run(ctx, *repository)
+	if writeOutput(stdout, stderr, result) != 0 || !result.Passed {
 		return 1
 	}
 	return 0

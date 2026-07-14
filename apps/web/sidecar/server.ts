@@ -5,9 +5,11 @@ import { extname, join, relative, resolve, sep } from "node:path";
 
 import { type LifecycleMode, lifecycleMode } from "@open-cut/sidecar-client";
 import type { ViteDevServer } from "vite";
+import { ApiProxy } from "./api-proxy.js";
 
 export type WebServer = {
   url: string;
+  setApiRuntime(endpoint: string | undefined): void;
   close(): Promise<void>;
 };
 
@@ -19,8 +21,10 @@ export async function startWebServer(mode: LifecycleMode, host = "127.0.0.1", po
 
 async function startViteServer(webRoot: string, host: string, port: number): Promise<WebServer> {
   const { createServer: createViteServer } = await import("vite");
+  const api = new ApiProxy();
   let vite: ViteDevServer | undefined;
   const server = createServer((request, response) => {
+    if (api.handle(request, response)) return;
     if (!vite) {
       response.writeHead(503);
       response.end();
@@ -53,6 +57,7 @@ async function startViteServer(webRoot: string, host: string, port: number): Pro
   }
   return {
     url: `http://${host}:${address.port}`,
+    setApiRuntime: (endpoint) => api.setRuntime(endpoint),
     close: async () => {
       await vite?.close();
       await closeServer(server);
@@ -63,8 +68,10 @@ async function startViteServer(webRoot: string, host: string, port: number): Pro
 async function startStaticServer(distRoot: string, host: string, port: number): Promise<WebServer> {
   const indexPath = join(distRoot, "index.html");
   await stat(indexPath);
+  const api = new ApiProxy();
   const server = createServer(async (request, response) => {
     try {
+      if (api.handle(request, response)) return;
       if (request.method !== "GET" && request.method !== "HEAD") {
         response.writeHead(405, { allow: "GET, HEAD" });
         response.end();
@@ -91,6 +98,7 @@ async function startStaticServer(distRoot: string, host: string, port: number): 
   if (!address || typeof address === "string") throw new Error("Web server did not bind loopback TCP");
   return {
     url: `http://${host}:${address.port}`,
+    setApiRuntime: (endpoint) => api.setRuntime(endpoint),
     close: () => closeServer(server),
   };
 }

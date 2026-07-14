@@ -109,7 +109,10 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		stderr = io.Discard
 	}
 	if !options.SkipBuild {
-		if err := run(ctx, repositoryRoot, stdout, stderr, nil, "pnpm", "-r", "--if-present", "run", "build"); err != nil {
+		if err := run(
+			ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
+			"pnpm", "-r", "--if-present", "run", "build",
+		); err != nil {
 			return Result{}, fmt.Errorf("build workspace: %w", err)
 		}
 	}
@@ -178,7 +181,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	); err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
 	}
-	runtimeTopology, err := packagedRuntimeTopology(packRoot, packEntry, options.Target, controlConfig.PayloadWorkspace, topology)
+	runtimeTopology, err := packagedRuntimeTopology(packRoot, packEntry, options.Target, topology)
 	if err != nil {
 		return Result{}, err
 	}
@@ -221,7 +224,6 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 func packagedRuntimeTopology(
 	packRoot, packEntry string,
 	buildTarget target.Target,
-	payloadWorkspace string,
 	discovered workspace.Topology,
 ) (runtimetopology.Topology, error) {
 	layout, err := lifecycle.ResolveRuntimeLayout(packRoot, packEntry, buildTarget)
@@ -231,18 +233,25 @@ func packagedRuntimeTopology(
 
 	processes := make([]runtimetopology.Process, 0, len(discovered.Sidecars))
 	for _, sidecar := range discovered.Sidecars {
-		if sidecar.App == payloadWorkspace {
+		workingDirectory := filepath.ToSlash(filepath.Join(layout.PayloadResources, "sidecars", sidecar.App))
+		switch sidecar.Command {
+		case workspace.SidecarCommandPayload:
 			processes = append(processes, runtimetopology.Process{
 				App: sidecar.App, Command: layout.ElectronCommand, WorkingDirectory: "app",
 				UnsetEnv: []string{"ELECTRON_RUN_AS_NODE"}, Sandbox: lifecycle.SandboxChromium,
 			})
-			continue
+		case workspace.SidecarCommandNode:
+			processes = append(processes, runtimetopology.Process{
+				App: sidecar.App, Command: layout.NodeCommand, Args: append([]string(nil), sidecar.Args...),
+				WorkingDirectory: workingDirectory, Env: map[string]string{"ELECTRON_RUN_AS_NODE": "1"},
+			})
+		default:
+			processes = append(processes, runtimetopology.Process{
+				App:     sidecar.App,
+				Command: filepath.ToSlash(filepath.Join(workingDirectory, filepath.FromSlash(sidecar.Command))),
+				Args:    append([]string(nil), sidecar.Args...), WorkingDirectory: workingDirectory,
+			})
 		}
-		processes = append(processes, runtimetopology.Process{
-			App: sidecar.App, Command: layout.NodeCommand, Args: []string{"dist/sidecar/index.js"},
-			WorkingDirectory: filepath.ToSlash(filepath.Join(layout.PayloadResources, "sidecars", sidecar.App)),
-			Env:              map[string]string{"ELECTRON_RUN_AS_NODE": "1"},
-		})
 	}
 	topology := runtimetopology.Topology{Schema: runtimetopology.Schema, Processes: processes}
 	if err := topology.Validate(); err != nil {

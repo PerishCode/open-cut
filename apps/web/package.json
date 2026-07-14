@@ -10,12 +10,21 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@open-cut/components": "workspace:*",
     "@open-cut/contracts": "workspace:*",
-    "@open-cut/sidecar-client": "workspace:*"
+    "@open-cut/openapi": "workspace:*",
+    "@open-cut/sidecar-client": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/node": "24.13.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
     "vite": "^8.1.4",
     "vitest": "4.1.10"
   }

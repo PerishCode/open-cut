@@ -12,8 +12,12 @@ import (
 )
 
 const (
-	ConfigSchema   = 1
-	TopologySchema = 1
+	ConfigSchema            = 1
+	TopologySchema          = 1
+	SidecarManifestSchema   = 1
+	SidecarCommandNode      = "$node"
+	SidecarCommandPayload   = "$payload"
+	SidecarManifestFilename = "manifest.json"
 )
 
 var appPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`)
@@ -24,8 +28,15 @@ type Config struct {
 }
 
 type Sidecar struct {
-	App   string `json:"app"`
-	Entry string `json:"entry"`
+	App     string   `json:"app"`
+	Command string   `json:"command"`
+	Args    []string `json:"args,omitempty"`
+}
+
+type SidecarManifest struct {
+	Schema  int      `json:"schema"`
+	Command string   `json:"command"`
+	Args    []string `json:"args,omitempty"`
 }
 
 type Topology struct {
@@ -134,18 +145,27 @@ func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {
 		if !entry.IsDir() || !appPattern.MatchString(entry.Name()) {
 			continue
 		}
-		sourceEntry := filepath.Join(appsRoot, entry.Name(), "sidecar", "index.ts")
-		if _, err := os.Stat(sourceEntry); errors.Is(err, os.ErrNotExist) {
+		manifestPath := filepath.Join(appsRoot, entry.Name(), "sidecar", SidecarManifestFilename)
+		manifest, err := loadSidecarManifest(manifestPath)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
-			return Topology{}, err
+			return Topology{}, fmt.Errorf("load sidecar manifest for %s: %w", entry.Name(), err)
 		}
-		compiledEntry := filepath.Join(appsRoot, entry.Name(), "dist", "sidecar", "index.js")
-		if info, err := os.Stat(compiledEntry); err != nil || !info.Mode().IsRegular() {
-			return Topology{}, fmt.Errorf("sidecar %s has source entry but no compiled dist/sidecar/index.js", entry.Name())
+		if manifest.Command == SidecarCommandPayload && entry.Name() != config.PayloadWorkspace {
+			return Topology{}, fmt.Errorf("sidecar %s declares the payload command but is not the payload workspace", entry.Name())
+		}
+		if entry.Name() == config.PayloadWorkspace && manifest.Command != SidecarCommandPayload {
+			return Topology{}, fmt.Errorf("payload workspace %s must declare the payload sidecar command", entry.Name())
+		}
+		if manifest.Command != SidecarCommandNode && manifest.Command != SidecarCommandPayload {
+			artifact := filepath.Join(appsRoot, entry.Name(), filepath.FromSlash(manifest.Command))
+			if info, err := os.Stat(artifact); err != nil || !info.Mode().IsRegular() {
+				return Topology{}, fmt.Errorf("sidecar %s command artifact is unavailable at %s", entry.Name(), manifest.Command)
+			}
 		}
 		sidecars = append(sidecars, Sidecar{
-			App: entry.Name(), Entry: filepath.ToSlash(filepath.Join("sidecars", entry.Name(), "dist", "sidecar", "index.js")),
+			App: entry.Name(), Command: manifest.Command, Args: append([]string(nil), manifest.Args...),
 		})
 	}
 	sort.Slice(sidecars, func(i, j int) bool { return sidecars[i].App < sidecars[j].App })
@@ -153,6 +173,45 @@ func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {
 		return Topology{}, fmt.Errorf("no app sidecar entries discovered")
 	}
 	return Topology{Schema: TopologySchema, Sidecars: sidecars}, nil
+}
+
+func loadSidecarManifest(filename string) (SidecarManifest, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return SidecarManifest{}, err
+	}
+	var manifest SidecarManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return SidecarManifest{}, fmt.Errorf("decode %s: %w", filename, err)
+	}
+	if manifest.Schema != SidecarManifestSchema {
+		return SidecarManifest{}, fmt.Errorf("sidecar manifest requires schema %d", SidecarManifestSchema)
+	}
+	if manifest.Command != SidecarCommandNode && manifest.Command != SidecarCommandPayload {
+		if err := validateSidecarPath(manifest.Command, "command"); err != nil {
+			return SidecarManifest{}, err
+		}
+	}
+	for _, argument := range manifest.Args {
+		if strings.ContainsRune(argument, '\x00') {
+			return SidecarManifest{}, fmt.Errorf("sidecar argument contains a null byte")
+		}
+	}
+	if manifest.Command == SidecarCommandPayload && len(manifest.Args) > 0 {
+		return SidecarManifest{}, fmt.Errorf("payload sidecar command does not accept manifest arguments")
+	}
+	return manifest, nil
+}
+
+func validateSidecarPath(value, field string) error {
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(value)))
+	if value == "" || strings.ContainsRune(value, '\\') || filepath.IsAbs(value) || clean != value {
+		return fmt.Errorf("sidecar %s must be a clean relative slash path", field)
+	}
+	if value == ".." || strings.HasPrefix(value, "../") {
+		return fmt.Errorf("sidecar %s escapes the app workspace", field)
+	}
+	return nil
 }
 
 func LoadPackage(repositoryRoot, app string) (Package, error) {

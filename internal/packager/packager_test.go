@@ -70,8 +70,11 @@ func TestPackagedRuntimeTopologyKeepsElectronAndAppsAsPeers(t *testing.T) {
 		packRoot,
 		"Open Cut.app/Contents/MacOS/Open Cut",
 		target.Target{Platform: target.Mac, Arch: target.ARM64},
-		"electron",
-		workspace.Topology{Schema: 1, Sidecars: []workspace.Sidecar{{App: "api"}, {App: "electron"}, {App: "web"}}},
+		workspace.Topology{Schema: 1, Sidecars: []workspace.Sidecar{
+			{App: "api", Command: "dist/sidecar/api-sidecar.exe"},
+			{App: "electron", Command: workspace.SidecarCommandPayload},
+			{App: "web", Command: workspace.SidecarCommandNode, Args: []string{"dist/sidecar/index.js"}},
+		}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -86,8 +89,14 @@ func TestPackagedRuntimeTopologyKeepsElectronAndAppsAsPeers(t *testing.T) {
 			}
 			continue
 		}
-		if process.Command != "app/Open Cut.app/Contents/Frameworks/Open Cut Helper.app/Contents/MacOS/Open Cut Helper" || process.Env["ELECTRON_RUN_AS_NODE"] != "1" {
-			t.Fatalf("sidecar process=%+v", process)
+		if process.App == "web" {
+			if process.Command != "app/Open Cut.app/Contents/Frameworks/Open Cut Helper.app/Contents/MacOS/Open Cut Helper" || process.Env["ELECTRON_RUN_AS_NODE"] != "1" {
+				t.Fatalf("Node sidecar process=%+v", process)
+			}
+			continue
+		}
+		if process.Command != "app/Open Cut.app/Contents/Resources/payload/sidecars/api/dist/sidecar/api-sidecar.exe" || len(process.Env) != 0 {
+			t.Fatalf("native sidecar process=%+v", process)
 		}
 	}
 }

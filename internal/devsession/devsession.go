@@ -56,7 +56,7 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	if err != nil {
 		return err
 	}
-	plan, err := developmentPlan(repositoryRoot, controlConfig, topology)
+	plan, err := ResolvePlan(repositoryRoot, controlConfig, topology)
 	if err != nil {
 		return err
 	}
@@ -103,28 +103,42 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	}
 }
 
-func developmentPlan(repositoryRoot string, config workspace.Config, topology workspace.Topology) (runtimetopology.Plan, error) {
-	node, err := tool.ResolveRepository(repositoryRoot, "node")
-	if err != nil {
-		return runtimetopology.Plan{}, fmt.Errorf("resolve Node runtime: %w", err)
-	}
-	electron, err := tool.ResolveElectron(repositoryRoot, config.PayloadWorkspace)
-	if err != nil {
-		return runtimetopology.Plan{}, err
-	}
+// ResolvePlan adapts the language-neutral app manifests into host commands for
+// checkout execution. Development and harness paths share this one resolver.
+func ResolvePlan(repositoryRoot string, config workspace.Config, topology workspace.Topology) (runtimetopology.Plan, error) {
+	var node *tool.Command
+	var electron string
 	plan := runtimetopology.Plan{Processes: make([]runtimetopology.ResolvedProcess, 0, len(topology.Sidecars))}
 	for _, sidecar := range topology.Sidecars {
 		appRoot := filepath.Join(repositoryRoot, "apps", sidecar.App)
 		process := runtimetopology.ResolvedProcess{
-			App: sidecar.App, Command: node.Executable,
-			Args:             node.Arguments(filepath.Join(appRoot, "dist", "sidecar", "index.js")),
-			WorkingDirectory: appRoot,
+			App: sidecar.App, Args: append([]string(nil), sidecar.Args...), WorkingDirectory: appRoot,
 		}
-		if sidecar.App == config.PayloadWorkspace {
+		switch sidecar.Command {
+		case workspace.SidecarCommandPayload:
+			if electron == "" {
+				resolved, err := tool.ResolveElectron(repositoryRoot, config.PayloadWorkspace)
+				if err != nil {
+					return runtimetopology.Plan{}, err
+				}
+				electron = resolved
+			}
 			process.Command = electron
 			process.Args = []string{"."}
 			process.UnsetEnv = []string{"ELECTRON_RUN_AS_NODE"}
 			process.Sandbox = lifecycle.SandboxChromium
+		case workspace.SidecarCommandNode:
+			if node == nil {
+				resolved, err := tool.ResolveRepository(repositoryRoot, "node")
+				if err != nil {
+					return runtimetopology.Plan{}, fmt.Errorf("resolve Node runtime: %w", err)
+				}
+				node = &resolved
+			}
+			process.Command = node.Executable
+			process.Args = node.Arguments(sidecar.Args...)
+		default:
+			process.Command = filepath.Join(appRoot, filepath.FromSlash(sidecar.Command))
 		}
 		plan.Processes = append(plan.Processes, process)
 	}

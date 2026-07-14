@@ -4,10 +4,12 @@ import { startWebServer, type WebServer } from "./server.js";
 
 let web: WebServer | undefined;
 let sidecar: SidecarConnection | undefined;
+let unsubscribe: (() => void) | undefined;
 let stopping: Promise<void> | undefined;
 
 function stop(code = 0): Promise<void> {
   stopping ??= (async () => {
+    unsubscribe?.();
     await web?.close();
     sidecar?.close(code);
   })();
@@ -20,6 +22,17 @@ sidecar = await SidecarConnection.connect({
   },
 });
 web = await startWebServer(sidecar.mode);
+unsubscribe = sidecar.watchApp(runtimePeer.api.app, (api) => {
+  const endpoint = api?.ready
+    ? api.endpoints?.find((candidate) => candidate.name === runtimePeer.api.httpEndpoint)?.url
+    : undefined;
+  try {
+    web?.setApiRuntime(endpoint);
+  } catch (error) {
+    web?.setApiRuntime(undefined);
+    console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+  }
+});
 sidecar.publishEndpoint(runtimePeer.web.httpEndpoint, web.url);
 sidecar.ready();
 

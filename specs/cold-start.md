@@ -106,10 +106,11 @@ older canonical version does not authorize downgrade or reinstall.
 
 ## App sidecar isolation
 
-`apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
-`apps/api/sidecar/index.ts` are symmetric, independently compiled sidecar
-entries. Business code has zero knowledge of the control plane. Dev, packaged,
-and harness execution all consume the same `dist/sidecar/index.js` outputs.
+Each `apps/*/sidecar/manifest.json` is a symmetric, language-neutral sidecar
+entry contract. Electron and Web point at independently compiled TypeScript
+entries; API points at its native Go artifact. Business code has zero knowledge
+of the control plane. Dev, packaged, and harness execution all consume those
+same declared artifacts through the generic runtime plan.
 
 Electron is not a sidecar supervisor. It observes the web sidecar's READY state
 and published endpoint continuously through the shared cell TCP broker, then
