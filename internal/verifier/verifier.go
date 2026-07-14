@@ -13,6 +13,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/target"
 )
 
@@ -57,7 +58,11 @@ func VerifyBundle(path string, expected target.Target) (Report, error) {
 	if _, err := release.ResolveEntry(tree, manifest.Launcher.Entry, "launcher"); err != nil {
 		return Report{}, err
 	}
-	if _, err := release.ResolveEntry(tree, manifest.Payload.Entry, "payload"); err != nil {
+	topologyEntry, err := release.ResolveEntry(tree, manifest.Payload.Entry, "payload")
+	if err != nil {
+		return Report{}, err
+	}
+	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
 		return Report{}, err
 	}
 	digest, size, err := bundle.SHA256(absolute)

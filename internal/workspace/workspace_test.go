@@ -13,7 +13,7 @@ func TestTopologyIsDerivedFromSidecarEntries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, app := range []string{"web", "api"} {
+	for _, app := range []string{"web", "api", "electron"} {
 		for _, entry := range []string{"sidecar/index.ts", "dist/sidecar/index.js"} {
 			path := filepath.Join(root, "apps", app, entry)
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -28,7 +28,7 @@ func TestTopologyIsDerivedFromSidecarEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(topology.Sidecars) != 2 || topology.Sidecars[0].App != "api" || topology.Sidecars[1].App != "web" {
+	if len(topology.Sidecars) != 3 || topology.Sidecars[0].App != "api" || topology.Sidecars[1].App != "electron" || topology.Sidecars[2].App != "web" {
 		t.Fatalf("unexpected topology: %+v", topology)
 	}
 	if topology.Sidecars[0].Entry != "sidecars/api/dist/sidecar/index.js" {

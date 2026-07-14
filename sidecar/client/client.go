@@ -3,11 +3,14 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +21,7 @@ import (
 
 type Client struct {
 	descriptor protocol.ControlDescriptor
+	tokenMu    sync.RWMutex
 	token      string
 	http       *http.Client
 }
@@ -59,8 +63,20 @@ func (client *Client) Control(ctx context.Context, command string) (protocol.Con
 }
 
 func (client *Client) DelegateSidecar(ctx context.Context, subject string, ttl time.Duration) (protocol.DelegateResponse, error) {
+	return client.DelegateSidecarWithCapabilities(ctx, subject, ttl, nil)
+}
+
+func (client *Client) DelegateSidecarWithCapabilities(
+	ctx context.Context,
+	subject string,
+	ttl time.Duration,
+	capabilities []protocol.Capability,
+) (protocol.DelegateResponse, error) {
 	var response protocol.DelegateResponse
-	request := protocol.DelegateRequest{Subject: subject, TTLSeconds: int64(ttl / time.Second)}
+	request := protocol.DelegateRequest{
+		Subject: subject, TTLSeconds: int64(ttl / time.Second),
+		Capabilities: append([]protocol.Capability(nil), capabilities...),
+	}
 	if err := client.request(ctx, http.MethodPost, "/v1/capabilities/sidecar", request, &response); err != nil {
 		return protocol.DelegateResponse{}, err
 	}
@@ -76,6 +92,22 @@ func (client *Client) PrepareLatest(ctx context.Context) (protocol.UpdateTransit
 	return response, nil
 }
 
+func (client *Client) Renew(ctx context.Context, ttl time.Duration) (protocol.RenewResponse, error) {
+	var response protocol.RenewResponse
+	request := protocol.RenewRequest{TTLSeconds: int64(ttl / time.Second)}
+	if err := client.request(ctx, http.MethodPost, "/v1/capabilities/renew", request, &response); err != nil {
+		return protocol.RenewResponse{}, err
+	}
+	client.SetToken(response.Token)
+	return response, nil
+}
+
+func (client *Client) SetToken(token string) {
+	client.tokenMu.Lock()
+	client.token = token
+	client.tokenMu.Unlock()
+}
+
 func (client *Client) request(ctx context.Context, method, requestPath string, body, output any) error {
 	var encoded []byte
 	var err error
@@ -89,7 +121,10 @@ func (client *Client) request(ctx context.Context, method, requestPath string, b
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Authorization", "Bearer "+client.token)
+	client.tokenMu.RLock()
+	token := client.token
+	client.tokenMu.RUnlock()
+	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.http.Do(request)
 	if err != nil {
@@ -103,19 +138,232 @@ func (client *Client) request(ctx context.Context, method, requestPath string, b
 }
 
 type Registration struct {
-	Channel   string
-	Namespace string
-	App       string
-	Mode      string
-	Source    string
+	Channel    string
+	Namespace  string
+	App        string
+	InstanceID string
+	Mode       string
+	Source     string
 }
 
 type Session struct {
-	connection *websocket.Conn
-	write      sync.Mutex
+	descriptor   protocol.ControlDescriptor
+	token        string
+	registration Registration
+
+	mu           sync.Mutex
+	connection   *websocket.Conn
+	endpoints    map[string]string
+	desiredReady bool
+	events       chan protocol.ServerEvent
+	closed       chan struct{}
+	closeOnce    sync.Once
 }
 
 func DialSession(ctx context.Context, descriptor protocol.ControlDescriptor, token string, registration Registration) (*Session, error) {
+	if registration.InstanceID == "" {
+		instanceID, err := randomInstanceID()
+		if err != nil {
+			return nil, err
+		}
+		registration.InstanceID = instanceID
+	}
+	connection, err := dialConnection(ctx, descriptor, token, registration)
+	if err != nil {
+		return nil, err
+	}
+	session := &Session{
+		descriptor: descriptor, token: token, registration: registration,
+		connection: connection, endpoints: make(map[string]string),
+		events: make(chan protocol.ServerEvent, 64), closed: make(chan struct{}),
+	}
+	go session.run(connection)
+	return session, nil
+}
+
+func (session *Session) Heartbeat() error {
+	return session.Send(protocol.ClientEvent{Type: "heartbeat"})
+}
+func (session *Session) Ready() error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	session.desiredReady = true
+	return session.replayLocked()
+}
+func (session *Session) NotReady() error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	session.desiredReady = false
+	ready := false
+	return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+}
+func (session *Session) Endpoint(name, value string) error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	session.endpoints[name] = value
+	if !session.desiredReady {
+		return nil
+	}
+	return session.sendLocked(protocol.ClientEvent{Type: "endpoint", Name: name, URL: value})
+}
+
+func (session *Session) Send(event protocol.ClientEvent) error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	return session.sendLocked(event)
+}
+
+func (session *Session) ReadCommand(ctx context.Context) (string, error) {
+	for {
+		event, err := session.ReadEvent(ctx)
+		if err != nil {
+			return "", err
+		}
+		if event.Type == "command" {
+			return event.Command, nil
+		}
+	}
+}
+
+func (session *Session) ReadEvent(ctx context.Context) (protocol.ServerEvent, error) {
+	select {
+	case event := <-session.events:
+		return event, nil
+	case <-ctx.Done():
+		return protocol.ServerEvent{}, ctx.Err()
+	case <-session.closed:
+		return protocol.ServerEvent{}, fmt.Errorf("sidecar session is closed")
+	}
+}
+
+func (session *Session) Close(code int) error {
+	var result error
+	session.closeOnce.Do(func() {
+		close(session.closed)
+		session.mu.Lock()
+		if session.connection != nil {
+			_ = session.sendLocked(protocol.ClientEvent{Type: "exiting", Code: code})
+			result = session.connection.Close()
+			session.connection = nil
+		}
+		session.mu.Unlock()
+	})
+	return result
+}
+
+func (session *Session) SetToken(token string) {
+	session.mu.Lock()
+	session.token = token
+	session.mu.Unlock()
+}
+
+func (session *Session) run(connection *websocket.Conn) {
+	current := connection
+	for {
+		var event protocol.ServerEvent
+		err := current.ReadJSON(&event)
+		if err == nil {
+			if event.Type != "command" && event.Type != "status" {
+				continue
+			}
+			if event.Type == "status" {
+				select {
+				case session.events <- event:
+				default:
+				}
+				continue
+			}
+			select {
+			case session.events <- event:
+			case <-session.closed:
+				return
+			}
+			continue
+		}
+
+		session.mu.Lock()
+		if session.connection == current {
+			session.connection = nil
+		}
+		session.mu.Unlock()
+		_ = current.Close()
+		select {
+		case <-session.closed:
+			return
+		default:
+		}
+
+		delay := 50 * time.Millisecond
+		for {
+			reconnectContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			session.mu.Lock()
+			token := session.token
+			session.mu.Unlock()
+			next, reconnectErr := dialConnection(reconnectContext, session.descriptor, token, session.registration)
+			cancel()
+			if reconnectErr == nil {
+				session.mu.Lock()
+				select {
+				case <-session.closed:
+					session.mu.Unlock()
+					next.Close()
+					return
+				default:
+				}
+				session.connection = next
+				reconnectErr = session.replayLocked()
+				session.mu.Unlock()
+				if reconnectErr == nil {
+					current = next
+					break
+				}
+				next.Close()
+			}
+			select {
+			case <-session.closed:
+				return
+			case <-time.After(delay):
+			}
+			delay = min(delay*2, 2*time.Second)
+		}
+	}
+}
+
+func (session *Session) replayLocked() error {
+	if !session.desiredReady {
+		ready := false
+		return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+	}
+	names := make([]string, 0, len(session.endpoints))
+	for name := range session.endpoints {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if err := session.sendLocked(protocol.ClientEvent{Type: "endpoint", Name: name, URL: session.endpoints[name]}); err != nil {
+			return err
+		}
+	}
+	ready := true
+	return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+}
+
+func (session *Session) sendLocked(event protocol.ClientEvent) error {
+	if session.connection == nil {
+		return fmt.Errorf("sidecar session is reconnecting")
+	}
+	_ = session.connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err := session.connection.WriteJSON(event)
+	_ = session.connection.SetWriteDeadline(time.Time{})
+	return err
+}
+
+func dialConnection(
+	ctx context.Context,
+	descriptor protocol.ControlDescriptor,
+	token string,
+	registration Registration,
+) (*websocket.Conn, error) {
 	endpoint := url.URL{Scheme: "ws", Host: descriptor.Address, Path: "/v1/sessions/register"}
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+token)
@@ -126,55 +374,29 @@ func DialSession(ctx context.Context, descriptor protocol.ControlDescriptor, tok
 		}
 		return nil, err
 	}
-	session := &Session{connection: connection}
-	if err := session.Send(protocol.ClientEvent{
+	if err := connection.WriteJSON(protocol.ClientEvent{
 		Type: "register", Channel: registration.Channel, Namespace: registration.Namespace,
 		SessionID: descriptor.SessionID, Generation: descriptor.Generation,
-		App: registration.App, Mode: registration.Mode, Source: registration.Source,
+		App: registration.App, InstanceID: registration.InstanceID,
+		Mode: registration.Mode, Source: registration.Source,
 	}); err != nil {
 		connection.Close()
 		return nil, err
 	}
 	connection.SetReadDeadline(time.Now().Add(5 * time.Second))
-	var ack protocol.ServerEvent
-	if err := connection.ReadJSON(&ack); err != nil || ack.Type != "registered" {
+	var acknowledgement protocol.ServerEvent
+	if err := connection.ReadJSON(&acknowledgement); err != nil || acknowledgement.Type != "registered" {
 		connection.Close()
 		return nil, fmt.Errorf("broker did not acknowledge registration")
 	}
 	connection.SetReadDeadline(time.Time{})
-	return session, nil
+	return connection, nil
 }
 
-func (session *Session) Heartbeat() error {
-	return session.Send(protocol.ClientEvent{Type: "heartbeat"})
-}
-func (session *Session) Ready() error { return session.Send(protocol.ClientEvent{Type: "ready"}) }
-func (session *Session) Endpoint(name, value string) error {
-	return session.Send(protocol.ClientEvent{Type: "endpoint", Name: name, URL: value})
-}
-
-func (session *Session) Send(event protocol.ClientEvent) error {
-	session.write.Lock()
-	defer session.write.Unlock()
-	return session.connection.WriteJSON(event)
-}
-
-func (session *Session) ReadCommand(ctx context.Context) (string, error) {
-	if deadline, ok := ctx.Deadline(); ok {
-		session.connection.SetReadDeadline(deadline)
-		defer session.connection.SetReadDeadline(time.Time{})
-	}
-	var event protocol.ServerEvent
-	if err := session.connection.ReadJSON(&event); err != nil {
+func randomInstanceID() (string, error) {
+	value := make([]byte, 12)
+	if _, err := rand.Read(value); err != nil {
 		return "", err
 	}
-	if event.Type != "command" {
-		return "", fmt.Errorf("unexpected server event %q", event.Type)
-	}
-	return event.Command, nil
-}
-
-func (session *Session) Close(code int) error {
-	_ = session.Send(protocol.ClientEvent{Type: "exiting", Code: code})
-	return session.connection.Close()
+	return base64.RawURLEncoding.EncodeToString(value), nil
 }

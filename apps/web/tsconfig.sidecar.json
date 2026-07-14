@@ -5,5 +5,5 @@
     "rootDir": ".",
     "tsBuildInfoFile": "dist/tsconfig.sidecar.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "sidecar/**/*.ts"]
+  "include": ["sidecar/**/*.ts"]
 }

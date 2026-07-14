@@ -13,6 +13,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 )
 
@@ -89,6 +90,13 @@ func (installer Installer) Recover(bootstrap config.Bootstrap, paths layout.Cell
 	}
 	if err := manifest.ValidateHost(bootstrap.Channel, bootstrap.ProtocolFloor); err != nil {
 		return err
+	}
+	topologyEntry, err := release.ResolveEntry(installedRoot, manifest.Payload.Entry, "payload")
+	if err != nil {
+		return err
+	}
+	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
+		return fmt.Errorf("recover runtime topology: %w", err)
 	}
 	prepared, err := state.Prepare(runtimeState, bootstrap.Channel, entry.Version)
 	if err != nil {

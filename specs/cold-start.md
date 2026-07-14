@@ -7,8 +7,9 @@ Status: Day 0 baseline.
 The cold-start substrate launches one user-scoped application cell from an
 installer containing only B0. It owns cell identity, roots, a shared loopback TCP
 broker, signed release discovery, atomic activation, handoff, readiness, and
-rollback. It does not own product data, app HTTP ports, Electron behavior, or a
-payload process graph.
+rollback. It does not own product data, app HTTP ports, Electron behavior, or
+application dependency semantics. Its runtime runner understands only a generic
+command topology.
 
 ## Identity and roots
 
@@ -78,7 +79,19 @@ silently bypasses the state machine.
 - A prepared steady-state candidate is handed off inside the same B0 cell session
   after the old runtime tree exits; B0 then applies the normal READY/stability gate.
 - A second invocation talks to the existing broker instead of creating another cell.
-- The payload is one opaque root entry. Any sidecar-capable binary tree is valid.
+- The payload exposes one opaque runtime-topology entry. The versioned launcher
+  and `oc-control dev` invoke the same generic Go runner against packaged and
+  workspace-resolved topology respectively.
+- The runner starts peer sidecar processes, aggregates their READY state into the
+  broker-visible `payload` session, and independently restarts peers after
+  unexpected exits with bounded exponential backoff.
+- Before first aggregate READY, the readiness deadline remains strict and failure
+  rejects the candidate. After confirmation, peer loss is a recoverable runtime
+  condition and does not retroactively change activation state.
+- Only explicit broker lifecycle shutdown, B0 cancellation, or loss of the broker
+  generation ends the whole runtime tree. Process exit codes do not encode that intent.
+- Any binary that accepts a sidecar launch envelope is valid; the runner has no
+  Electron, web, API, or product branches.
 
 ## Activation state
 
@@ -93,7 +106,17 @@ older canonical version does not authorize downgrade or reinstall.
 
 ## App sidecar isolation
 
-`apps/web/sidecar/index.ts` and `apps/api/sidecar/index.ts` are symmetric,
-independently compiled sidecar entries. Business code has zero knowledge of the
-control plane. Dev, packaged Electron, and harness execution all consume the
-same `dist/sidecar/index.js` output.
+`apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
+`apps/api/sidecar/index.ts` are symmetric, independently compiled sidecar
+entries. Business code has zero knowledge of the control plane. Dev, packaged,
+and harness execution all consume the same `dist/sidecar/index.js` outputs.
+
+Electron is not a sidecar supervisor. It observes the web sidecar's READY state
+and published endpoint continuously through the shared cell TCP broker, then
+binds that loopback HTTP lease behind the Electron-owned `oc://app/` protocol.
+The renderer origin never contains the random sidecar port, and business/UI
+source does not know the broker or underlying endpoint. The observer reconciles
+revisioned subscription snapshots with periodic TCP polling. Web disappearance
+invalidates the protocol target and reverses Electron READY; a new peer instance
+or endpoint reloads the same `oc://app/` entry and restores READY. Web and API
+remain independently owned peers.

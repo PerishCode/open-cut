@@ -16,6 +16,7 @@ pnpm install
 go install ./cmd/oc-control
 oc-control doctor
 oc-control clean --scope temp
+oc-control dev
 ```
 
 The current executable acceptance paths are:
@@ -35,12 +36,22 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
 - `cold-start` builds real B0/L1 and fixture payload binaries, performs genesis
   confirmation, rotates the trust root, executes a broker-mediated v1→v2
   steady-state handoff, proves offline last-good boot, and proves pre-READY rollback.
-- `pack` discovers app sidecars from their unique source entries, deploys their
-  production trees, generates the payload topology, builds the platform Electron
-  full pack, and archives it with a versioned launcher.
-- `full-pack` extracts that real archive and runs its Electron binary as the Node
-  carrier, proving restricted child delegation, packaged web/API READY, endpoint
-  publication, shared lifecycle control, and clean runtime-tree exit without a GUI.
+- `dev` builds and starts the generic Go runtime runner in headed mode. Electron,
+  web, and API are peer sidecars; Electron discovers the web endpoint through the
+  shared TCP broker and never owns the other processes. Its renderer always loads
+  `oc://app/`; an Electron protocol adapter proxies that stable origin to the current
+  loopback Web lease. Web runs Vite in dev and serves the Vite production build
+  through the same thin sidecar wrapper in a release.
+- Sidecar state is continuously reconciled over TCP. Revisioned WebSocket snapshots
+  provide low-latency changes, status polling repairs gaps, and the runner restarts
+  unexpectedly exited peers without changing ownership boundaries.
+- `pack` discovers every app sidecar from its unique source entry, deploys their
+  production trees, generates a platform-resolved generic runtime topology,
+  builds the Electron full pack, and archives it with the versioned launcher.
+- `full-pack` extracts that real archive and invokes the versioned L1 launcher,
+  proving that the same runner starts independent Electron/web/API peers,
+  aggregates READY, publishes endpoints, broadcasts lifecycle control, and exits
+  the runtime tree cleanly without a GUI.
 
 ## Local delivery loop
 

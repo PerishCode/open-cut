@@ -18,6 +18,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/workspace"
 )
@@ -119,6 +120,9 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	}
 	resourcesRoot := filepath.Join(workRoot, "payload-resources")
 	for _, sidecar := range topology.Sidecars {
+		if sidecar.App == controlConfig.PayloadWorkspace {
+			continue
+		}
 		manifest, err := workspace.LoadPackage(repositoryRoot, sidecar.App)
 		if err != nil {
 			return Result{}, err
@@ -128,10 +132,6 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 			return Result{}, err
 		}
 	}
-	if err := workspace.WriteTopology(filepath.Join(resourcesRoot, "payload-topology.json"), topology); err != nil {
-		return Result{}, err
-	}
-
 	electronOutput := filepath.Join(workRoot, "electron-out")
 	builderConfig := map[string]any{
 		"productName":     payloadPackage.ProductName,
@@ -184,11 +184,22 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	); err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
 	}
+	runtimeTopology, err := packagedRuntimeTopology(packRoot, packEntry, options.Target, controlConfig.PayloadWorkspace, topology)
+	if err != nil {
+		return Result{}, err
+	}
+	topologyEntry := filepath.Join("payload", "runtime-topology.json")
+	if err := runtimetopology.Write(filepath.Join(releaseTree, topologyEntry), runtimeTopology); err != nil {
+		return Result{}, err
+	}
+	if _, err := runtimetopology.Resolve(filepath.Join(releaseTree, topologyEntry)); err != nil {
+		return Result{}, fmt.Errorf("validate staged runtime topology: %w", err)
+	}
 	manifest := release.Manifest{
 		Schema: release.ManifestSchema, Channel: version.Channel, Version: version.String(),
 		Platform: options.Target.Platform, Arch: options.Target.Arch,
 		Launcher:                 release.Entry{Entry: filepath.ToSlash(filepath.Join("launcher", launcherName))},
-		Payload:                  release.Entry{Entry: filepath.ToSlash(filepath.Join("payload", "app", packEntry))},
+		Payload:                  release.Entry{Entry: filepath.ToSlash(topologyEntry)},
 		MinimumBootstrapProtocol: "bootstrap.v1", PublishedAt: time.Now().UTC(),
 	}
 	if err := atomicfile.WriteJSON(filepath.Join(releaseTree, "manifest.json"), manifest, 0o600); err != nil {
@@ -211,6 +222,54 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		result.WorkRoot = workRoot
 	}
 	return result, nil
+}
+
+func packagedRuntimeTopology(
+	packRoot, packEntry string,
+	buildTarget target.Target,
+	payloadWorkspace string,
+	discovered workspace.Topology,
+) (runtimetopology.Topology, error) {
+	electronCommand := filepath.ToSlash(filepath.Join("app", packEntry))
+	nodeCommand := electronCommand
+	payloadResources := filepath.ToSlash(filepath.Join("app", "resources", "payload"))
+	if buildTarget.Platform == target.Mac {
+		executable := filepath.Base(packEntry)
+		application := strings.Split(filepath.ToSlash(packEntry), "/Contents/")[0]
+		if !strings.HasSuffix(application, ".app") || executable == "" {
+			return runtimetopology.Topology{}, fmt.Errorf("invalid macOS Electron entry %q", packEntry)
+		}
+		helper := executable + " Helper"
+		nodeCommand = filepath.ToSlash(filepath.Join(
+			"app", application, "Contents", "Frameworks", helper+".app", "Contents", "MacOS", helper,
+		))
+		payloadResources = filepath.ToSlash(filepath.Join("app", application, "Contents", "Resources", "payload"))
+	}
+	nodeOnDisk := filepath.Join(packRoot, filepath.FromSlash(strings.TrimPrefix(nodeCommand, "app/")))
+	if info, err := os.Stat(nodeOnDisk); err != nil || !info.Mode().IsRegular() {
+		return runtimetopology.Topology{}, fmt.Errorf("Electron Node command is unavailable at %s", nodeOnDisk)
+	}
+
+	processes := make([]runtimetopology.Process, 0, len(discovered.Sidecars))
+	for _, sidecar := range discovered.Sidecars {
+		if sidecar.App == payloadWorkspace {
+			processes = append(processes, runtimetopology.Process{
+				App: sidecar.App, Command: electronCommand, WorkingDirectory: "app",
+				UnsetEnv: []string{"ELECTRON_RUN_AS_NODE"},
+			})
+			continue
+		}
+		processes = append(processes, runtimetopology.Process{
+			App: sidecar.App, Command: nodeCommand, Args: []string{"dist/sidecar/index.js"},
+			WorkingDirectory: filepath.ToSlash(filepath.Join(payloadResources, "sidecars", sidecar.App)),
+			Env:              map[string]string{"ELECTRON_RUN_AS_NODE": "1"},
+		})
+	}
+	topology := runtimetopology.Topology{Schema: runtimetopology.Schema, Processes: processes}
+	if err := topology.Validate(); err != nil {
+		return runtimetopology.Topology{}, err
+	}
+	return topology, nil
 }
 
 func adHocSignMacPack(ctx context.Context, packRoot string, buildTarget target.Target, stdout, stderr io.Writer) error {
