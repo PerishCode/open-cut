@@ -1,4 +1,4 @@
-import { SidecarConnection } from "@open-cut/sidecar-client";
+import { SidecarConnection, controlCommand } from "@open-cut/sidecar-client";
 import { startApiServer, type ApiServer } from "../src/server.js";
 
 let api: ApiServer | undefined;
@@ -16,7 +16,7 @@ function stop(code = 0): Promise<void> {
 sidecar = await SidecarConnection.connect({
   app: "api",
   onCommand: async (command) => {
-    if (command === "shutdown") await stop();
+    if (command === controlCommand.shutdown) await stop();
   },
 });
 api = await startApiServer();

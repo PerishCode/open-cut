@@ -7,23 +7,22 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/install"
 	"github.com/PerishCode/open-cut/internal/layout"
-	"github.com/PerishCode/open-cut/internal/processutil"
 	"github.com/PerishCode/open-cut/internal/publisher"
-	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/verifier"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/target"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 type InstallOptions struct {
@@ -67,12 +66,6 @@ type UninstallResult struct {
 }
 
 func Install(ctx context.Context, options InstallOptions) (InstallResult, error) {
-	if options.Target != target.Host() {
-		return InstallResult{}, fmt.Errorf("install harness target %s must match host %s", options.Target, target.Host())
-	}
-	if runtime.GOOS != "darwin" {
-		return InstallResult{}, fmt.Errorf("the first delivery adapter is macOS; native Windows/Linux adapters run in their runners")
-	}
 	for name, value := range map[string]string{
 		"repository": options.RepositoryRoot, "workspace": options.Workspace, "origin": options.OriginRoot,
 	} {
@@ -97,24 +90,25 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 	if err != nil {
 		return InstallResult{}, err
 	}
-	installRoot := filepath.Join(options.Workspace, "install", "Open Cut Launcher.app")
-	if _, err := os.Lstat(installRoot); !errors.Is(err, os.ErrNotExist) {
-		return InstallResult{}, fmt.Errorf("install root already exists: %s", installRoot)
-	}
-	macOSRoot := filepath.Join(installRoot, "Contents", "MacOS")
-	resourcesRoot := filepath.Join(installRoot, "Contents", "Resources")
-	if err := os.MkdirAll(macOSRoot, 0o755); err != nil {
+	installLayout, err := lifecycle.PrepareNativeInstall(options.Target, options.Workspace, lifecycle.InstallProduct{
+		Name: "Open Cut", ExecutableName: "Open Cut", BundleID: "local.open-cut.launcher",
+	})
+	if err != nil {
 		return InstallResult{}, err
 	}
-	hostPath := filepath.Join(macOSRoot, "Open Cut")
-	launcherPath := filepath.Join(resourcesRoot, "launcher")
+	goTool, err := tool.Resolve("go")
+	if err != nil {
+		return InstallResult{}, err
+	}
 	for _, build := range []struct{ output, source string }{
-		{hostPath, "./cmd/platform-host"}, {launcherPath, "./cmd/launcher"},
+		{installLayout.HostPath, "./cmd/platform-host"}, {installLayout.LauncherPath, "./cmd/launcher"},
 	} {
-		command := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", build.output, build.source)
-		command.Dir, command.Stdout, command.Stderr = options.RepositoryRoot, options.Stderr, options.Stderr
-		command.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+options.Target.GoOS(), "GOARCH="+options.Target.GoArch())
-		if err := command.Run(); err != nil {
+		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+			Executable: goTool, Args: []string{"build", "-trimpath", "-o", build.output, build.source},
+			Directory: options.RepositoryRoot, Stdout: options.Stderr, Stderr: options.Stderr,
+			Env:     options.Target.GoBuildEnvironment(os.Environ()),
+			Profile: lifecycle.ProfileProduction,
+		}); err != nil {
 			return InstallResult{}, fmt.Errorf("build %s: %w", build.source, err)
 		}
 	}
@@ -132,38 +126,20 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 	if err := atomicfile.WriteJSON(bootstrapPath, bootstrap, 0o600); err != nil {
 		return InstallResult{}, err
 	}
-	internalReceiptPath := filepath.Join(resourcesRoot, "install-receipt.json")
 	receiptPath := filepath.Join(options.Workspace, "receipts", "install-receipt.json")
 	receipt := install.Receipt{
-		Schema: install.ReceiptSchema, Target: options.Target, InstallRoot: installRoot,
-		HostPath: hostPath, LauncherPath: launcherPath, BootstrapPath: bootstrapPath,
+		Schema: install.ReceiptSchema, Target: options.Target, InstallRoot: installLayout.InstallRoot,
+		HostPath: installLayout.HostPath, LauncherPath: installLayout.LauncherPath, BootstrapPath: bootstrapPath,
 		ManagedRoots: []string{roots.BootstrapRoot, roots.StoreRoot, roots.CacheRoot, roots.RuntimeRoot, roots.LogRoot},
 		Channel:      options.Channel, Namespace: options.Namespace,
 	}
-	for _, destination := range []string{internalReceiptPath, receiptPath} {
+	for _, destination := range []string{installLayout.InternalReceiptPath, receiptPath} {
 		if err := install.SaveReceipt(destination, receipt); err != nil {
 			return InstallResult{}, err
 		}
 	}
-	plist := `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>Open Cut</string>
-<key>CFBundleIdentifier</key><string>local.open-cut.launcher</string>
-<key>CFBundleName</key><string>Open Cut Launcher</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
-</dict></plist>
-`
-	if err := atomicfile.Write(filepath.Join(installRoot, "Contents", "Info.plist"), []byte(plist), 0o644); err != nil {
-		return InstallResult{}, err
-	}
-	if codesign, lookErr := exec.LookPath("codesign"); lookErr == nil {
-		command := exec.CommandContext(ctx, codesign, "--force", "--deep", "--sign", "-", installRoot)
-		command.Stdout, command.Stderr = options.Stderr, options.Stderr
-		if err := command.Run(); err != nil {
-			return InstallResult{}, fmt.Errorf("ad-hoc sign launcher app: %w", err)
-		}
+	if err := lifecycle.SignNativeInstall(ctx, options.Target, installLayout, options.Stderr, options.Stderr); err != nil {
+		return InstallResult{}, fmt.Errorf("sign launcher app: %w", err)
 	}
 	result, err := Run(ctx, RunOptions{
 		Receipt: receiptPath, Workspace: options.Workspace, Headless: options.Headless,
@@ -212,26 +188,27 @@ func Run(ctx context.Context, options RunOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	command := exec.Command(receipt.HostPath)
-	command.Dir, command.Stdout, command.Stderr = receipt.InstallRoot, logFile, logFile
-	command.Env = os.Environ()
-	processutil.Detach(command)
+	environment := os.Environ()
 	if options.Headless {
-		command.Env = append(command.Env, "OC_DELIVERY_HEADLESS=1")
+		environment = append(environment, "OC_DELIVERY_HEADLESS=1")
 	}
-	if err := command.Start(); err != nil {
+	process, err := lifecycle.Start(ctx, lifecycle.ProcessSpec{
+		Executable: receipt.HostPath, Directory: receipt.InstallRoot, Env: environment,
+		Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileProduction, Detached: true,
+	})
+	if err != nil {
 		_ = logFile.Close()
 		return InstallResult{}, err
 	}
 	_ = logFile.Close()
 	status, err := waitInstalledReady(ctx, paths, 2*time.Minute)
 	if err != nil {
-		_ = command.Process.Kill()
+		_ = process.Kill()
 		return InstallResult{}, err
 	}
 	return InstallResult{
 		Schema: 1, Receipt: options.Receipt, InstallRoot: receipt.InstallRoot,
-		Bootstrap: receipt.BootstrapPath, HostPID: command.Process.Pid, Status: status,
+		Bootstrap: receipt.BootstrapPath, HostPID: process.PID(), Status: status,
 	}, nil
 }
 
@@ -298,7 +275,7 @@ func Uninstall(ctx context.Context, receiptPath, workspace string, purge bool) (
 			}
 		}
 		if owner, loadErr := client.Load(paths.ControlFile, paths.OwnerTokenFile); loadErr == nil {
-			_, _ = owner.Control(ctx, "shutdown")
+			_, _ = owner.Control(ctx, protocol.ControlCommandShutdown)
 		}
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {

@@ -1,6 +1,6 @@
 //go:build windows
 
-package processutil
+package lifecycle
 
 import (
 	"os/exec"
@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	detachedProcess       = 0x00000008
 	createNewProcessGroup = 0x00000200
+	detachedProcess       = 0x00000008
 )
 
-func Detach(command *exec.Cmd) {
+func applyDetachment(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: detachedProcess | createNewProcessGroup,
+		CreationFlags: createNewProcessGroup | detachedProcess,
 		HideWindow:    true,
 	}
 }

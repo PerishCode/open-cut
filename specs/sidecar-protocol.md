@@ -3,6 +3,11 @@
 Status: v1 draft implemented from the language-neutral artifacts under
 `protocol/sidecar/v1`.
 
+`protocol/sidecar/v1/main.tsp` is the only editable wire-contract source.
+`oc-control protocol generate` compiles it into OpenAPI, JSON Schema, and the
+Go/TypeScript bindings consumed by the broker and clients. Generated artifacts
+are checked by `oc-control protocol check` and are never maintained by hand.
+
 Each cell has one B0-owned listener on an ephemeral `127.0.0.1` TCP port.
 `control.json` publishes the endpoint, PID, session ID, generation, and protocol
 version without secrets. HTTP/JSON handles requests; WebSocket handles registered

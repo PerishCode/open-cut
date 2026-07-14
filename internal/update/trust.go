@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
 )
 
 func ensureTrustRoot(bootstrap config.Bootstrap, paths layout.CellPaths) (release.TrustRoot, error) {

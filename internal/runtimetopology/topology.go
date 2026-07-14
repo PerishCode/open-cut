@@ -10,8 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
 )
 
 const Schema = 1
@@ -24,13 +25,14 @@ var (
 // Process is a platform-resolved, product-agnostic command descriptor. Paths
 // are slash-separated and relative to the directory containing the topology.
 type Process struct {
-	App              string                `json:"app"`
-	Command          string                `json:"command"`
-	Args             []string              `json:"args,omitempty"`
-	WorkingDirectory string                `json:"workingDirectory"`
-	Env              map[string]string     `json:"env,omitempty"`
-	UnsetEnv         []string              `json:"unsetEnv,omitempty"`
-	Capabilities     []protocol.Capability `json:"capabilities,omitempty"`
+	App              string                  `json:"app"`
+	Command          string                  `json:"command"`
+	Args             []string                `json:"args,omitempty"`
+	WorkingDirectory string                  `json:"workingDirectory"`
+	Env              map[string]string       `json:"env,omitempty"`
+	UnsetEnv         []string                `json:"unsetEnv,omitempty"`
+	Capabilities     []protocol.Capability   `json:"capabilities,omitempty"`
+	Sandbox          lifecycle.SandboxPolicy `json:"sandbox,omitempty"`
 }
 
 type Topology struct {
@@ -46,6 +48,7 @@ type ResolvedProcess struct {
 	Env              map[string]string
 	UnsetEnv         []string
 	Capabilities     []protocol.Capability
+	Sandbox          lifecycle.SandboxPolicy
 }
 
 type Plan struct {
@@ -118,6 +121,9 @@ func (topology Topology) Validate() error {
 			}
 			capabilities[capability] = struct{}{}
 		}
+		if process.Sandbox != lifecycle.SandboxDefault && process.Sandbox != lifecycle.SandboxChromium {
+			return fmt.Errorf("runtime app %s requests unsupported sandbox policy %q", process.App, process.Sandbox)
+		}
 	}
 	return nil
 }
@@ -146,6 +152,7 @@ func Resolve(filename string) (Plan, error) {
 			WorkingDirectory: workingDirectory, Env: cloneMap(process.Env),
 			UnsetEnv:     append([]string(nil), process.UnsetEnv...),
 			Capabilities: append([]protocol.Capability(nil), process.Capabilities...),
+			Sandbox:      process.Sandbox,
 		})
 	}
 	return plan, nil

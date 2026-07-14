@@ -1,12 +1,12 @@
 //go:build !windows
 
-package processutil
+package lifecycle
 
 import (
 	"os/exec"
 	"syscall"
 )
 
-func Detach(command *exec.Cmd) {
+func applyDetachment(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

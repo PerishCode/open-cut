@@ -215,7 +215,7 @@ func waitForStreamStatus(t *testing.T, session *client.Session, accept func(prot
 		if err != nil {
 			t.Fatal(err)
 		}
-		if event.Type == "status" && event.Status != nil && accept(*event.Status) {
+		if event.Type == protocol.EventStatus && event.Status != nil && accept(*event.Status) {
 			return *event.Status
 		}
 	}
@@ -245,7 +245,7 @@ func TestUpdateTransitionRequiresExplicitCapability(t *testing.T) {
 		Identity: identity, Paths: paths, Generation: 1,
 		UpdateTransition: func(context.Context, protocol.UpdateTransitionRequest) (protocol.UpdateTransitionResponse, error) {
 			calls.Add(1)
-			return protocol.UpdateTransitionResponse{Status: "prepared", Version: "2.0.0-beta.1", RestartRequired: true}, nil
+			return protocol.UpdateTransitionResponse{Status: protocol.UpdateStatusPrepared, Version: "2.0.0-beta.1", RestartRequired: true}, nil
 		},
 	})
 	if err != nil {
@@ -254,14 +254,14 @@ func TestUpdateTransitionRequiresExplicitCapability(t *testing.T) {
 	defer cellBroker.Close()
 	runtimeToken, _ := cellBroker.MintRuntimeToken("payload", time.Minute)
 	transition, err := client.New(cellBroker.Descriptor(), runtimeToken).PrepareLatest(context.Background())
-	if err != nil || transition.Status != "prepared" || !transition.RestartRequired {
+	if err != nil || transition.Status != protocol.UpdateStatusPrepared || !transition.RestartRequired {
 		t.Fatalf("transition=%+v err=%v", transition, err)
 	}
 	childToken, _ := cellBroker.MintSidecarToken("web", time.Minute)
 	if _, err := client.New(cellBroker.Descriptor(), childToken).PrepareLatest(context.Background()); err == nil {
 		t.Fatal("sidecar token requested update transition")
 	}
-	delegated, err := client.New(cellBroker.Descriptor(), runtimeToken).DelegateSidecarWithCapabilities(
+	delegated, err := client.New(cellBroker.Descriptor(), runtimeToken).DelegateSidecar(
 		context.Background(), "electron", time.Minute, []protocol.Capability{protocol.CapabilityUpdateTransition},
 	)
 	if err != nil {
@@ -295,7 +295,7 @@ func TestRuntimeDelegatesAppBoundChildCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtimeClient := client.New(cellBroker.Descriptor(), runtimeToken)
-	delegated, err := runtimeClient.DelegateSidecar(context.Background(), "api", 30*time.Second)
+	delegated, err := runtimeClient.DelegateSidecar(context.Background(), "api", 30*time.Second, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestRuntimeDelegatesAppBoundChildCapability(t *testing.T) {
 	if _, err := childClient.PrepareLatest(context.Background()); err == nil {
 		t.Fatal("renewal escalated sidecar update authority")
 	}
-	if _, err := childClient.DelegateSidecar(context.Background(), "web", time.Minute); err == nil {
+	if _, err := childClient.DelegateSidecar(context.Background(), "web", time.Minute, nil); err == nil {
 		t.Fatal("delegated child capability delegated again")
 	}
 	if _, err := client.DialSession(context.Background(), cellBroker.Descriptor(), delegated.Token, client.Registration{

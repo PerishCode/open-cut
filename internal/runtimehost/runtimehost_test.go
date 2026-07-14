@@ -19,21 +19,6 @@ import (
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
-func TestProcessEnvironmentRemovesCaseInsensitivelyAndOverrides(t *testing.T) {
-	environment := processEnvironment(
-		[]string{"PATH=/bin", "electron_run_as_node=1", "MODE=old"},
-		[]string{"ELECTRON_RUN_AS_NODE"},
-		map[string]string{"MODE": "new", "OC_SIDECAR_TOKEN": "token"},
-	)
-	joined := strings.Join(environment, "\n")
-	if strings.Contains(strings.ToUpper(joined), "ELECTRON_RUN_AS_NODE=") {
-		t.Fatalf("Electron Node mode was not removed: %s", joined)
-	}
-	if !strings.Contains(joined, "MODE=new") || strings.Contains(joined, "MODE=old") {
-		t.Fatalf("environment override failed: %s", joined)
-	}
-}
-
 func TestAllReadyUsesAppIdentity(t *testing.T) {
 	status := protocol.Status{Sessions: []protocol.SessionStatus{
 		{Subject: "payload", App: "runtime", Ready: false},
@@ -110,7 +95,7 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := owner.Control(context.Background(), "shutdown"); err != nil {
+	if _, err := owner.Control(context.Background(), protocol.ControlCommandShutdown); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -140,12 +125,12 @@ func TestRuntimeHostHelperProcess(t *testing.T) {
 		os.Exit(23)
 	}
 	var descriptor protocol.ControlDescriptor
-	if err := json.Unmarshal([]byte(os.Getenv("OC_SIDECAR_CONTROL")), &descriptor); err != nil {
+	if err := json.Unmarshal([]byte(os.Getenv(protocol.SidecarEnvControl)), &descriptor); err != nil {
 		os.Exit(91)
 	}
-	session, err := client.DialSession(context.Background(), descriptor, os.Getenv("OC_SIDECAR_TOKEN"), client.Registration{
-		Channel: os.Getenv("OC_SIDECAR_CHANNEL"), Namespace: os.Getenv("OC_SIDECAR_NAMESPACE"),
-		App: "recovering-peer", Mode: os.Getenv("OC_SIDECAR_MODE"), Source: os.Getenv("OC_SIDECAR_SOURCE"),
+	session, err := client.DialSession(context.Background(), descriptor, os.Getenv(protocol.SidecarEnvToken), client.Registration{
+		Channel: os.Getenv(protocol.SidecarEnvChannel), Namespace: os.Getenv(protocol.SidecarEnvNamespace),
+		App: "recovering-peer", Mode: os.Getenv(protocol.SidecarEnvMode), Source: os.Getenv(protocol.SidecarEnvSource),
 	})
 	if err != nil {
 		os.Exit(92)
@@ -158,7 +143,7 @@ func TestRuntimeHostHelperProcess(t *testing.T) {
 		if err != nil {
 			os.Exit(94)
 		}
-		if command == "shutdown" {
+		if command == protocol.ControlCommandShutdown {
 			_ = session.Close(0)
 			os.Exit(0)
 		}

@@ -1,6 +1,6 @@
 //go:build windows
 
-package packager
+package filesystem
 
 import (
 	"fmt"
@@ -11,10 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// canonicalPath asks the Windows kernel for the final DOS path behind a file
-// handle. filepath.EvalSymlinks does not reliably dereference directory
-// junctions, while pnpm uses junctions throughout its Windows virtual store.
-func canonicalPath(name string) (string, error) {
+func Canonical(name string) (string, error) {
 	file, err := os.Open(name)
 	if err != nil {
 		return "", err

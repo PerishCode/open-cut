@@ -14,7 +14,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 type Report struct {

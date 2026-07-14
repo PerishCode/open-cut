@@ -18,7 +18,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/state"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 func TestBadSignatureNeverDownloadsBundle(t *testing.T) {

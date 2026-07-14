@@ -4,10 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/cell"
@@ -16,8 +13,10 @@ import (
 	"github.com/PerishCode/open-cut/internal/runtimehost"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/workspace"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 type Result struct {
@@ -38,9 +37,14 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 		return err
 	}
 	if !skipBuild {
-		command := exec.CommandContext(ctx, "pnpm", "-r", "--if-present", "run", "build")
-		command.Dir, command.Stdout, command.Stderr = repositoryRoot, stderr, stderr
-		if err := command.Run(); err != nil {
+		pnpm, err := tool.Resolve("pnpm")
+		if err != nil {
+			return err
+		}
+		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+			Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+			Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
+		}); err != nil {
 			return fmt.Errorf("build workspace: %w", err)
 		}
 	}
@@ -99,11 +103,11 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 }
 
 func developmentPlan(repositoryRoot string, config workspace.Config, topology workspace.Topology) (runtimetopology.Plan, error) {
-	node, err := exec.LookPath("node")
+	node, err := tool.Resolve("node")
 	if err != nil {
 		return runtimetopology.Plan{}, fmt.Errorf("resolve Node runtime: %w", err)
 	}
-	electron, err := resolveElectronBinary(repositoryRoot, config.PayloadWorkspace)
+	electron, err := tool.ResolveElectron(repositoryRoot, config.PayloadWorkspace)
 	if err != nil {
 		return runtimetopology.Plan{}, err
 	}
@@ -119,6 +123,7 @@ func developmentPlan(repositoryRoot string, config workspace.Config, topology wo
 			process.Command = electron
 			process.Args = []string{"."}
 			process.UnsetEnv = []string{"ELECTRON_RUN_AS_NODE"}
+			process.Sandbox = lifecycle.SandboxChromium
 		}
 		plan.Processes = append(plan.Processes, process)
 	}
@@ -126,29 +131,4 @@ func developmentPlan(repositoryRoot string, config workspace.Config, topology wo
 		return runtimetopology.Plan{}, err
 	}
 	return plan, nil
-}
-
-func resolveElectronBinary(repositoryRoot, payloadWorkspace string) (string, error) {
-	packageRoot := filepath.Join(repositoryRoot, "apps", payloadWorkspace, "node_modules", "electron")
-	data, err := os.ReadFile(filepath.Join(packageRoot, "path.txt"))
-	if err != nil {
-		return "", fmt.Errorf("resolve Electron binary: %w", err)
-	}
-	relative := strings.TrimSpace(string(data))
-	if relative == "" || filepath.IsAbs(relative) {
-		return "", fmt.Errorf("electron/path.txt must contain a relative binary path")
-	}
-	binary := filepath.Join(packageRoot, "dist", relative)
-	contained, err := filepath.Rel(packageRoot, binary)
-	if err != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("Electron binary escapes its package")
-	}
-	info, err := os.Stat(binary)
-	if err != nil {
-		return "", fmt.Errorf("stat Electron binary: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("Electron binary is not a regular file")
-	}
-	return binary, nil
 }

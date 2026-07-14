@@ -8,19 +8,20 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
-	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/workspace"
+	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/environment"
+	"github.com/PerishCode/open-cut/utils/filesystem"
+	"github.com/PerishCode/open-cut/utils/target"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 type Options struct {
@@ -71,6 +72,10 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := options.Target.Validate(); err != nil {
 		return Result{}, err
 	}
+	packagingPolicy, err := lifecycle.NativePackagingPolicy(options.Target)
+	if err != nil {
+		return Result{}, err
+	}
 	outputPath := options.Output
 	if outputPath == "" {
 		name := slug(payloadPackage.ProductName) + "-" + version.String() + "-" + options.Target.String() + ".release-bundle.tar.zst"
@@ -114,8 +119,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	}
 
 	deployedApp := filepath.Join(workRoot, "electron-app")
-	hoistedDeploy := options.Target.Platform == target.Win
-	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, hoistedDeploy, stdout, stderr); err != nil {
+	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
 		return Result{}, err
 	}
 	resourcesRoot := filepath.Join(workRoot, "payload-resources")
@@ -128,38 +132,28 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 			return Result{}, err
 		}
 		destination := filepath.Join(resourcesRoot, "sidecars", sidecar.App)
-		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, hoistedDeploy, stdout, stderr); err != nil {
+		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
 			return Result{}, err
 		}
 	}
 	electronOutput := filepath.Join(workRoot, "electron-out")
-	builderConfig := map[string]any{
-		"productName":     payloadPackage.ProductName,
-		"asar":            false,
-		"npmRebuild":      false,
-		"electronVersion": payloadPackage.DevDependencies["electron"],
-		"directories":     map[string]string{"app": deployedApp, "output": electronOutput},
-		"files":           []string{"dist/**/*", "package.json", "node_modules/**/*"},
-		"extraResources":  []map[string]string{{"from": resourcesRoot, "to": "payload"}},
-		"mac":             map[string]any{"identity": nil, "target": "dir"},
-		"win":             map[string]any{"target": "dir"},
-		"linux":           map[string]any{"executableName": slug(payloadPackage.ProductName), "target": "dir"},
-	}
+	builderConfig := lifecycle.ElectronBuilderConfig(
+		payloadPackage.ProductName, payloadPackage.DevDependencies["electron"], deployedApp, electronOutput, resourcesRoot,
+	)
 	configPath := filepath.Join(workRoot, "electron-builder.json")
 	if err := atomicfile.WriteJSON(configPath, builderConfig, 0o600); err != nil {
 		return Result{}, err
 	}
-	environment := append(os.Environ(), "CSC_IDENTITY_AUTO_DISCOVERY=false")
-	if err := run(ctx, repositoryRoot, stdout, stderr, environment,
-		"pnpm", "--filter", payloadPackage.Name, "exec", "electron-builder", "--dir",
-		options.Target.ElectronPlatformFlag(), options.Target.ElectronArchFlag(), "--publish", "never", "--config", configPath); err != nil {
+	if err := lifecycle.BuildElectronPack(
+		ctx, options.Target, repositoryRoot, payloadPackage.Name, configPath, stdout, stderr,
+	); err != nil {
 		return Result{}, fmt.Errorf("build Electron full pack: %w", err)
 	}
-	packRoot, packEntry, err := locateElectronPack(electronOutput, payloadPackage.ProductName, options.Target)
+	packRoot, packEntry, err := lifecycle.LocateElectronPack(electronOutput, payloadPackage.ProductName, options.Target)
 	if err != nil {
 		return Result{}, err
 	}
-	if err := adHocSignMacPack(ctx, packRoot, options.Target, stdout, stderr); err != nil {
+	if err := lifecycle.FinalizeElectronPack(ctx, packRoot, options.Target, stdout, stderr); err != nil {
 		return Result{}, err
 	}
 
@@ -167,7 +161,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	launcherArtifact := options.Launcher
 	if launcherArtifact == "" {
 		launcherArtifact = filepath.Join(workRoot, options.Target.ExecutableName("launcher"))
-		goEnvironment := append(os.Environ(), "CGO_ENABLED=0", "GOOS="+options.Target.GoOS(), "GOARCH="+options.Target.GoArch())
+		goEnvironment := options.Target.GoBuildEnvironment(os.Environ())
 		if err := run(ctx, repositoryRoot, stdout, stderr, goEnvironment, "go", "build", "-o", launcherArtifact, "./cmd/launcher"); err != nil {
 			return Result{}, fmt.Errorf("build launcher: %w", err)
 		}
@@ -179,7 +173,7 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := copyTree(
 		packRoot,
 		filepath.Join(releaseTree, "payload", "app"),
-		options.Target.Platform == target.Win,
+		packagingPolicy.MaterializeLinks,
 		repositoryRoot,
 	); err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
@@ -230,38 +224,23 @@ func packagedRuntimeTopology(
 	payloadWorkspace string,
 	discovered workspace.Topology,
 ) (runtimetopology.Topology, error) {
-	electronCommand := filepath.ToSlash(filepath.Join("app", packEntry))
-	nodeCommand := electronCommand
-	payloadResources := filepath.ToSlash(filepath.Join("app", "resources", "payload"))
-	if buildTarget.Platform == target.Mac {
-		executable := filepath.Base(packEntry)
-		application := strings.Split(filepath.ToSlash(packEntry), "/Contents/")[0]
-		if !strings.HasSuffix(application, ".app") || executable == "" {
-			return runtimetopology.Topology{}, fmt.Errorf("invalid macOS Electron entry %q", packEntry)
-		}
-		helper := executable + " Helper"
-		nodeCommand = filepath.ToSlash(filepath.Join(
-			"app", application, "Contents", "Frameworks", helper+".app", "Contents", "MacOS", helper,
-		))
-		payloadResources = filepath.ToSlash(filepath.Join("app", application, "Contents", "Resources", "payload"))
-	}
-	nodeOnDisk := filepath.Join(packRoot, filepath.FromSlash(strings.TrimPrefix(nodeCommand, "app/")))
-	if info, err := os.Stat(nodeOnDisk); err != nil || !info.Mode().IsRegular() {
-		return runtimetopology.Topology{}, fmt.Errorf("Electron Node command is unavailable at %s", nodeOnDisk)
+	layout, err := lifecycle.ResolveRuntimeLayout(packRoot, packEntry, buildTarget)
+	if err != nil {
+		return runtimetopology.Topology{}, err
 	}
 
 	processes := make([]runtimetopology.Process, 0, len(discovered.Sidecars))
 	for _, sidecar := range discovered.Sidecars {
 		if sidecar.App == payloadWorkspace {
 			processes = append(processes, runtimetopology.Process{
-				App: sidecar.App, Command: electronCommand, WorkingDirectory: "app",
-				UnsetEnv: []string{"ELECTRON_RUN_AS_NODE"},
+				App: sidecar.App, Command: layout.ElectronCommand, WorkingDirectory: "app",
+				UnsetEnv: []string{"ELECTRON_RUN_AS_NODE"}, Sandbox: lifecycle.SandboxChromium,
 			})
 			continue
 		}
 		processes = append(processes, runtimetopology.Process{
-			App: sidecar.App, Command: nodeCommand, Args: []string{"dist/sidecar/index.js"},
-			WorkingDirectory: filepath.ToSlash(filepath.Join(payloadResources, "sidecars", sidecar.App)),
+			App: sidecar.App, Command: layout.NodeCommand, Args: []string{"dist/sidecar/index.js"},
+			WorkingDirectory: filepath.ToSlash(filepath.Join(layout.PayloadResources, "sidecars", sidecar.App)),
 			Env:              map[string]string{"ELECTRON_RUN_AS_NODE": "1"},
 		})
 	}
@@ -272,34 +251,17 @@ func packagedRuntimeTopology(
 	return topology, nil
 }
 
-func adHocSignMacPack(ctx context.Context, packRoot string, buildTarget target.Target, stdout, stderr io.Writer) error {
-	if buildTarget.Platform != target.Mac || runtime.GOOS != "darwin" {
-		return nil
-	}
-	applications, err := filepath.Glob(filepath.Join(packRoot, "*.app"))
-	if err != nil {
-		return err
-	}
-	if len(applications) != 1 {
-		return fmt.Errorf("expected one macOS application under %s, found %d", packRoot, len(applications))
-	}
-	if err := run(ctx, packRoot, stdout, stderr, nil, "codesign", "--force", "--deep", "--sign", "-", applications[0]); err != nil {
-		return fmt.Errorf("ad-hoc sign Electron full pack: %w", err)
-	}
-	return nil
-}
-
 func deploy(ctx context.Context, root, packageName, destination string, hoisted bool, stdout, stderr io.Writer) error {
-	var environment []string
+	var processEnvironment []string
 	if hoisted {
 		// pnpm's isolated Windows layout relies on junctions into its virtual
 		// store. A release cannot preserve those links safely, and materializing
 		// them changes the package's physical path (and therefore Node's lookup
 		// chain). Hoisted deploy produces the same dependency closure as ordinary
 		// directories, which remains valid after final staging and extraction.
-		environment = append(os.Environ(), "npm_config_node_linker=hoisted")
+		processEnvironment = environment.Merge(os.Environ(), nil, map[string]string{"npm_config_node_linker": "hoisted"})
 	}
-	if err := run(ctx, root, stdout, stderr, environment,
+	if err := run(ctx, root, stdout, stderr, processEnvironment,
 		"pnpm", "--config.inject-workspace-packages=true", "--filter", packageName, "deploy", "--prod", destination); err != nil {
 		return fmt.Errorf("deploy %s: %w", packageName, err)
 	}
@@ -335,11 +297,11 @@ func removeExternalDeploySelfLink(destination, packageName string) error {
 	if !followed.IsDir() {
 		return fmt.Errorf("deploy self-reference %s is not a directory", selfLink)
 	}
-	resolved, err := canonicalPath(selfLink)
+	resolved, err := filesystem.Canonical(selfLink)
 	if err != nil {
 		return err
 	}
-	resolvedDestination, err := canonicalPath(destination)
+	resolvedDestination, err := filesystem.Canonical(destination)
 	if err != nil {
 		return err
 	}
@@ -355,68 +317,14 @@ func pathWithin(root, candidate string) bool {
 }
 
 func run(ctx context.Context, directory string, stdout, stderr io.Writer, environment []string, name string, arguments ...string) error {
-	command := exec.CommandContext(ctx, name, arguments...)
-	command.Dir, command.Stdout, command.Stderr = directory, stdout, stderr
-	if environment != nil {
-		command.Env = environment
-	}
-	return command.Run()
-}
-
-func locateElectronPack(output, productName string, buildTarget target.Target) (string, string, error) {
-	entries, err := os.ReadDir(output)
+	executable, err := tool.Resolve(name)
 	if err != nil {
-		return "", "", err
+		return err
 	}
-	directories := make([]string, 0)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			directories = append(directories, filepath.Join(output, entry.Name()))
-		}
-	}
-	sort.Strings(directories)
-	for _, root := range directories {
-		var executable string
-		switch buildTarget.Platform {
-		case target.Mac:
-			apps, _ := filepath.Glob(filepath.Join(root, "*.app", "Contents", "MacOS", "*"))
-			executable = selectExecutable(apps, productName)
-		case target.Win:
-			apps, _ := filepath.Glob(filepath.Join(root, "*.exe"))
-			executable = selectExecutable(apps, productName+".exe")
-		default:
-			rootEntries, _ := os.ReadDir(root)
-			var candidates []string
-			for _, entry := range rootEntries {
-				if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 && entry.Name() != "chrome-sandbox" && entry.Name() != "chrome_crashpad_handler" {
-					candidates = append(candidates, filepath.Join(root, entry.Name()))
-				}
-			}
-			executable = selectExecutable(candidates, slug(productName))
-		}
-		if executable == "" {
-			continue
-		}
-		relative, err := filepath.Rel(root, executable)
-		if err != nil {
-			return "", "", err
-		}
-		return root, relative, nil
-	}
-	return "", "", fmt.Errorf("could not locate Electron full pack entry under %s", output)
-}
-
-func selectExecutable(candidates []string, preferred string) string {
-	sort.Strings(candidates)
-	for _, candidate := range candidates {
-		if filepath.Base(candidate) == preferred {
-			return candidate
-		}
-	}
-	if len(candidates) == 1 {
-		return candidates[0]
-	}
-	return ""
+	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: executable, Args: arguments, Directory: directory, Env: environment,
+		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileProduction,
+	})
 }
 
 func copyTree(source, destination string, dereferenceLinks bool, repositoryDependencyRoot string) error {
@@ -424,13 +332,13 @@ func copyTree(source, destination string, dereferenceLinks bool, repositoryDepen
 	if err != nil {
 		return err
 	}
-	physicalRoot, err := canonicalPath(root)
+	physicalRoot, err := filesystem.Canonical(root)
 	if err != nil {
 		return err
 	}
 	physicalRepositoryRoot := ""
 	if repositoryDependencyRoot != "" {
-		physicalRepositoryRoot, err = canonicalPath(repositoryDependencyRoot)
+		physicalRepositoryRoot, err = filesystem.Canonical(repositoryDependencyRoot)
 		if err != nil {
 			return err
 		}
@@ -464,7 +372,7 @@ func copyTreeEntry(root, physicalRoot, physicalRepositoryRoot, source, destinati
 		if !pathWithin(root, resolved) {
 			return fmt.Errorf("full pack symlink escapes pack root: %s", source)
 		}
-		physical, err := canonicalPath(source)
+		physical, err := filesystem.Canonical(source)
 		if err != nil {
 			return fmt.Errorf("resolve full pack symlink %s: %w", source, err)
 		}
@@ -479,14 +387,14 @@ func copyTreeEntry(root, physicalRoot, physicalRepositoryRoot, source, destinati
 
 	switch {
 	case info.IsDir():
-		physical, err := canonicalPath(source)
+		physical, err := filesystem.Canonical(source)
 		if err != nil {
 			return err
 		}
 		if !allowedMaterializationPath(physicalRoot, physicalRepositoryRoot, physical) {
 			return fmt.Errorf("full pack directory resolves outside pack root: %s", source)
 		}
-		key := directoryKey(physical)
+		key := filesystem.IdentityKey(physical)
 		if activeDirectories[key] {
 			return fmt.Errorf("full pack contains a directory link cycle at %s", source)
 		}
@@ -530,7 +438,7 @@ func copyTreeEntry(root, physicalRoot, physicalRepositoryRoot, source, destinati
 }
 
 func copyDereferencedEntry(root, physicalRoot, physicalRepositoryRoot, source, destination string, dereferenceLinks bool, activeDirectories map[string]bool) error {
-	physical, err := canonicalPath(source)
+	physical, err := filesystem.Canonical(source)
 	if err != nil {
 		return fmt.Errorf("resolve full pack link %s: %w", source, err)
 	}
@@ -543,7 +451,7 @@ func copyDereferencedEntry(root, physicalRoot, physicalRepositoryRoot, source, d
 	}
 	switch {
 	case info.IsDir():
-		key := directoryKey(physical)
+		key := filesystem.IdentityKey(physical)
 		if activeDirectories[key] {
 			return fmt.Errorf("full pack contains a directory link cycle at %s", source)
 		}
@@ -599,14 +507,6 @@ func allowedMaterializationPath(physicalRoot, physicalRepositoryRoot, candidate 
 		}
 	}
 	return false
-}
-
-func directoryKey(name string) string {
-	key := filepath.Clean(name)
-	if runtime.GOOS == "windows" {
-		return strings.ToLower(key)
-	}
-	return key
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {

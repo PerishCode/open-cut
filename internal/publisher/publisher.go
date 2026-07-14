@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/release"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 type Key struct {

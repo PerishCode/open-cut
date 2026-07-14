@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
@@ -20,9 +18,11 @@ import (
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/update"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
 )
 
 var ErrRecoveryRequired = errors.New("no installed release is available; recovery download is required")
@@ -94,9 +94,9 @@ func RunB0(ctx context.Context, options B0Options) error {
 			return protocol.UpdateTransitionResponse{}, loadErr
 		}
 		if updated.Candidate == version {
-			return protocol.UpdateTransitionResponse{Status: "prepared", Version: version, RestartRequired: true}, nil
+			return protocol.UpdateTransitionResponse{Status: protocol.UpdateStatusPrepared, Version: version, RestartRequired: true}, nil
 		}
-		return protocol.UpdateTransitionResponse{Status: "current", Version: version}, nil
+		return protocol.UpdateTransitionResponse{Status: protocol.UpdateStatusCurrent, Version: version}, nil
 	}
 	cellBroker, err := broker.Start(broker.Options{
 		Identity: identity, Paths: paths, Generation: runtimeState.Generation, UpdateTransition: transition,
@@ -106,7 +106,7 @@ func RunB0(ctx context.Context, options B0Options) error {
 		if loadErr != nil {
 			return fmt.Errorf("cell lock held but broker rendezvous failed: %w", loadErr)
 		}
-		_, controlErr := existing.Control(ctx, "show")
+		_, controlErr := existing.Control(ctx, protocol.ControlCommandShow)
 		return controlErr
 	}
 	if err != nil {
@@ -180,18 +180,20 @@ func runManagedRelease(
 	if err != nil {
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
 	}
-	descriptorJSON, _ := json.Marshal(cellBroker.Descriptor())
-	command := exec.CommandContext(ctx, launcherEntry, "--role", "l1", "--manifest", manifestPath)
-	command.Stdout, command.Stderr = options.Stdout, options.Stderr
-	command.Env = append(os.Environ(),
-		"OC_SIDECAR_CONTROL="+string(descriptorJSON),
-		"OC_SIDECAR_TOKEN="+runtimeToken,
-		"OC_SIDECAR_CHANNEL="+identity.Channel,
-		"OC_SIDECAR_NAMESPACE="+identity.Namespace,
-		"OC_SIDECAR_MODE=packaged",
-		"OC_SIDECAR_SOURCE=launcher",
-	)
-	if err := command.Start(); err != nil {
+	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
+		Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
+		Namespace: identity.Namespace, Mode: string(lifecycle.ProfilePackaged), Source: "launcher",
+	})
+	if err != nil {
+		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
+	}
+	command, err := lifecycle.Start(ctx, lifecycle.VersionedProcess(launcherEntry, manifestPath, lifecycle.ProcessSpec{
+		Stdout:  options.Stdout,
+		Stderr:  options.Stderr,
+		Profile: lifecycle.ProfilePackaged,
+		Env:     launchEnvironment,
+	}))
+	if err != nil {
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, fmt.Errorf("start versioned launcher: %w", err))
 	}
 	exited := make(chan error, 1)
@@ -206,7 +208,7 @@ func runManagedRelease(
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, processExitError("before registration", processErr))
 	case registerErr := <-registered:
 		if registerErr != nil {
-			_ = command.Process.Kill()
+			_ = command.Kill()
 			<-exited
 			return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, registerErr)
 		}
@@ -221,7 +223,7 @@ func runManagedRelease(
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, processExitError("before READY", processErr))
 	case readyErr := <-ready:
 		if readyErr != nil {
-			_ = command.Process.Kill()
+			_ = command.Kill()
 			<-exited
 			return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, readyErr)
 		}
@@ -234,7 +236,7 @@ func runManagedRelease(
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, processExitError("during stability hold", processErr))
 	case <-hold.C:
 	case <-ctx.Done():
-		_ = command.Process.Kill()
+		_ = command.Kill()
 		<-exited
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, ctx.Err())
 	}
@@ -242,12 +244,12 @@ func runManagedRelease(
 	if isCandidate {
 		confirmed, err := state.Confirm(runtimeState, identity.Channel, selected)
 		if err != nil {
-			_ = command.Process.Kill()
+			_ = command.Kill()
 			<-exited
 			return err
 		}
 		if err := state.Save(paths.StateFile, identity.Channel, confirmed); err != nil {
-			_ = command.Process.Kill()
+			_ = command.Kill()
 			<-exited
 			return err
 		}
@@ -282,14 +284,14 @@ func RunL1(ctx context.Context, options L1Options) error {
 		}
 		plan.Processes[index].Env["OC_RELEASE_VERSION"] = manifest.Version
 	}
-	var descriptor protocol.ControlDescriptor
-	if err := json.Unmarshal([]byte(os.Getenv("OC_SIDECAR_CONTROL")), &descriptor); err != nil {
-		return fmt.Errorf("decode L1 control descriptor: %w", err)
+	launch, err := protocol.LoadLaunchEnvironment()
+	if err != nil {
+		return fmt.Errorf("load L1 sidecar launch envelope: %w", err)
 	}
 	return runtimehost.Run(ctx, runtimehost.Options{
-		Descriptor: descriptor, Token: os.Getenv("OC_SIDECAR_TOKEN"),
-		Channel: os.Getenv("OC_SIDECAR_CHANNEL"), Namespace: os.Getenv("OC_SIDECAR_NAMESPACE"),
-		Mode: os.Getenv("OC_SIDECAR_MODE"), Source: os.Getenv("OC_SIDECAR_SOURCE"),
+		Descriptor: launch.Control, Token: launch.Token,
+		Channel: launch.Channel, Namespace: launch.Namespace,
+		Mode: launch.Mode, Source: launch.Source,
 		Plan: plan, Stdout: options.Stdout, Stderr: options.Stderr,
 	}, nil)
 }

@@ -23,11 +23,10 @@ func TestHarnessCommand(t *testing.T) {
 	}
 }
 
-func TestVersionArgs(t *testing.T) {
-	if got := versionArgs("go"); len(got) != 1 || got[0] != "version" {
-		t.Fatalf("go version args = %v", got)
-	}
-	if got := versionArgs("node"); len(got) != 1 || got[0] != "--version" {
-		t.Fatalf("node version args = %v", got)
+func TestProtocolRejectsUnknownMode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"protocol", "unknown"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }

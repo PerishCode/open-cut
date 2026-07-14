@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
 )
 
 const Schema = 1

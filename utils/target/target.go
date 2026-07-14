@@ -3,6 +3,8 @@ package target
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/PerishCode/open-cut/utils/environment"
 )
 
 type Platform string
@@ -24,10 +26,7 @@ type Target struct {
 
 func New(platform, arch string) (Target, error) {
 	value := Target{Platform: Platform(platform), Arch: Arch(arch)}
-	if err := value.Validate(); err != nil {
-		return Target{}, err
-	}
-	return value, nil
+	return value, value.Validate()
 }
 
 func Host() Target {
@@ -49,7 +48,7 @@ func (value Target) Validate() error {
 		return fmt.Errorf("platform must be mac, win, or linux")
 	}
 	if value.Arch != ARM64 && value.Arch != X64 {
-		return fmt.Errorf("arch must be arm64 or x64")
+		return fmt.Errorf("architecture must be arm64 or x64")
 	}
 	return nil
 }
@@ -76,17 +75,15 @@ func (value Target) GoArch() string {
 	return "arm64"
 }
 
-func (value Target) ElectronPlatformFlag() string {
-	return "--" + string(value.Platform)
-}
-
-func (value Target) ElectronArchFlag() string {
-	return "--" + string(value.Arch)
-}
-
 func (value Target) ExecutableName(base string) string {
 	if value.Platform == Win {
 		return base + ".exe"
 	}
 	return base
+}
+
+func (value Target) GoBuildEnvironment(base []string) []string {
+	return environment.Merge(base, []string{"CGO_ENABLED", "GOOS", "GOARCH"}, map[string]string{
+		"CGO_ENABLED": "0", "GOOS": value.GoOS(), "GOARCH": value.GoArch(),
+	})
 }

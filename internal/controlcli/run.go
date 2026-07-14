@@ -7,13 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/buildinfo"
-	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/cleaner"
 	"github.com/PerishCode/open-cut/internal/config"
@@ -23,11 +20,15 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/originserver"
 	"github.com/PerishCode/open-cut/internal/packager"
+	"github.com/PerishCode/open-cut/internal/protocolgen"
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/release"
-	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/verifier"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
+	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/target"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -42,13 +43,15 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
 	case "doctor":
-		return runDoctor(stdout)
+		return runDoctor(ctx, stdout)
 	case "clean":
 		return runClean(args[1:], stdout, stderr)
 	case "dev":
 		return runDev(ctx, args[1:], stdout, stderr)
 	case "pack":
 		return runPack(ctx, args[1:], stdout, stderr)
+	case "protocol":
+		return runProtocol(ctx, args[1:], stdout, stderr)
 	case "release":
 		return runRelease(args[1:], stdout, stderr)
 	case "serve":
@@ -59,8 +62,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runInspect(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(ctx, args[1:], stdout, stderr)
-	case "show", "shutdown":
-		return runControl(ctx, args[0], args[1:], stdout, stderr)
+	case string(protocol.ControlCommandShow), string(protocol.ControlCommandShutdown):
+		return runControl(ctx, protocol.ControlCommand(args[0]), args[1:], stdout, stderr)
 	case "harness":
 		return runHarness(ctx, args[1:], stdout, stderr)
 	default:
@@ -79,7 +82,8 @@ Usage:
   oc-control clean [--repo <path>] [--scope temp|build|all] [--dry-run]
   oc-control dev [--repo <path>] [--workspace <path>] [--skip-build]
   oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
-  oc-control pack --source <assembled-tree> --output <release-bundle.tar.zst>
+  oc-control protocol generate [--repo <path>]
+  oc-control protocol check [--repo <path>]
   oc-control release keygen --output <key.json> [--id dev]
   oc-control release create --bundle <bundle> --origin <dir> --key <key.json>
   oc-control release display-version <X.Y.Z-channel.N>
@@ -98,6 +102,34 @@ Usage:
 	oc-control harness run --workspace <path> --receipt <install-receipt.json> [--headless]
 	oc-control harness uninstall --workspace <path> --receipt <install-receipt.json> [--purge]
 `)
+}
+
+func runProtocol(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
+		return 2
+	}
+	mode := protocolgen.Mode(args[0])
+	if mode != protocolgen.ModeGenerate && mode != protocolgen.ModeCheck {
+		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
+		return 2
+	}
+	set := flag.NewFlagSet("protocol "+args[0], flag.ContinueOnError)
+	set.SetOutput(stderr)
+	repository := set.String("repo", ".", "open-cut repository root")
+	if err := set.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
+		return 2
+	}
+	result, err := protocolgen.Run(ctx, *repository, mode, stderr, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "protocol %s: %v\n", mode, err)
+		return 1
+	}
+	return writeOutput(stdout, stderr, result)
 }
 
 func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -171,17 +203,12 @@ type doctorCheck struct {
 	OK      bool   `json:"ok"`
 }
 
-func runDoctor(stdout io.Writer) int {
+func runDoctor(ctx context.Context, stdout io.Writer) int {
 	checks := make([]doctorCheck, 0, 3)
 	passed := true
-	for _, tool := range []string{"go", "node", "pnpm"} {
-		path, err := exec.LookPath(tool)
-		check := doctorCheck{Name: tool, Path: path, OK: err == nil}
-		if err == nil {
-			output, versionErr := exec.Command(path, versionArgs(tool)...).CombinedOutput()
-			check.OK = versionErr == nil
-			check.Version = string(bytesTrimSpace(output))
-		}
+	for _, toolName := range []string{"go", "node", "pnpm"} {
+		info, err := tool.Inspect(ctx, toolName)
+		check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: err == nil}
 		if !check.OK {
 			passed = false
 		}
@@ -194,68 +221,42 @@ func runDoctor(stdout io.Writer) int {
 	return 0
 }
 
-func versionArgs(tool string) []string {
-	if tool == "go" {
-		return []string{"version"}
-	}
-	return []string{"--version"}
-}
-
 func runPack(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] != "--source" && args[0] != "-source" {
-		platform := args[0]
-		set := flag.NewFlagSet("pack "+platform, flag.ContinueOnError)
-		set.SetOutput(stderr)
-		arch := set.String("arch", "", "target architecture: arm64 or x64")
-		output := set.String("output", "", "bundle path; defaults to dist/releases/<version>/<target>")
-		version := set.String("version", "", "canonical X.Y.Z-channel.N version")
-		repository := set.String("repo", ".", "open-cut repository root")
-		launcher := set.String("launcher", "", "prebuilt target launcher")
-		skipBuild := set.Bool("skip-build", false, "use existing pnpm build output")
-		keepWork := set.Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
-		if err := set.Parse(args[1:]); err != nil {
-			return 2
-		}
-		if *version == "" || *arch == "" {
-			fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
-			return 2
-		}
-		buildTarget, err := target.New(platform, *arch)
-		if err != nil {
-			fmt.Fprintf(stderr, "pack: %v\n", err)
-			return 2
-		}
-		result, err := packager.Pack(ctx, packager.Options{
-			RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
-			SkipBuild: *skipBuild, KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
-		})
-		if err != nil {
-			fmt.Fprintf(stderr, "pack: %v\n", err)
-			return 1
-		}
-		return writeOutput(stdout, stderr, result)
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
+		return 2
 	}
-	set := flag.NewFlagSet("pack", flag.ContinueOnError)
+	platform := args[0]
+	set := flag.NewFlagSet("pack "+platform, flag.ContinueOnError)
 	set.SetOutput(stderr)
-	source := set.String("source", "", "assembled launcher + payload tree")
-	output := set.String("output", "", "release-bundle.tar.zst path")
-	if err := set.Parse(args); err != nil {
+	arch := set.String("arch", "", "target architecture: arm64 or x64")
+	output := set.String("output", "", "bundle path; defaults to dist/releases/<version>/<target>")
+	version := set.String("version", "", "canonical X.Y.Z-channel.N version")
+	repository := set.String("repo", ".", "open-cut repository root")
+	launcher := set.String("launcher", "", "prebuilt target launcher")
+	skipBuild := set.Bool("skip-build", false, "use existing pnpm build output")
+	keepWork := set.Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
+	if err := set.Parse(args[1:]); err != nil {
 		return 2
 	}
-	if *output == "" || *source == "" {
-		fmt.Fprintln(stderr, "low-level pack requires --source and --output")
+	if *version == "" || *arch == "" {
+		fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
 		return 2
 	}
-	if err := bundle.Pack(*source, *output); err != nil {
+	buildTarget, err := target.New(platform, *arch)
+	if err != nil {
+		fmt.Fprintf(stderr, "pack: %v\n", err)
+		return 2
+	}
+	result, err := packager.Pack(ctx, packager.Options{
+		RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
+		SkipBuild: *skipBuild, KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
+	})
+	if err != nil {
 		fmt.Fprintf(stderr, "pack: %v\n", err)
 		return 1
 	}
-	digest, size, err := bundle.SHA256(*output)
-	if err != nil {
-		fmt.Fprintf(stderr, "digest bundle: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, map[string]any{"path": *output, "sha256": digest, "size": size})
+	return writeOutput(stdout, stderr, result)
 }
 
 func runRelease(args []string, stdout, stderr io.Writer) int {
@@ -427,7 +428,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	return writeOutput(stdout, stderr, status)
 }
 
-func runControl(ctx context.Context, command string, args []string, stdout, stderr io.Writer) int {
+func runControl(ctx context.Context, command protocol.ControlCommand, args []string, stdout, stderr io.Writer) int {
 	controlClient, code := loadClient(args, stderr)
 	if code != 0 {
 		return code
@@ -534,10 +535,15 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			return 1
 		}
 		if !*skipBuild {
-			build := exec.CommandContext(ctx, "pnpm", "-r", "--if-present", "run", "build")
-			build.Dir = repositoryRoot
-			build.Stdout, build.Stderr = stderr, stderr
-			if err := build.Run(); err != nil {
+			pnpm, resolveErr := tool.Resolve("pnpm")
+			if resolveErr != nil {
+				fmt.Fprintln(stderr, resolveErr)
+				return 1
+			}
+			if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+				Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+				Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
+			}); err != nil {
 				fmt.Fprintf(stderr, "workspace build: %v\n", err)
 				return 1
 			}
@@ -554,14 +560,21 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		launcherArtifact := filepath.Join(artifacts, executableName("launcher"))
-		payloadArtifact := filepath.Join(artifacts, executableName("fixture-runtime"))
+		hostTarget := target.Host()
+		launcherArtifact := filepath.Join(artifacts, hostTarget.ExecutableName("launcher"))
+		payloadArtifact := filepath.Join(artifacts, hostTarget.ExecutableName("fixture-runtime"))
+		goTool, err := tool.Resolve("go")
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 		for _, build := range []struct{ output, source string }{
 			{launcherArtifact, "./cmd/launcher"}, {payloadArtifact, "./internal/harness/testpayload"},
 		} {
-			command := exec.CommandContext(ctx, "go", "build", "-o", build.output, build.source)
-			command.Dir, command.Stdout, command.Stderr = repositoryRoot, stderr, stderr
-			if err := command.Run(); err != nil {
+			if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+				Executable: goTool, Args: []string{"build", "-o", build.output, build.source}, Directory: repositoryRoot,
+				Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
+			}); err != nil {
 				fmt.Fprintf(stderr, "build %s: %v\n", build.source, err)
 				return 1
 			}
@@ -658,13 +671,6 @@ func runHarnessRun(ctx context.Context, args []string, stdout, stderr io.Writer)
 	return writeOutput(stdout, stderr, result)
 }
 
-func executableName(base string) string {
-	if runtime.GOOS == "windows" {
-		return base + ".exe"
-	}
-	return base
-}
-
 func writeOutput(stdout, stderr io.Writer, value any) int {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
@@ -673,15 +679,4 @@ func writeOutput(stdout, stderr io.Writer, value any) int {
 		return 1
 	}
 	return 0
-}
-
-func bytesTrimSpace(value []byte) []byte {
-	start, end := 0, len(value)
-	for start < end && (value[start] == ' ' || value[start] == '\n' || value[start] == '\r' || value[start] == '\t') {
-		start++
-	}
-	for end > start && (value[end-1] == ' ' || value[end-1] == '\n' || value[end-1] == '\r' || value[end-1] == '\t') {
-		end--
-	}
-	return value[start:end]
 }

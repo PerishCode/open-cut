@@ -4,9 +4,10 @@ package packager
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/PerishCode/open-cut/utils/filesystem"
 )
 
 func TestRemoveExternalDeploySelfJunction(t *testing.T) {
@@ -20,8 +21,8 @@ func TestRemoveExternalDeploySelfJunction(t *testing.T) {
 	if err := os.MkdirAll(workspacePackage, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", selfJunction, workspacePackage).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(workspacePackage, selfJunction); err != nil {
+		t.Fatal(err)
 	}
 	if err := removeExternalDeploySelfLink(destination, "@open-cut/api"); err != nil {
 		t.Fatal(err)
@@ -41,8 +42,8 @@ func TestRemoveExternalDeploySelfJunctionPreservesInternalTarget(t *testing.T) {
 	if err := os.MkdirAll(deployedPackage, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", selfJunction, deployedPackage).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(deployedPackage, selfJunction); err != nil {
+		t.Fatal(err)
 	}
 	if err := removeExternalDeploySelfLink(destination, "@open-cut/api"); err != nil {
 		t.Fatal(err)
@@ -65,18 +66,18 @@ func TestCopyTreeDereferencesWindowsJunction(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(junction), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, target).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(target, junction); err != nil {
+		t.Fatal(err)
 	}
-	junctionPath, err := canonicalPath(junction)
+	junctionPath, err := filesystem.Canonical(junction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetPath, err := canonicalPath(target)
+	targetPath, err := filesystem.Canonical(target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if directoryKey(junctionPath) != directoryKey(targetPath) {
+	if filesystem.IdentityKey(junctionPath) != filesystem.IdentityKey(targetPath) {
 		t.Fatalf("junction canonical path=%q target=%q", junctionPath, targetPath)
 	}
 
@@ -99,8 +100,8 @@ func TestCopyTreeRejectsWindowsJunctionCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	junction := filepath.Join(source, "loop")
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, source).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(source, junction); err != nil {
+		t.Fatal(err)
 	}
 	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true, ""); err == nil {
 		t.Fatal("junction cycle was accepted")
@@ -121,8 +122,8 @@ func TestCopyTreeDereferencesWindowsRepositoryDependencyJunction(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(junction), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, dependency).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(dependency, junction); err != nil {
+		t.Fatal(err)
 	}
 
 	destination := filepath.Join(t.TempDir(), "destination")
@@ -146,8 +147,8 @@ func TestCopyTreeRejectsWindowsRepositorySourceJunction(t *testing.T) {
 	if err := os.MkdirAll(productSource, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, productSource).CombinedOutput(); err != nil {
-		t.Fatalf("create junction: %v: %s", err, output)
+	if err := filesystem.CreateDirectoryLink(productSource, junction); err != nil {
+		t.Fatal(err)
 	}
 	if err := copyTree(source, filepath.Join(t.TempDir(), "destination"), true, repository); err == nil {
 		t.Fatal("repository source junction was accepted")

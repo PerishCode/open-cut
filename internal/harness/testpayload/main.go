@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,18 +12,18 @@ import (
 )
 
 func main() {
-	var descriptor protocol.ControlDescriptor
-	if err := json.Unmarshal([]byte(required("OC_SIDECAR_CONTROL")), &descriptor); err != nil {
+	launch, err := protocol.LoadLaunchEnvironment()
+	if err != nil {
 		fatal(err)
 	}
-	session, err := client.DialSession(context.Background(), descriptor, required("OC_SIDECAR_TOKEN"), client.Registration{
-		Channel: required("OC_SIDECAR_CHANNEL"), Namespace: required("OC_SIDECAR_NAMESPACE"),
-		App: "fixture-runtime", Mode: required("OC_SIDECAR_MODE"), Source: required("OC_SIDECAR_SOURCE"),
+	session, err := client.DialSession(context.Background(), launch.Control, launch.Token, client.Registration{
+		Channel: launch.Channel, Namespace: launch.Namespace,
+		App: "fixture-runtime", Mode: launch.Mode, Source: launch.Source,
 	})
 	if err != nil {
 		fatal(err)
 	}
-	control := client.New(descriptor, required("OC_SIDECAR_TOKEN"))
+	control := client.New(launch.Control, launch.Token)
 	defer session.Close(0)
 	delay := durationFromEnv("OC_FIXTURE_READY_DELAY_MS", 100*time.Millisecond)
 	lifetime := durationFromEnv("OC_FIXTURE_LIFETIME_MS", 1200*time.Millisecond)
@@ -60,14 +59,14 @@ func main() {
 				fatal(err)
 			}
 			if transition.RestartRequired {
-				if _, err := control.Control(context.Background(), "shutdown"); err != nil {
+				if _, err := control.Control(context.Background(), protocol.ControlCommandShutdown); err != nil {
 					fatal(err)
 				}
 				return
 			}
 			updateTimer = nil
 		case <-lifetimeTimer.C:
-			if _, err := control.Control(context.Background(), "shutdown"); err != nil {
+			if _, err := control.Control(context.Background(), protocol.ControlCommandShutdown); err != nil {
 				fatal(err)
 			}
 			return

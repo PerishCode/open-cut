@@ -2,18 +2,16 @@ package runtimehost
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/environment"
 )
 
 const (
@@ -56,7 +54,7 @@ type restartRequest struct {
 
 type managedProcess struct {
 	definition runtimetopology.ResolvedProcess
-	command    *exec.Cmd
+	command    *lifecycle.Process
 	startedAt  time.Time
 	generation uint64
 	backoff    time.Duration
@@ -98,7 +96,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 	heartbeatDone := make(chan struct{})
 	defer close(heartbeatDone)
 	go heartbeat(session, heartbeatDone)
-	commands := make(chan string, 1)
+	commands := make(chan protocol.ControlCommand, 1)
 	go func() {
 		for {
 			command, readErr := session.ReadCommand(context.Background())
@@ -142,7 +140,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 			shutdown(control, processes, exits, false)
 			return nil
 		case command := <-commands:
-			if command == "show" {
+			if command == protocol.ControlCommandShow {
 				continue
 			}
 			shutdown(control, processes, exits, true)
@@ -201,13 +199,12 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 			}
 		case <-renewTicker.C:
 			renewContext, cancel := context.WithTimeout(ctx, 10*time.Second)
-			renewed, renewErr := control.Renew(renewContext, sessionCapabilityTTL)
+			_, renewErr := session.Renew(renewContext, sessionCapabilityTTL)
 			cancel()
 			if renewErr != nil {
 				fmt.Fprintf(options.Stderr, "runtime capability renewal failed; retrying later: %v\n", renewErr)
 				continue
 			}
-			session.SetToken(renewed.Token)
 		case <-readyDeadline.C:
 			if confirmed {
 				continue
@@ -226,28 +223,35 @@ func startProcess(
 	exits chan<- processExit,
 ) error {
 	definition := managed.definition
-	delegated, err := control.DelegateSidecarWithCapabilities(ctx, definition.App, sessionCapabilityTTL, definition.Capabilities)
+	delegated, err := control.DelegateSidecar(ctx, definition.App, sessionCapabilityTTL, definition.Capabilities)
 	if err != nil {
 		return fmt.Errorf("delegate capability: %w", err)
 	}
-	command := exec.Command(definition.Command, definition.Args...)
-	command.Dir, command.Stdout, command.Stderr = definition.WorkingDirectory, options.Stdout, options.Stderr
-	command.Env = processEnvironment(os.Environ(), definition.UnsetEnv, definition.Env, map[string]string{
-		"OC_SIDECAR_CONTROL":   encodeDescriptor(options.Descriptor),
-		"OC_SIDECAR_TOKEN":     delegated.Token,
-		"OC_SIDECAR_CHANNEL":   options.Channel,
-		"OC_SIDECAR_NAMESPACE": options.Namespace,
-		"OC_SIDECAR_MODE":      options.Mode,
-		"OC_SIDECAR_SOURCE":    options.Source,
+	launchEnvironment, err := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
+		Control: options.Descriptor, Token: delegated.Token, Channel: options.Channel,
+		Namespace: options.Namespace, Mode: options.Mode, Source: options.Source,
 	})
-	if err := command.Start(); err != nil {
+	if err != nil {
+		return err
+	}
+	command, err := lifecycle.Start(ctx, lifecycle.ProcessSpec{
+		Executable: definition.Command,
+		Args:       definition.Args,
+		Directory:  definition.WorkingDirectory,
+		Stdout:     options.Stdout,
+		Stderr:     options.Stderr,
+		Profile:    lifecycle.Profile(options.Mode),
+		Sandbox:    definition.Sandbox,
+		Env:        environment.Merge(os.Environ(), definition.UnsetEnv, definition.Env, launchEnvironment),
+	})
+	if err != nil {
 		return err
 	}
 	managed.generation++
 	managed.command = command
 	managed.startedAt = time.Now()
 	generation := managed.generation
-	go func(app string, command *exec.Cmd) {
+	go func(app string, command *lifecycle.Process) {
 		exits <- processExit{app: app, generation: generation, err: command.Wait()}
 	}(definition.App, command)
 	return nil
@@ -299,7 +303,7 @@ func shutdown(
 	}
 	if !alreadyBroadcast && len(running) > 0 {
 		requestContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_, _ = control.Control(requestContext, "shutdown")
+		_, _ = control.Control(requestContext, protocol.ControlCommandShutdown)
 		cancel()
 	}
 	deadline := time.NewTimer(4 * time.Second)
@@ -313,8 +317,8 @@ func shutdown(
 		case <-deadline.C:
 			for app, generation := range running {
 				managed := processes[app]
-				if managed != nil && managed.generation == generation && managed.command != nil && managed.command.Process != nil {
-					_ = managed.command.Process.Kill()
+				if managed != nil && managed.generation == generation && managed.command != nil {
+					_ = managed.command.Kill()
 				}
 			}
 			return
@@ -333,47 +337,4 @@ func heartbeat(session *client.Session, done <-chan struct{}) {
 			_ = session.Heartbeat()
 		}
 	}
-}
-
-func processEnvironment(base, unset []string, additions ...map[string]string) []string {
-	removed := make(map[string]struct{}, len(unset))
-	for _, name := range unset {
-		removed[strings.ToUpper(name)] = struct{}{}
-	}
-	values := make(map[string]string, len(base))
-	for _, entry := range base {
-		name, _, found := strings.Cut(entry, "=")
-		if !found {
-			continue
-		}
-		canonical := strings.ToUpper(name)
-		if _, drop := removed[canonical]; drop {
-			continue
-		}
-		values[canonical] = entry
-	}
-	for _, addition := range additions {
-		for name, value := range addition {
-			canonical := strings.ToUpper(name)
-			values[canonical] = name + "=" + value
-		}
-	}
-	ordered := make([]string, 0, len(values))
-	canonicalKeys := make([]string, 0, len(values))
-	for canonical := range values {
-		canonicalKeys = append(canonicalKeys, canonical)
-	}
-	sort.Strings(canonicalKeys)
-	for _, canonical := range canonicalKeys {
-		ordered = append(ordered, values[canonical])
-	}
-	return ordered
-}
-
-func encodeDescriptor(descriptor protocol.ControlDescriptor) string {
-	data, err := json.Marshal(descriptor)
-	if err == nil {
-		return string(data)
-	}
-	return "{}"
 }

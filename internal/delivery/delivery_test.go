@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/PerishCode/open-cut/internal/install"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 func TestUninstallIsIdempotentWhenInstallIsAlreadyGone(t *testing.T) {

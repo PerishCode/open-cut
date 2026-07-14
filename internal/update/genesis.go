@@ -21,7 +21,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 type Installer struct {

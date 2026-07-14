@@ -11,13 +11,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
@@ -25,8 +22,10 @@ import (
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 const harnessVersion = "1.0.0-harness.1"
@@ -36,6 +35,7 @@ const failingHarnessVersion = "3.0.0-harness.1"
 func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtifact string) Report {
 	started := time.Now()
 	report := Report{Schema: 1, Scenario: "genesis-download-confirm-offline-rollback"}
+	hostTarget := target.Host()
 	check := func(name string, err error) bool {
 		entry := Check{Name: name, Passed: err == nil}
 		if err != nil {
@@ -58,10 +58,10 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	if !check("root-layout", err) || !check("create-roots", paths.Ensure()) {
 		return finish(report, started)
 	}
-	bootstrapLauncher := filepath.Join(roots.BootstrapRoot, executableName("launcher"))
+	bootstrapLauncher := filepath.Join(roots.BootstrapRoot, hostTarget.ExecutableName("launcher"))
 	releaseTree := filepath.Join(workspace, "fixture-origin", "tree")
-	versionedLauncher := filepath.Join(releaseTree, "launcher", executableName("launcher"))
-	payload := filepath.Join(releaseTree, "payload", executableName("fixture-runtime"))
+	versionedLauncher := filepath.Join(releaseTree, "launcher", hostTarget.ExecutableName("launcher"))
+	payload := filepath.Join(releaseTree, "payload", hostTarget.ExecutableName("fixture-runtime"))
 	topologyPath := filepath.Join(releaseTree, "payload", "runtime-topology.json")
 	if !check("install-bootstrap-launcher", copyExecutable(launcherArtifact, bootstrapLauncher)) ||
 		!check("stage-versioned-launcher", copyExecutable(launcherArtifact, versionedLauncher)) ||
@@ -72,7 +72,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 
 	manifest := release.Manifest{
 		Schema: release.ManifestSchema, Channel: identity.Channel, Version: harnessVersion,
-		Platform: target.Host().Platform, Arch: target.Host().Arch,
+		Platform: hostTarget.Platform, Arch: hostTarget.Arch,
 		Launcher:                 release.Entry{Entry: filepath.ToSlash(filepath.Join("launcher", filepath.Base(versionedLauncher)))},
 		Payload:                  release.Entry{Entry: filepath.ToSlash(filepath.Join("payload", filepath.Base(topologyPath)))},
 		MinimumBootstrapProtocol: "bootstrap.v1", PublishedAt: time.Now().UTC(),
@@ -93,8 +93,8 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		return finish(report, started)
 	}
 	steadyTree := filepath.Join(workspace, "fixture-origin", "tree-v2")
-	steadyLauncher := filepath.Join(steadyTree, "launcher", executableName("launcher"))
-	steadyPayload := filepath.Join(steadyTree, "payload", executableName("fixture-runtime"))
+	steadyLauncher := filepath.Join(steadyTree, "launcher", hostTarget.ExecutableName("launcher"))
+	steadyPayload := filepath.Join(steadyTree, "payload", hostTarget.ExecutableName("fixture-runtime"))
 	steadyTopology := filepath.Join(steadyTree, "payload", "runtime-topology.json")
 	steadyManifest := manifest
 	steadyManifest.Version = steadyHarnessVersion
@@ -129,7 +129,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 			}
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write(selected)
-		case "/metadata/harness/" + target.Host().String() + "/latest.json":
+		case "/metadata/harness/" + hostTarget.String() + "/latest.json":
 			metadataLock.RLock()
 			selected := append([]byte(nil), metadata...)
 			metadataLock.RUnlock()
@@ -147,7 +147,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	now := time.Now().UTC()
 	envelope, err := release.SignEnvelope(release.Descriptor{
 		Schema: release.ReleaseMetadataSchema, Channel: identity.Channel, Version: harnessVersion,
-		Platform: target.Host().Platform, Arch: target.Host().Arch,
+		Platform: hostTarget.Platform, Arch: hostTarget.Arch,
 		Bundle: release.BundleDescriptor{
 			Path: "releases/" + harnessVersion + "/release-bundle.tar.zst", Size: size, SHA256: digest,
 		},
@@ -190,7 +190,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	}
 	steadyEnvelope, err := release.SignEnvelope(release.Descriptor{
 		Schema: release.ReleaseMetadataSchema, Channel: identity.Channel, Version: steadyHarnessVersion,
-		Platform: target.Host().Platform, Arch: target.Host().Arch,
+		Platform: hostTarget.Platform, Arch: hostTarget.Arch,
 		Bundle: release.BundleDescriptor{
 			Path: "releases/" + steadyHarnessVersion + "/release-bundle.tar.zst",
 			Size: steadySize, SHA256: steadyDigest,
@@ -307,10 +307,9 @@ func runLauncher(ctx context.Context, launcherPath, bootstrapPath, logPath strin
 	defer logFile.Close()
 	launchContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	command := exec.CommandContext(launchContext, launcherPath, "--bootstrap", bootstrapPath)
-	command.Stdout, command.Stderr = logFile, logFile
-	command.Env = append(os.Environ(), extraEnv...)
-	return command.Run()
+	return lifecycle.Run(launchContext, lifecycle.BootstrapProcess(launcherPath, bootstrapPath, lifecycle.ProcessSpec{
+		Stdout: logFile, Stderr: logFile, Env: append(os.Environ(), extraEnv...), Profile: lifecycle.ProfileHarness,
+	}))
 }
 
 func validateConfirmed(runtimeState state.Runtime, expected string) error {
@@ -340,11 +339,4 @@ func copyExecutable(source, destination string) error {
 		return copyErr
 	}
 	return closeErr
-}
-
-func executableName(base string) string {
-	if runtime.GOOS == "windows" {
-		return base + ".exe"
-	}
-	return base
 }

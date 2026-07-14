@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 const ManifestSchema = 1

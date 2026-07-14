@@ -2,103 +2,51 @@ import { randomUUID } from "node:crypto";
 
 import WebSocket from "ws";
 
-export type ControlDescriptor = {
-  schema: 1;
-  protocol: "sidecar.v1";
-  address: string;
-  pid: number;
-  sessionId: string;
-  generation: number;
-  startedAt: string;
-};
+import {
+  controlCommand,
+  eventType,
+  protocolVersion,
+  operations,
+  sidecarEnvironment,
+  type ClientEvent,
+  type ControlCommand,
+  type ControlResponse,
+  type RenewResponse,
+  type ServerEvent,
+  type SidecarLaunch,
+  type SessionStatus,
+  type Status,
+} from "./generated.js";
 
-export type SidecarLaunch = {
-  descriptor: ControlDescriptor;
-  token: string;
-  channel: string;
-  namespace: string;
-  mode: string;
-  source: string;
-};
-
-export type SidecarCommand = "show" | "shutdown";
-
-export type DelegatedCapability = {
-  subject: string;
-  token: string;
-  expiresAt: string;
-};
-
-export type SidecarStatus = {
-  subject: string;
-  app: string;
-  instanceId: string;
-  mode: string;
-  source: string;
-  ready: boolean;
-  connectedAt: string;
-  lastHeartbeat: string;
-  endpoints?: Array<{ name: string; url: string }>;
-};
-
-export type BrokerStatus = {
-  schema: 1;
-  revision: number;
-  channel: string;
-  namespace: string;
-  sessionId: string;
-  generation: number;
-  sessions: SidecarStatus[];
-};
-
-export type UpdateTransition = {
-  status: "current" | "prepared";
-  version: string;
-  restartRequired: boolean;
-};
+export { controlCommand } from "./generated.js";
+export type { ControlCommand, SessionStatus } from "./generated.js";
 
 export type ConnectOptions = {
   app: string;
-  launch?: SidecarLaunch;
   heartbeatIntervalMs?: number;
   reconcileIntervalMs?: number;
   capabilityRenewIntervalMs?: number;
-  onCommand?: (command: SidecarCommand) => void | Promise<void>;
+  onCommand?: (command: ControlCommand) => void | Promise<void>;
 };
 
-type ServerEvent = {
-  type: "registered" | "command" | "status";
-  command?: SidecarCommand;
-  status?: BrokerStatus;
-};
+type StatusListener = (status: Status) => void;
+type AppStatusListener = (status: SessionStatus | undefined, broker: Status) => void;
 
-type StatusListener = (status: BrokerStatus) => void;
-type AppStatusListener = (status: SidecarStatus | undefined, broker: BrokerStatus) => void;
-
-const REQUIRED_ENV = [
-  "OC_SIDECAR_CONTROL",
-  "OC_SIDECAR_TOKEN",
-  "OC_SIDECAR_CHANNEL",
-  "OC_SIDECAR_NAMESPACE",
-  "OC_SIDECAR_MODE",
-  "OC_SIDECAR_SOURCE",
-] as const;
-
-export function loadSidecarLaunch(env: NodeJS.ProcessEnv = process.env): SidecarLaunch {
-  for (const name of REQUIRED_ENV) {
+function loadSidecarLaunch(env: NodeJS.ProcessEnv = process.env): SidecarLaunch {
+  for (const name of Object.values(sidecarEnvironment)) {
     if (!env[name]) throw new Error(`${name} is required for sidecar startup`);
   }
-  const descriptor = JSON.parse(env.OC_SIDECAR_CONTROL!) as ControlDescriptor;
-  if (descriptor.schema !== 1 || descriptor.protocol !== "sidecar.v1" || !descriptor.address || !descriptor.sessionId) {
-    throw new Error("OC_SIDECAR_CONTROL is not a valid sidecar.v1 descriptor");
+  const control = JSON.parse(env[sidecarEnvironment.control]!) as SidecarLaunch["control"];
+  if (control.schema !== 1 || control.protocol !== protocolVersion || !control.address || !control.sessionId) {
+    throw new Error(`${sidecarEnvironment.control} is not a valid ${protocolVersion} descriptor`);
   }
   return {
-    descriptor,
-    token: env.OC_SIDECAR_TOKEN!,
-    channel: env.OC_SIDECAR_CHANNEL!,
-    namespace: env.OC_SIDECAR_NAMESPACE!,
-    mode: env.OC_SIDECAR_MODE!,
-    source: env.OC_SIDECAR_SOURCE!,
+    control,
+    token: env[sidecarEnvironment.token]!,
+    channel: env[sidecarEnvironment.channel]!,
+    namespace: env[sidecarEnvironment.namespace]!,
+    mode: env[sidecarEnvironment.mode]!,
+    source: env[sidecarEnvironment.source]!,
   };
 }
 
@@ -114,7 +62,7 @@ export class SidecarConnection {
 
   #socket: WebSocket | undefined;
   #connecting: Promise<void> | undefined;
-  #status: BrokerStatus | undefined;
+  #status: Status | undefined;
   #desiredReady = false;
   #closed = false;
   #polling = false;
@@ -122,7 +70,7 @@ export class SidecarConnection {
   private constructor(options: ConnectOptions, launch: SidecarLaunch) {
     this.#options = options;
     this.#launch = launch;
-    this.#heartbeat = setInterval(() => this.#send({ type: "heartbeat" }), options.heartbeatIntervalMs ?? 5_000);
+    this.#heartbeat = setInterval(() => this.#send({ type: eventType.heartbeat }), options.heartbeatIntervalMs ?? 5_000);
     this.#heartbeat.unref();
     this.#reconcile = setInterval(() => void this.#pollStatus(), options.reconcileIntervalMs ?? 2_000);
     this.#reconcile.unref();
@@ -134,7 +82,7 @@ export class SidecarConnection {
   }
 
   static async connect(options: ConnectOptions): Promise<SidecarConnection> {
-    const connection = new SidecarConnection(options, options.launch ?? loadSidecarLaunch());
+    const connection = new SidecarConnection(options, loadSidecarLaunch());
     await connection.#ensureConnected();
     await connection.#pollStatus();
     return connection;
@@ -152,44 +100,17 @@ export class SidecarConnection {
     });
   }
 
-  async waitForReady(app: string, timeoutMs = 30_000): Promise<SidecarStatus> {
-    return new Promise<SidecarStatus>((resolve, reject) => {
-      let settled = false;
-      let unsubscribe: () => void = () => undefined;
-      let timeout: NodeJS.Timeout | undefined;
-      const onStatus = (peer: SidecarStatus | undefined) => {
-        if (!peer?.ready || settled) return;
-        settled = true;
-        if (timeout) clearTimeout(timeout);
-        unsubscribe();
-        resolve(peer);
-      };
-      unsubscribe = this.watchApp(app, onStatus);
-      if (settled) unsubscribe();
-      timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        unsubscribe();
-        reject(new Error(`sidecar ${app} did not reach READY within ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-  }
-
-  async delegateSidecar(subject: string, ttlSeconds = 900): Promise<SidecarLaunch> {
-    return delegateSidecar(this.#launch, subject, ttlSeconds);
-  }
-
-  async prepareLatestUpdate(): Promise<UpdateTransition> {
-    return prepareLatestUpdate(this.#launch);
+  get mode(): string {
+    return this.#launch.mode;
   }
 
   async shutdownCell(): Promise<number> {
-    return controlCell(this.#launch, "shutdown");
+    return controlCell(this.#launch, controlCommand.shutdown);
   }
 
   publishEndpoint(name: string, url: string): void {
     this.#endpoints.set(name, url);
-    if (this.#desiredReady) this.#send({ type: "endpoint", name, url });
+    if (this.#desiredReady) this.#send({ type: eventType.endpoint, name, url });
   }
 
   ready(): void {
@@ -199,7 +120,7 @@ export class SidecarConnection {
 
   notReady(): void {
     this.#desiredReady = false;
-    this.#send({ type: "state", ready: false });
+    this.#send({ type: eventType.state, ready: false });
   }
 
   close(code = 0): void {
@@ -211,7 +132,7 @@ export class SidecarConnection {
     const socket = this.#socket;
     this.#socket = undefined;
     if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "exiting", code }));
+      socket.send(JSON.stringify({ type: eventType.exiting, code }));
       socket.close();
     } else {
       socket?.close();
@@ -247,7 +168,7 @@ export class SidecarConnection {
 
   async #open(): Promise<void> {
     const launch = this.#launch;
-    const socket = new WebSocket(`ws://${launch.descriptor.address}/v1/sessions/register`, {
+    const socket = new WebSocket(`ws://${launch.control.address}${operations.registerSession.path}`, {
       headers: { Authorization: `Bearer ${launch.token}` },
     });
     this.#socket = socket;
@@ -269,9 +190,9 @@ export class SidecarConnection {
           socket.close();
           return;
         }
-        if (event.type === "registered") finish();
-        if (event.type === "status" && event.status) this.#acceptStatus(event.status);
-        if (event.type === "command" && event.command && this.#options.onCommand) {
+        if (event.type === eventType.registered) finish();
+        if (event.type === eventType.status) this.#acceptStatus(event.status);
+        if (event.type === eventType.command && this.#options.onCommand) {
           void Promise.resolve(this.#options.onCommand(event.command)).catch((error: unknown) => {
             console.error(error instanceof Error ? error.stack ?? error.message : String(error));
           });
@@ -279,11 +200,11 @@ export class SidecarConnection {
       });
       socket.once("open", () => {
         socket.send(JSON.stringify({
-          type: "register",
+          type: eventType.register,
           channel: launch.channel,
           namespace: launch.namespace,
-          sessionId: launch.descriptor.sessionId,
-          generation: launch.descriptor.generation,
+          sessionId: launch.control.sessionId,
+          generation: launch.control.generation,
           app: this.#options.app,
           instanceId: this.#instanceId,
           mode: launch.mode,
@@ -310,14 +231,14 @@ export class SidecarConnection {
 
   #replayState(): void {
     if (!this.#desiredReady) {
-      this.#send({ type: "state", ready: false });
+      this.#send({ type: eventType.state, ready: false });
       return;
     }
-    for (const [name, url] of this.#endpoints) this.#send({ type: "endpoint", name, url });
-    this.#send({ type: "state", ready: true });
+    for (const [name, url] of this.#endpoints) this.#send({ type: eventType.endpoint, name, url });
+    this.#send({ type: eventType.state, ready: true });
   }
 
-  #send(event: object): void {
+  #send(event: ClientEvent): void {
     const socket = this.#socket;
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
   }
@@ -344,8 +265,8 @@ export class SidecarConnection {
     }
   }
 
-  #acceptStatus(status: BrokerStatus): void {
-    if (status.sessionId !== this.#launch.descriptor.sessionId || status.generation !== this.#launch.descriptor.generation) return;
+  #acceptStatus(status: Status): void {
+    if (status.sessionId !== this.#launch.control.sessionId || status.generation !== this.#launch.control.generation) return;
     if (this.#status && status.revision < this.#status.revision) return;
     this.#status = status;
     this.#notify(status);
@@ -357,7 +278,7 @@ export class SidecarConnection {
     this.#notify(this.#status);
   }
 
-  #notify(status: BrokerStatus): void {
+  #notify(status: Status): void {
     for (const listener of this.#listeners) {
       try {
         listener(status);
@@ -368,36 +289,19 @@ export class SidecarConnection {
   }
 }
 
-export async function delegateSidecar(parent: SidecarLaunch, subject: string, ttlSeconds = 900): Promise<SidecarLaunch> {
-  const response = await fetch(`http://${parent.descriptor.address}/v1/capabilities/sidecar`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${parent.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ subject, ttlSeconds }),
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!response.ok) throw new Error(`sidecar capability delegation returned ${response.status}`);
-  const delegated = await response.json() as DelegatedCapability;
-  if (delegated.subject !== subject || !delegated.token || !delegated.expiresAt) {
-    throw new Error("broker returned an invalid delegated capability");
-  }
-  return { ...parent, token: delegated.token, source: "payload" };
-}
-
-export async function getBrokerStatus(launch: SidecarLaunch): Promise<BrokerStatus> {
-  const response = await fetch(`http://${launch.descriptor.address}/v1/status`, {
+async function getBrokerStatus(launch: SidecarLaunch): Promise<Status> {
+  const response = await fetch(`http://${launch.control.address}${operations.status.path}`, {
+    method: operations.status.method,
     headers: { Authorization: `Bearer ${launch.token}` },
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar status returned ${response.status}`);
-  const status = await response.json() as BrokerStatus;
+  const status = await response.json() as Status;
   if (
     status.schema !== 1 ||
     !Number.isSafeInteger(status.revision) ||
     status.revision < 0 ||
-    status.sessionId !== launch.descriptor.sessionId ||
+    status.sessionId !== launch.control.sessionId ||
     !Array.isArray(status.sessions)
   ) {
     throw new Error("broker returned an invalid status document");
@@ -405,9 +309,9 @@ export async function getBrokerStatus(launch: SidecarLaunch): Promise<BrokerStat
   return status;
 }
 
-export async function renewCapability(launch: SidecarLaunch, ttlSeconds: number): Promise<DelegatedCapability> {
-  const response = await fetch(`http://${launch.descriptor.address}/v1/capabilities/renew`, {
-    method: "POST",
+async function renewCapability(launch: SidecarLaunch, ttlSeconds: number): Promise<RenewResponse> {
+  const response = await fetch(`http://${launch.control.address}${operations.renewCapability.path}`, {
+    method: operations.renewCapability.method,
     headers: {
       Authorization: `Bearer ${launch.token}`,
       "Content-Type": "application/json",
@@ -416,14 +320,14 @@ export async function renewCapability(launch: SidecarLaunch, ttlSeconds: number)
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar capability renewal returned ${response.status}`);
-  const renewed = await response.json() as DelegatedCapability;
+  const renewed = await response.json() as RenewResponse;
   if (!renewed.token || !renewed.expiresAt) throw new Error("broker returned an invalid renewed capability");
   return renewed;
 }
 
-export async function controlCell(launch: SidecarLaunch, command: SidecarCommand): Promise<number> {
-  const response = await fetch(`http://${launch.descriptor.address}/v1/control`, {
-    method: "POST",
+async function controlCell(launch: SidecarLaunch, command: ControlCommand): Promise<number> {
+  const response = await fetch(`http://${launch.control.address}${operations.broadcastControl.path}`, {
+    method: operations.broadcastControl.method,
     headers: {
       Authorization: `Bearer ${launch.token}`,
       "Content-Type": "application/json",
@@ -432,40 +336,11 @@ export async function controlCell(launch: SidecarLaunch, command: SidecarCommand
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new Error(`sidecar lifecycle control returned ${response.status}`);
-  const result = await response.json() as { accepted?: unknown };
+  const result = await response.json() as ControlResponse;
   if (!Number.isSafeInteger(result.accepted) || (result.accepted as number) < 0) {
     throw new Error("broker returned an invalid lifecycle response");
   }
   return result.accepted as number;
-}
-
-export async function prepareLatestUpdate(launch: SidecarLaunch): Promise<UpdateTransition> {
-  const response = await fetch(`http://${launch.descriptor.address}/v1/update/transition`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${launch.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action: "prepare-latest" }),
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!response.ok) throw new Error(`update transition returned ${response.status}`);
-  const transition = await response.json() as UpdateTransition;
-  if (!transition.version || !["current", "prepared"].includes(transition.status) || typeof transition.restartRequired !== "boolean") {
-    throw new Error("broker returned an invalid update transition");
-  }
-  return transition;
-}
-
-export function sidecarLaunchEnv(launch: SidecarLaunch): NodeJS.ProcessEnv {
-  return {
-    OC_SIDECAR_CONTROL: JSON.stringify(launch.descriptor),
-    OC_SIDECAR_TOKEN: launch.token,
-    OC_SIDECAR_CHANNEL: launch.channel,
-    OC_SIDECAR_NAMESPACE: launch.namespace,
-    OC_SIDECAR_MODE: launch.mode,
-    OC_SIDECAR_SOURCE: launch.source,
-  };
 }
 
 function delay(milliseconds: number): Promise<void> {

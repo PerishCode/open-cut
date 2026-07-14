@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/config"
-	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 func TestSignedReleaseEnvelope(t *testing.T) {

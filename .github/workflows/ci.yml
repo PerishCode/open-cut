@@ -23,6 +23,11 @@ jobs:
       - name: Enable pinned pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Check generated protocol artifacts
+        run: |
+          mkdir -p .tmp/ci
+          go build -trimpath -o .tmp/ci/oc-control ./cmd/oc-control
+          .tmp/ci/oc-control protocol check --repo .
       - name: Go format
         shell: bash
         run: |

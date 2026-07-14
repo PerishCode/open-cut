@@ -1,0 +1,19 @@
+emit:
+  - "@typespec/openapi3"
+  - "@typespec/json-schema"
+
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{output-dir}"
+    output-file: "openapi.{file-type}"
+    file-type: ["yaml", "json"]
+    openapi-versions: ["3.1.0"]
+    operation-id-strategy: "explicit-only"
+    safeint-strategy: "double-int"
+  "@typespec/json-schema":
+    emitter-output-dir: "{output-dir}"
+    file-type: "json"
+    bundleId: "events.schema.json"
+    int64-strategy: "number"
+    emitAllRefs: true
+    polymorphic-models-strategy: "oneOf"

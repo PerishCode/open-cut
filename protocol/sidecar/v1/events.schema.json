@@ -1,77 +1,330 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://open-cut.local/protocol/sidecar/v1/events.schema.json",
-  "title": "Sidecar WebSocket event",
-  "oneOf": [
-    { "$ref": "#/$defs/register" },
-    { "$ref": "#/$defs/heartbeat" },
-    { "$ref": "#/$defs/endpoint" },
-    { "$ref": "#/$defs/ready" },
-    { "$ref": "#/$defs/exiting" }
-  ],
   "$defs": {
-    "base": {
-      "type": "object",
-      "required": ["type"],
-      "properties": { "type": { "type": "string" } }
-    },
-    "register": {
-      "allOf": [
-        { "$ref": "#/$defs/base" },
+    "ClientEvent": {
+      "anyOf": [
         {
-          "type": "object",
-          "required": ["type", "channel", "namespace", "sessionId", "generation", "app", "mode", "source"],
-          "properties": {
-            "type": { "const": "register" },
-            "channel": { "type": "string", "minLength": 1 },
-            "namespace": { "type": "string", "minLength": 1 },
-            "sessionId": { "type": "string", "minLength": 1 },
-            "generation": { "type": "integer", "minimum": 0 },
-            "app": { "type": "string", "minLength": 1 },
-            "mode": { "type": "string", "minLength": 1 },
-            "source": { "type": "string", "minLength": 1 }
-          }
+          "$ref": "#/$defs/RegisterEvent"
+        },
+        {
+          "$ref": "#/$defs/HeartbeatEvent"
+        },
+        {
+          "$ref": "#/$defs/EndpointEvent"
+        },
+        {
+          "$ref": "#/$defs/StateEvent"
+        },
+        {
+          "$ref": "#/$defs/ExitingEvent"
         }
       ]
     },
-    "heartbeat": {
-      "allOf": [
-        { "$ref": "#/$defs/base" },
-        { "type": "object", "properties": { "type": { "const": "heartbeat" } } }
-      ]
+    "CommandEvent": {
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/ControlCommand"
+        },
+        "type": {
+          "const": "command",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "command"
+      ],
+      "type": "object"
     },
-    "endpoint": {
-      "allOf": [
-        { "$ref": "#/$defs/base" },
+    "ControlCommand": {
+      "enum": [
+        "show",
+        "shutdown"
+      ],
+      "type": "string"
+    },
+    "Endpoint": {
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ],
+      "type": "object"
+    },
+    "EndpointEvent": {
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "endpoint",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "url"
+      ],
+      "type": "object"
+    },
+    "ExitingEvent": {
+      "properties": {
+        "code": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        },
+        "type": {
+          "const": "exiting",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "code"
+      ],
+      "type": "object"
+    },
+    "HeartbeatEvent": {
+      "properties": {
+        "type": {
+          "const": "heartbeat",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "RegisterEvent": {
+      "properties": {
+        "app": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "channel": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "instanceId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "namespace": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "register",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "channel",
+        "namespace",
+        "sessionId",
+        "generation",
+        "app",
+        "instanceId",
+        "mode",
+        "source"
+      ],
+      "type": "object"
+    },
+    "RegisteredEvent": {
+      "properties": {
+        "type": {
+          "const": "registered",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "ServerEvent": {
+      "anyOf": [
         {
-          "type": "object",
-          "required": ["type", "name", "url"],
-          "properties": {
-            "type": { "const": "endpoint" },
-            "name": { "type": "string", "minLength": 1 },
-            "url": { "type": "string", "format": "uri" }
-          }
+          "$ref": "#/$defs/RegisteredEvent"
+        },
+        {
+          "$ref": "#/$defs/CommandEvent"
+        },
+        {
+          "$ref": "#/$defs/StatusEvent"
         }
       ]
     },
-    "ready": {
-      "allOf": [
-        { "$ref": "#/$defs/base" },
-        { "type": "object", "properties": { "type": { "const": "ready" } } }
-      ]
-    },
-    "exiting": {
-      "allOf": [
-        { "$ref": "#/$defs/base" },
-        {
-          "type": "object",
-          "required": ["type", "code"],
-          "properties": {
-            "type": { "const": "exiting" },
-            "code": { "type": "integer" }
-          }
+    "SessionStatus": {
+      "properties": {
+        "app": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "connectedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "endpoints": {
+          "items": {
+            "$ref": "#/$defs/Endpoint"
+          },
+          "type": "array"
+        },
+        "instanceId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "lastHeartbeat": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "mode": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "subject": {
+          "minLength": 1,
+          "type": "string"
         }
-      ]
+      },
+      "required": [
+        "subject",
+        "app",
+        "instanceId",
+        "mode",
+        "source",
+        "ready",
+        "connectedAt",
+        "lastHeartbeat"
+      ],
+      "type": "object"
+    },
+    "StateEvent": {
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "type": {
+          "const": "state",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "ready"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "properties": {
+        "channel": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "namespace": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema": {
+          "const": 1,
+          "type": "number"
+        },
+        "sessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema",
+        "revision",
+        "channel",
+        "namespace",
+        "sessionId",
+        "generation",
+        "sessions"
+      ],
+      "type": "object"
+    },
+    "StatusEvent": {
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "type": {
+          "const": "status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "status"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "$id": "events.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ClientEvent"
+    },
+    {
+      "$ref": "#/$defs/ServerEvent"
+    }
+  ]
 }

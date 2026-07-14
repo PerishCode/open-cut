@@ -48,25 +48,21 @@ func New(descriptor protocol.ControlDescriptor, token string) *Client {
 
 func (client *Client) Status(ctx context.Context) (protocol.Status, error) {
 	var status protocol.Status
-	if err := client.request(ctx, http.MethodGet, "/v1/status", nil, &status); err != nil {
+	if err := client.request(ctx, protocol.MethodStatus, protocol.RouteStatus, nil, &status); err != nil {
 		return protocol.Status{}, err
 	}
 	return status, nil
 }
 
-func (client *Client) Control(ctx context.Context, command string) (protocol.ControlResponse, error) {
+func (client *Client) Control(ctx context.Context, command protocol.ControlCommand) (protocol.ControlResponse, error) {
 	var response protocol.ControlResponse
-	if err := client.request(ctx, http.MethodPost, "/v1/control", protocol.ControlRequest{Command: command}, &response); err != nil {
+	if err := client.request(ctx, protocol.MethodBroadcastControl, protocol.RouteBroadcastControl, protocol.ControlRequest{Command: command}, &response); err != nil {
 		return protocol.ControlResponse{}, err
 	}
 	return response, nil
 }
 
-func (client *Client) DelegateSidecar(ctx context.Context, subject string, ttl time.Duration) (protocol.DelegateResponse, error) {
-	return client.DelegateSidecarWithCapabilities(ctx, subject, ttl, nil)
-}
-
-func (client *Client) DelegateSidecarWithCapabilities(
+func (client *Client) DelegateSidecar(
 	ctx context.Context,
 	subject string,
 	ttl time.Duration,
@@ -77,7 +73,7 @@ func (client *Client) DelegateSidecarWithCapabilities(
 		Subject: subject, TTLSeconds: int64(ttl / time.Second),
 		Capabilities: append([]protocol.Capability(nil), capabilities...),
 	}
-	if err := client.request(ctx, http.MethodPost, "/v1/capabilities/sidecar", request, &response); err != nil {
+	if err := client.request(ctx, protocol.MethodDelegateSidecarCapability, protocol.RouteDelegateSidecarCapability, request, &response); err != nil {
 		return protocol.DelegateResponse{}, err
 	}
 	return response, nil
@@ -85,8 +81,8 @@ func (client *Client) DelegateSidecarWithCapabilities(
 
 func (client *Client) PrepareLatest(ctx context.Context) (protocol.UpdateTransitionResponse, error) {
 	var response protocol.UpdateTransitionResponse
-	request := protocol.UpdateTransitionRequest{Action: "prepare-latest"}
-	if err := client.request(ctx, http.MethodPost, "/v1/update/transition", request, &response); err != nil {
+	request := protocol.UpdateTransitionRequest{Action: protocol.UpdateActionPrepareLatest}
+	if err := client.request(ctx, protocol.MethodPrepareLatestUpdate, protocol.RoutePrepareLatestUpdate, request, &response); err != nil {
 		return protocol.UpdateTransitionResponse{}, err
 	}
 	return response, nil
@@ -95,14 +91,14 @@ func (client *Client) PrepareLatest(ctx context.Context) (protocol.UpdateTransit
 func (client *Client) Renew(ctx context.Context, ttl time.Duration) (protocol.RenewResponse, error) {
 	var response protocol.RenewResponse
 	request := protocol.RenewRequest{TTLSeconds: int64(ttl / time.Second)}
-	if err := client.request(ctx, http.MethodPost, "/v1/capabilities/renew", request, &response); err != nil {
+	if err := client.request(ctx, protocol.MethodRenewCapability, protocol.RouteRenewCapability, request, &response); err != nil {
 		return protocol.RenewResponse{}, err
 	}
-	client.SetToken(response.Token)
+	client.setToken(response.Token)
 	return response, nil
 }
 
-func (client *Client) SetToken(token string) {
+func (client *Client) setToken(token string) {
 	client.tokenMu.Lock()
 	client.token = token
 	client.tokenMu.Unlock()
@@ -182,7 +178,7 @@ func DialSession(ctx context.Context, descriptor protocol.ControlDescriptor, tok
 }
 
 func (session *Session) Heartbeat() error {
-	return session.Send(protocol.ClientEvent{Type: "heartbeat"})
+	return session.send(protocol.ClientEvent{Type: protocol.EventHeartbeat})
 }
 func (session *Session) Ready() error {
 	session.mu.Lock()
@@ -195,7 +191,7 @@ func (session *Session) NotReady() error {
 	defer session.mu.Unlock()
 	session.desiredReady = false
 	ready := false
-	return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+	return session.sendLocked(protocol.ClientEvent{Type: protocol.EventState, Ready: &ready})
 }
 func (session *Session) Endpoint(name, value string) error {
 	session.mu.Lock()
@@ -204,22 +200,22 @@ func (session *Session) Endpoint(name, value string) error {
 	if !session.desiredReady {
 		return nil
 	}
-	return session.sendLocked(protocol.ClientEvent{Type: "endpoint", Name: name, URL: value})
+	return session.sendLocked(protocol.ClientEvent{Type: protocol.EventEndpoint, Name: name, URL: value})
 }
 
-func (session *Session) Send(event protocol.ClientEvent) error {
+func (session *Session) send(event protocol.ClientEvent) error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	return session.sendLocked(event)
 }
 
-func (session *Session) ReadCommand(ctx context.Context) (string, error) {
+func (session *Session) ReadCommand(ctx context.Context) (protocol.ControlCommand, error) {
 	for {
 		event, err := session.ReadEvent(ctx)
 		if err != nil {
 			return "", err
 		}
-		if event.Type == "command" {
+		if event.Type == protocol.EventCommand {
 			return event.Command, nil
 		}
 	}
@@ -242,7 +238,7 @@ func (session *Session) Close(code int) error {
 		close(session.closed)
 		session.mu.Lock()
 		if session.connection != nil {
-			_ = session.sendLocked(protocol.ClientEvent{Type: "exiting", Code: code})
+			_ = session.sendLocked(protocol.ClientEvent{Type: protocol.EventExiting, Code: code})
 			result = session.connection.Close()
 			session.connection = nil
 		}
@@ -251,10 +247,19 @@ func (session *Session) Close(code int) error {
 	return result
 }
 
-func (session *Session) SetToken(token string) {
+func (session *Session) Renew(ctx context.Context, ttl time.Duration) (protocol.RenewResponse, error) {
 	session.mu.Lock()
-	session.token = token
+	token := session.token
 	session.mu.Unlock()
+	control := New(session.descriptor, token)
+	response, err := control.Renew(ctx, ttl)
+	if err != nil {
+		return protocol.RenewResponse{}, err
+	}
+	session.mu.Lock()
+	session.token = response.Token
+	session.mu.Unlock()
+	return response, nil
 }
 
 func (session *Session) run(connection *websocket.Conn) {
@@ -263,10 +268,10 @@ func (session *Session) run(connection *websocket.Conn) {
 		var event protocol.ServerEvent
 		err := current.ReadJSON(&event)
 		if err == nil {
-			if event.Type != "command" && event.Type != "status" {
+			if event.Type != protocol.EventCommand && event.Type != protocol.EventStatus {
 				continue
 			}
-			if event.Type == "status" {
+			if event.Type == protocol.EventStatus {
 				select {
 				case session.events <- event:
 				default:
@@ -332,7 +337,7 @@ func (session *Session) run(connection *websocket.Conn) {
 func (session *Session) replayLocked() error {
 	if !session.desiredReady {
 		ready := false
-		return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+		return session.sendLocked(protocol.ClientEvent{Type: protocol.EventState, Ready: &ready})
 	}
 	names := make([]string, 0, len(session.endpoints))
 	for name := range session.endpoints {
@@ -340,12 +345,12 @@ func (session *Session) replayLocked() error {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if err := session.sendLocked(protocol.ClientEvent{Type: "endpoint", Name: name, URL: session.endpoints[name]}); err != nil {
+		if err := session.sendLocked(protocol.ClientEvent{Type: protocol.EventEndpoint, Name: name, URL: session.endpoints[name]}); err != nil {
 			return err
 		}
 	}
 	ready := true
-	return session.sendLocked(protocol.ClientEvent{Type: "state", Ready: &ready})
+	return session.sendLocked(protocol.ClientEvent{Type: protocol.EventState, Ready: &ready})
 }
 
 func (session *Session) sendLocked(event protocol.ClientEvent) error {
@@ -364,7 +369,7 @@ func dialConnection(
 	token string,
 	registration Registration,
 ) (*websocket.Conn, error) {
-	endpoint := url.URL{Scheme: "ws", Host: descriptor.Address, Path: "/v1/sessions/register"}
+	endpoint := url.URL{Scheme: "ws", Host: descriptor.Address, Path: protocol.RouteRegisterSession}
 	headers := http.Header{}
 	headers.Set("Authorization", "Bearer "+token)
 	connection, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint.String(), headers)
@@ -375,7 +380,7 @@ func dialConnection(
 		return nil, err
 	}
 	if err := connection.WriteJSON(protocol.ClientEvent{
-		Type: "register", Channel: registration.Channel, Namespace: registration.Namespace,
+		Type: protocol.EventRegister, Channel: registration.Channel, Namespace: registration.Namespace,
 		SessionID: descriptor.SessionID, Generation: descriptor.Generation,
 		App: registration.App, InstanceID: registration.InstanceID,
 		Mode: registration.Mode, Source: registration.Source,
@@ -385,7 +390,7 @@ func dialConnection(
 	}
 	connection.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var acknowledgement protocol.ServerEvent
-	if err := connection.ReadJSON(&acknowledgement); err != nil || acknowledgement.Type != "registered" {
+	if err := connection.ReadJSON(&acknowledgement); err != nil || acknowledgement.Type != protocol.EventRegistered {
 		connection.Close()
 		return nil, fmt.Errorf("broker did not acknowledge registration")
 	}

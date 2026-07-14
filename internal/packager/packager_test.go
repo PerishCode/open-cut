@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/workspace"
+	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 func TestRemoveExternalDeploySelfLink(t *testing.T) {
@@ -47,7 +48,7 @@ func TestLocateLinuxPackSelectsSluggedProductExecutable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	packRoot, entry, err := locateElectronPack(output, "Open Cut", target.Target{Platform: target.Linux, Arch: target.X64})
+	packRoot, entry, err := lifecycle.LocateElectronPack(output, "Open Cut", target.Target{Platform: target.Linux, Arch: target.X64})
 	if err != nil {
 		t.Fatal(err)
 	}

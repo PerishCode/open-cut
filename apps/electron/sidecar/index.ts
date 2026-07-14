@@ -1,4 +1,4 @@
-import { SidecarConnection, type SidecarStatus } from "@open-cut/sidecar-client";
+import { SidecarConnection, controlCommand, type SessionStatus } from "@open-cut/sidecar-client";
 import { app } from "electron";
 import { startElectronApp, type ElectronApp } from "../src/main/app.js";
 import { registerOcWebProtocol, type OcWebProtocol } from "../src/main/oc-protocol-electron.js";
@@ -30,7 +30,7 @@ function stop(code = 0, requestCellShutdown = false): Promise<void> {
   return stopping;
 }
 
-async function reconcileWeb(web: SidecarStatus | undefined): Promise<void> {
+async function reconcileWeb(web: SessionStatus | undefined): Promise<void> {
   if (stopping) return;
   const endpoint = web?.ready ? web.endpoints?.find((candidate) => candidate.name === "http")?.url : undefined;
   if (!web?.ready || !endpoint) {
@@ -61,8 +61,8 @@ async function main(): Promise<void> {
   sidecar = await SidecarConnection.connect({
     app: "electron",
     onCommand: async (command) => {
-      if (command === "show") electron?.show();
-      if (command === "shutdown") await stop();
+      if (command === controlCommand.show) electron?.show();
+      if (command === controlCommand.shutdown) await stop();
     },
   });
 

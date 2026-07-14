@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 )
 
 const (
@@ -89,13 +87,6 @@ func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {
 		return Topology{}, fmt.Errorf("no app sidecar entries discovered")
 	}
 	return Topology{Schema: TopologySchema, Sidecars: sidecars}, nil
-}
-
-func WriteTopology(path string, topology Topology) error {
-	if topology.Schema != TopologySchema || len(topology.Sidecars) == 0 {
-		return fmt.Errorf("invalid payload topology")
-	}
-	return atomicfile.WriteJSON(path, topology, 0o600)
 }
 
 func LoadPackage(repositoryRoot, app string) (Package, error) {

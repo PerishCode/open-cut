@@ -1,4 +1,4 @@
-import { SidecarConnection } from "@open-cut/sidecar-client";
+import { SidecarConnection, controlCommand } from "@open-cut/sidecar-client";
 import { startWebServer, type WebServer } from "./server.js";
 
 let web: WebServer | undefined;
@@ -16,10 +16,10 @@ function stop(code = 0): Promise<void> {
 sidecar = await SidecarConnection.connect({
   app: "web",
   onCommand: async (command) => {
-    if (command === "shutdown") await stop();
+    if (command === controlCommand.shutdown) await stop();
   },
 });
-web = await startWebServer(process.env.OC_SIDECAR_MODE ?? "runtime");
+web = await startWebServer(sidecar.mode);
 sidecar.publishEndpoint("http", web.url);
 sidecar.ready();
 

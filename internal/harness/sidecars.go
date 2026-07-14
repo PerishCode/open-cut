@@ -2,27 +2,26 @@ package harness
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
 type childProcess struct {
-	app    string
-	cmd    *exec.Cmd
-	log    *os.File
-	exited chan error
+	app     string
+	process *lifecycle.Process
+	log     *os.File
+	exited  chan error
 }
 
 func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
@@ -55,10 +54,6 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 	}
 	defer cellBroker.Close()
 
-	descriptorJSON, err := json.Marshal(cellBroker.Descriptor())
-	if !check("encode-control-descriptor", err) {
-		return finish(report, started)
-	}
 	logRoot := filepath.Join(workspace, "reports", "logs")
 	if !check("create-log-root", os.MkdirAll(logRoot, 0o700)) {
 		return finish(report, started)
@@ -66,9 +61,7 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 	children := make([]*childProcess, 0, 2)
 	defer func() {
 		for _, child := range children {
-			if child.cmd.Process != nil {
-				_ = child.cmd.Process.Kill()
-			}
+			_ = child.process.Kill()
 			child.log.Close()
 		}
 	}()
@@ -76,6 +69,13 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 	for _, app := range []string{"api", "web"} {
 		token, tokenErr := cellBroker.MintSidecarToken(app, time.Minute)
 		if !check("mint-"+app+"-capability", tokenErr) {
+			return finish(report, started)
+		}
+		launchEnvironment, launchErr := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
+			Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
+			Namespace: identity.Namespace, Mode: string(lifecycle.ProfileHarness), Source: "oc-control",
+		})
+		if !check("encode-"+app+"-launch-envelope", launchErr) {
 			return finish(report, started)
 		}
 		entry := filepath.Join(repositoryRoot, "apps", app, "dist", "sidecar", "index.js")
@@ -86,24 +86,18 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		if !check("open-"+app+"-log", logErr) {
 			return finish(report, started)
 		}
-		command := exec.CommandContext(ctx, "node", entry)
-		command.Dir = repositoryRoot
-		command.Stdout, command.Stderr = logFile, logFile
-		command.Env = append(os.Environ(),
-			"OC_SIDECAR_CONTROL="+string(descriptorJSON),
-			"OC_SIDECAR_TOKEN="+token,
-			"OC_SIDECAR_CHANNEL="+identity.Channel,
-			"OC_SIDECAR_NAMESPACE="+identity.Namespace,
-			"OC_SIDECAR_MODE=harness",
-			"OC_SIDECAR_SOURCE=oc-control",
-		)
-		if !check("start-"+app+"-entry", command.Start()) {
+		process, startErr := lifecycle.Start(ctx, lifecycle.ProcessSpec{
+			Executable: "node", Args: []string{entry}, Directory: repositoryRoot,
+			Stdout: logFile, Stderr: logFile, Profile: lifecycle.ProfileHarness,
+			Env: launchEnvironment,
+		})
+		if !check("start-"+app+"-entry", startErr) {
 			logFile.Close()
 			return finish(report, started)
 		}
-		child := &childProcess{app: app, cmd: command, log: logFile, exited: make(chan error, 1)}
+		child := &childProcess{app: app, process: process, log: logFile, exited: make(chan error, 1)}
 		children = append(children, child)
-		go func() { child.exited <- child.cmd.Wait() }()
+		go func() { child.exited <- child.process.Wait() }()
 	}
 
 	for _, child := range children {
@@ -123,7 +117,7 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		return finish(report, started)
 	}
 	check("two-independent-sidecars", validateSidecarStatus(status))
-	response, err := owner.Control(ctx, "shutdown")
+	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)
 	if !check("broadcast-shutdown", err) {
 		return finish(report, started)
 	}
@@ -137,7 +131,6 @@ func RunSidecars(ctx context.Context, workspace, repositoryRoot string) Report {
 		select {
 		case exitErr := <-child.exited:
 			check(child.app+"-clean-exit", exitErr)
-			child.cmd.Process = nil
 		case <-time.After(5 * time.Second):
 			check(child.app+"-clean-exit", errors.New("sidecar did not exit after shutdown"))
 		}

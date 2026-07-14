@@ -5,27 +5,22 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
+
+	"github.com/PerishCode/open-cut/lifecycle"
 )
 
-func DefaultReceiptPath() (string, error) {
+func defaultReceiptPath() (string, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	directory := filepath.Dir(executable)
-	if runtime.GOOS == "darwin" {
-		return filepath.Clean(filepath.Join(directory, "..", "Resources", "install-receipt.json")), nil
-	}
-	return filepath.Join(directory, "install-receipt.json"), nil
+	return lifecycle.DefaultReceiptPath(executable), nil
 }
 
 func RunHost(ctx context.Context, receiptPath string, stdout, stderr io.Writer) error {
 	if receiptPath == "" {
 		var err error
-		receiptPath, err = DefaultReceiptPath()
+		receiptPath, err = defaultReceiptPath()
 		if err != nil {
 			return err
 		}
@@ -34,10 +29,9 @@ func RunHost(ctx context.Context, receiptPath string, stdout, stderr io.Writer) 
 	if err != nil {
 		return fmt.Errorf("load install receipt: %w", err)
 	}
-	command := exec.CommandContext(ctx, receipt.LauncherPath, "--bootstrap", receipt.BootstrapPath)
-	command.Stdout, command.Stderr = stdout, stderr
-	command.Env = os.Environ()
-	if err := command.Run(); err != nil {
+	if err := lifecycle.Run(ctx, lifecycle.BootstrapProcess(receipt.LauncherPath, receipt.BootstrapPath, lifecycle.ProcessSpec{
+		Stdout: stdout, Stderr: stderr, Env: os.Environ(), Profile: lifecycle.ProfileProduction,
+	})); err != nil {
 		return fmt.Errorf("bootstrap launcher exited: %w", err)
 	}
 	return nil

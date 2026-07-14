@@ -1,9 +1,9 @@
 //go:build !windows
 
-package packager
+package filesystem
 
 import "path/filepath"
 
-func canonicalPath(name string) (string, error) {
+func Canonical(name string) (string, error) {
 	return filepath.EvalSymlinks(name)
 }

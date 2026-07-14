@@ -16,11 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/sidecar/auth"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/gofrs/flock"
 	"github.com/gorilla/websocket"
 )
@@ -143,13 +143,13 @@ func Start(options Options) (*Broker, error) {
 		closed:           make(chan struct{}),
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/health", broker.handleHealth)
-	mux.HandleFunc("GET /v1/status", broker.handleStatus)
-	mux.HandleFunc("POST /v1/control", broker.handleControl)
-	mux.HandleFunc("POST /v1/capabilities/sidecar", broker.handleDelegateSidecar)
-	mux.HandleFunc("POST /v1/capabilities/renew", broker.handleRenewCapability)
-	mux.HandleFunc("POST /v1/update/transition", broker.handleUpdateTransition)
-	mux.HandleFunc("GET /v1/sessions/register", broker.handleRegister)
+	mux.HandleFunc(protocol.PatternHealth, broker.handleHealth)
+	mux.HandleFunc(protocol.PatternStatus, broker.handleStatus)
+	mux.HandleFunc(protocol.PatternBroadcastControl, broker.handleControl)
+	mux.HandleFunc(protocol.PatternDelegateSidecarCapability, broker.handleDelegateSidecar)
+	mux.HandleFunc(protocol.PatternRenewCapability, broker.handleRenewCapability)
+	mux.HandleFunc(protocol.PatternPrepareLatestUpdate, broker.handleUpdateTransition)
+	mux.HandleFunc(protocol.PatternRegisterSession, broker.handleRegister)
 	broker.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		if err := broker.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -284,11 +284,11 @@ func (broker *Broker) handleControl(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	var control protocol.ControlRequest
-	if err := json.NewDecoder(request.Body).Decode(&control); err != nil || (control.Command != "show" && control.Command != "shutdown") {
+	if err := json.NewDecoder(request.Body).Decode(&control); err != nil || (control.Command != protocol.ControlCommandShow && control.Command != protocol.ControlCommandShutdown) {
 		writeError(writer, http.StatusBadRequest, "command must be show or shutdown")
 		return
 	}
-	accepted := broker.broadcast(protocol.ServerEvent{Type: "command", Command: control.Command})
+	accepted := broker.broadcast(protocol.ServerEvent{Type: protocol.EventCommand, Command: control.Command})
 	writeJSON(writer, http.StatusAccepted, protocol.ControlResponse{Accepted: accepted})
 }
 
@@ -392,7 +392,7 @@ func (broker *Broker) handleUpdateTransition(writer http.ResponseWriter, request
 		return
 	}
 	var transition protocol.UpdateTransitionRequest
-	if err := json.NewDecoder(request.Body).Decode(&transition); err != nil || transition.Action != "prepare-latest" {
+	if err := json.NewDecoder(request.Body).Decode(&transition); err != nil || transition.Action != protocol.UpdateActionPrepareLatest {
 		writeError(writer, http.StatusBadRequest, "action must be prepare-latest")
 		return
 	}
@@ -447,7 +447,7 @@ func (broker *Broker) handleRegister(writer http.ResponseWriter, request *http.R
 	case broker.registered <- claims.Subject:
 	default:
 	}
-	err = registered.send(protocol.ServerEvent{Type: "registered"})
+	err = registered.send(protocol.ServerEvent{Type: protocol.EventRegistered})
 	if err == nil {
 		broker.mu.Lock()
 		registered.subscribed = true
@@ -476,9 +476,9 @@ func (broker *Broker) readSession(subject string, registered *session) error {
 		changed := false
 		broker.mu.Lock()
 		switch event.Type {
-		case "heartbeat":
+		case protocol.EventHeartbeat:
 			registered.status.LastHeartbeat = now
-		case "endpoint":
+		case protocol.EventEndpoint:
 			if event.Name == "" || event.URL == "" {
 				broker.mu.Unlock()
 				return fmt.Errorf("invalid endpoint event")
@@ -488,11 +488,7 @@ func (broker *Broker) readSession(subject string, registered *session) error {
 				registered.status.Endpoints,
 				protocol.Endpoint{Name: event.Name, URL: event.URL},
 			)
-		case "ready":
-			registered.status.LastHeartbeat = now
-			changed = !registered.status.Ready
-			registered.status.Ready = true
-		case "state":
+		case protocol.EventState:
 			if event.Ready == nil {
 				broker.mu.Unlock()
 				return fmt.Errorf("state event requires ready")
@@ -504,7 +500,7 @@ func (broker *Broker) readSession(subject string, registered *session) error {
 				registered.status.Endpoints = nil
 				changed = true
 			}
-		case "exiting":
+		case protocol.EventExiting:
 			broker.mu.Unlock()
 			return nil
 		default:
@@ -530,7 +526,7 @@ func (broker *Broker) readSession(subject string, registered *session) error {
 
 func (broker *Broker) validRegistration(claims auth.Claims, event protocol.ClientEvent) bool {
 	appMatches := event.App == claims.Subject || claims.Role == protocol.RoleRuntime
-	return event.Type == "register" && event.App != "" && event.InstanceID != "" && appMatches && event.Mode != "" && event.Source != "" &&
+	return event.Type == protocol.EventRegister && event.App != "" && event.InstanceID != "" && appMatches && event.Mode != "" && event.Source != "" &&
 		event.Channel == broker.identity.Channel && event.Namespace == broker.identity.Namespace &&
 		event.SessionID == broker.descriptor.SessionID && event.Generation == broker.descriptor.Generation
 }
@@ -624,7 +620,7 @@ func (broker *Broker) broadcastStatus() {
 		}
 	}
 	broker.mu.RUnlock()
-	event := protocol.ServerEvent{Type: "status", Status: &status}
+	event := protocol.ServerEvent{Type: protocol.EventStatus, Status: &status}
 	for _, registered := range sessions {
 		_ = registered.send(event)
 	}

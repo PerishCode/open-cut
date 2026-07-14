@@ -23,6 +23,10 @@ local policy to justify one.
 
 ## Sidecar entry contract
 
+- `protocol/sidecar/v1/main.tsp` is the sole sidecar wire-contract source.
+  `oc-control protocol generate` owns OpenAPI, JSON Schema, Go, and TypeScript
+  artifacts; never edit generated protocol files directly. CI uses
+  `oc-control protocol check` to reject drift.
 - `apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
   `apps/api/sidecar/index.ts` are the sole sidecar-mode source entries for those apps.
 - They compile to `dist/sidecar/index.js`. Development, packaged execution, and
@@ -56,6 +60,8 @@ harnesses:
 oc-control <subcommand>
 ```
 
+After changing the sidecar wire contract, run `oc-control protocol generate`.
+
 Do not add pnpm wrappers around `oc-control`, use `go run` as a documented hot
 path, or mutate `runtime.json` from scripts. CI may build a checkout-pinned
 binary instead of relying on a machine-global installation.
@@ -72,7 +78,7 @@ repository-guarded and deliberately excludes source, dependencies, and arbitrary
 - `oc-control pack` may invoke pinned pnpm build scripts, but archive creation,
   verification, and extraction stay implemented in Go.
 - Public targets are always `<mac|win|linux>-<arm64|x64>`. Keep Go and Electron
-  target spellings behind `internal/target`; never leak `darwin` or `amd64` into
+  target spellings behind `utils/target`; never leak `darwin` or `amd64` into
   artifact names, release metadata paths, or user-facing commands.
 - Final-user delivery checks use `oc-control harness install|run|uninstall` and
   the external install receipt. Do not bypass the installed platform host in CI.

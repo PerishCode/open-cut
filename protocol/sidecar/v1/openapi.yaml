@@ -2,167 +2,675 @@ openapi: 3.1.0
 info:
   title: Open Cut sidecar control plane
   version: 1.0.0
-servers:
-  - url: http://127.0.0.1:{port}
-    variables:
-      port:
-        default: "0"
+tags: []
 paths:
-  /v1/health:
-    get:
-      operationId: health
-      responses:
-        "200":
-          description: Broker identity without secret material
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
-  /v1/status:
-    get:
-      operationId: status
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Current revisioned cell and session status; clients reconcile this with WebSocket status events.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Status"
-        "401":
-          description: Invalid capability
-  /v1/sessions/register:
-    get:
-      operationId: registerSession
-      description: Upgrade to WebSocket; first frame must be a register event. The server then streams lifecycle commands and full revisioned status snapshots.
-      security:
-        - bearerAuth: []
-      responses:
-        "101":
-          description: WebSocket session established
-  /v1/control:
-    post:
-      operationId: broadcastControl
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [command]
-              properties:
-                command:
-                  type: string
-                  enum: [show, shutdown]
-      responses:
-        "202":
-          description: Command broadcast to registered lifecycle sessions
-  /v1/capabilities/sidecar:
-    post:
-      operationId: delegateSidecarCapability
-      description: Runtime-role only; mints one short-lived app-subject-bound child token.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [subject]
-              properties:
-                subject: { type: string, minLength: 1, maxLength: 64 }
-                ttlSeconds: { type: integer, minimum: 1, maximum: 3600 }
-                capabilities:
-                  type: array
-                  uniqueItems: true
-                  items: { type: string, enum: [update-transition] }
-      responses:
-        "201":
-          description: Delegated sidecar capability
-        "403":
-          description: Caller is not the runtime role
   /v1/capabilities/renew:
     post:
       operationId: renewCapability
-      description: Active runtime or sidecar session renews the same subject, role, delegation ancestry, and capability set without escalation.
-      security:
-        - bearerAuth: []
+      description: Renew an active runtime or sidecar capability without changing its authority.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenewResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                ttlSeconds: { type: integer, minimum: 1, maximum: 604800 }
+              $ref: '#/components/schemas/RenewRequest'
+  /v1/capabilities/sidecar:
+    post:
+      operationId: delegateSidecarCapability
+      description: Mint one short-lived app-subject-bound child capability; runtime role only.
+      parameters: []
       responses:
-        "201":
-          description: Same-scope renewed capability
-        "409":
-          description: Capability subject has no active registered session
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelegateResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelegateRequest'
+  /v1/control:
+    post:
+      operationId: broadcastControl
+      description: Broadcast a lifecycle command to registered sessions.
+      parameters: []
+      responses:
+        '202':
+          description: The request has been accepted for processing, but processing has not yet completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlRequest'
+  /v1/health:
+    get:
+      operationId: health
+      description: Return broker identity without secret material.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      security:
+        - {}
+  /v1/sessions/register:
+    get:
+      operationId: registerSession
+      description: Upgrade to WebSocket; the first frame must be a register event.
+      parameters: []
+      responses:
+        '101':
+          description: Informational
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/status:
+    get:
+      operationId: status
+      description: Return the current revisioned cell and session status.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/update/transition:
     post:
       operationId: prepareLatestUpdate
-      description: Capability-authorized request for B0 to verify, install, and prepare the latest release.
-      security:
-        - bearerAuth: []
+      description: Ask B0 to verify, install, and prepare the latest release.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateTransitionResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [action]
-              properties:
-                action: { type: string, const: prepare-latest }
-      responses:
-        "200":
-          description: Latest release is current or prepared for launcher handoff
-        "403":
-          description: Caller lacks the update-transition capability
-        "409":
-          description: Verification, installation, or state transition failed
+              $ref: '#/components/schemas/UpdateTransitionRequest'
+security:
+  - BearerAuth: []
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
   schemas:
+    Capability:
+      type: string
+      enum:
+        - observe
+        - runtime-ready
+        - lifecycle
+        - update-transition
+        - delegate-sidecar
+    ClientEvent:
+      anyOf:
+        - $ref: '#/components/schemas/RegisterEvent'
+        - $ref: '#/components/schemas/HeartbeatEvent'
+        - $ref: '#/components/schemas/EndpointEvent'
+        - $ref: '#/components/schemas/StateEvent'
+        - $ref: '#/components/schemas/ExitingEvent'
+    CommandEvent:
+      type: object
+      required:
+        - type
+        - command
+      properties:
+        type:
+          type: string
+          enum:
+            - command
+        command:
+          $ref: '#/components/schemas/ControlCommand'
+    ControlCommand:
+      type: string
+      enum:
+        - show
+        - shutdown
+    ControlDescriptor:
+      type: object
+      required:
+        - schema
+        - protocol
+        - address
+        - pid
+        - sessionId
+        - generation
+        - startedAt
+      properties:
+        schema:
+          type: number
+          enum:
+            - 1
+        protocol:
+          type: string
+          enum:
+            - sidecar.v1
+        address:
+          type: string
+          minLength: 1
+        pid:
+          type: integer
+          format: int32
+        sessionId:
+          type: string
+          minLength: 1
+        generation:
+          type: integer
+          format: double-int
+          minimum: 0
+        startedAt:
+          type: string
+          format: date-time
+    ControlRequest:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          $ref: '#/components/schemas/ControlCommand'
+    ControlResponse:
+      type: object
+      required:
+        - accepted
+      properties:
+        accepted:
+          type: integer
+          format: int32
+          minimum: 0
+    DelegateRequest:
+      type: object
+      required:
+        - subject
+      properties:
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 64
+        ttlSeconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 3600
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+          uniqueItems: true
+    DelegateResponse:
+      type: object
+      required:
+        - subject
+        - token
+        - expiresAt
+      properties:
+        subject:
+          type: string
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    Endpoint:
+      type: object
+      required:
+        - name
+        - url
+      properties:
+        name:
+          type: string
+          minLength: 1
+        url:
+          type: string
+          format: uri
+    EndpointEvent:
+      type: object
+      required:
+        - type
+        - name
+        - url
+      properties:
+        type:
+          type: string
+          enum:
+            - endpoint
+        name:
+          type: string
+          minLength: 1
+        url:
+          type: string
+          format: uri
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    ExitingEvent:
+      type: object
+      required:
+        - type
+        - code
+      properties:
+        type:
+          type: string
+          enum:
+            - exiting
+        code:
+          type: integer
+          format: int32
     Health:
       type: object
-      required: [schema, protocol, sessionId, generation]
+      required:
+        - schema
+        - protocol
+        - sessionId
+        - generation
       properties:
-        schema: { type: integer, const: 1 }
-        protocol: { type: string }
-        sessionId: { type: string }
-        generation: { type: integer, minimum: 0 }
+        schema:
+          type: number
+          enum:
+            - 1
+        protocol:
+          type: string
+          enum:
+            - sidecar.v1
+        sessionId:
+          type: string
+          minLength: 1
+        generation:
+          type: integer
+          format: double-int
+          minimum: 0
+    HeartbeatEvent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - heartbeat
+    RegisterEvent:
+      type: object
+      required:
+        - type
+        - channel
+        - namespace
+        - sessionId
+        - generation
+        - app
+        - instanceId
+        - mode
+        - source
+      properties:
+        type:
+          type: string
+          enum:
+            - register
+        channel:
+          type: string
+          minLength: 1
+        namespace:
+          type: string
+          minLength: 1
+        sessionId:
+          type: string
+          minLength: 1
+        generation:
+          type: integer
+          format: double-int
+          minimum: 0
+        app:
+          type: string
+          minLength: 1
+        instanceId:
+          type: string
+          minLength: 1
+        mode:
+          type: string
+          minLength: 1
+        source:
+          type: string
+          minLength: 1
+    RegisteredEvent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - registered
+    RenewRequest:
+      type: object
+      properties:
+        ttlSeconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 604800
+    RenewResponse:
+      type: object
+      required:
+        - subject
+        - token
+        - expiresAt
+      properties:
+        subject:
+          type: string
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    Role:
+      type: string
+      enum:
+        - owner
+        - runtime
+        - sidecar
+        - observer
+    ServerEvent:
+      anyOf:
+        - $ref: '#/components/schemas/RegisteredEvent'
+        - $ref: '#/components/schemas/CommandEvent'
+        - $ref: '#/components/schemas/StatusEvent'
+    SessionStatus:
+      type: object
+      required:
+        - subject
+        - app
+        - instanceId
+        - mode
+        - source
+        - ready
+        - connectedAt
+        - lastHeartbeat
+      properties:
+        subject:
+          type: string
+          minLength: 1
+        app:
+          type: string
+          minLength: 1
+        instanceId:
+          type: string
+          minLength: 1
+        mode:
+          type: string
+          minLength: 1
+        source:
+          type: string
+          minLength: 1
+        ready:
+          type: boolean
+        connectedAt:
+          type: string
+          format: date-time
+        lastHeartbeat:
+          type: string
+          format: date-time
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Endpoint'
+    SidecarEvent:
+      anyOf:
+        - $ref: '#/components/schemas/ClientEvent'
+        - $ref: '#/components/schemas/ServerEvent'
+    SidecarLaunch:
+      type: object
+      required:
+        - control
+        - token
+        - channel
+        - namespace
+        - mode
+        - source
+      properties:
+        control:
+          allOf:
+            - $ref: '#/components/schemas/ControlDescriptor'
+          x-environment: OC_SIDECAR_CONTROL
+        token:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_TOKEN
+        channel:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_CHANNEL
+        namespace:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_NAMESPACE
+        mode:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_MODE
+        source:
+          type: string
+          minLength: 1
+          x-environment: OC_SIDECAR_SOURCE
+    StateEvent:
+      type: object
+      required:
+        - type
+        - ready
+      properties:
+        type:
+          type: string
+          enum:
+            - state
+        ready:
+          type: boolean
     Status:
       type: object
-      required: [schema, revision, channel, namespace, sessionId, generation, sessions]
+      required:
+        - schema
+        - revision
+        - channel
+        - namespace
+        - sessionId
+        - generation
+        - sessions
       properties:
-        schema: { type: integer, const: 1 }
-        revision: { type: integer, minimum: 0 }
-        channel: { type: string }
-        namespace: { type: string }
-        sessionId: { type: string }
-        generation: { type: integer, minimum: 0 }
+        schema:
+          type: number
+          enum:
+            - 1
+        revision:
+          type: integer
+          format: double-int
+          minimum: 0
+        channel:
+          type: string
+          minLength: 1
+        namespace:
+          type: string
+          minLength: 1
+        sessionId:
+          type: string
+          minLength: 1
+        generation:
+          type: integer
+          format: double-int
+          minimum: 0
         sessions:
           type: array
           items:
-            $ref: "#/components/schemas/Session"
-    Session:
+            $ref: '#/components/schemas/SessionStatus'
+    StatusEvent:
       type: object
-      required: [subject, app, instanceId, mode, source, ready, connectedAt, lastHeartbeat]
+      required:
+        - type
+        - status
       properties:
-        subject: { type: string }
-        app: { type: string }
-        instanceId: { type: string }
-        mode: { type: string }
-        source: { type: string }
-        ready: { type: boolean }
-        connectedAt: { type: string, format: date-time }
-        lastHeartbeat: { type: string, format: date-time }
+        type:
+          type: string
+          enum:
+            - status
+        status:
+          $ref: '#/components/schemas/Status'
+    UpdateAction:
+      type: string
+      enum:
+        - prepare-latest
+    UpdateStatus:
+      type: string
+      enum:
+        - current
+        - prepared
+    UpdateTransitionRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          $ref: '#/components/schemas/UpdateAction'
+    UpdateTransitionResponse:
+      type: object
+      required:
+        - status
+        - version
+        - restartRequired
+      properties:
+        status:
+          $ref: '#/components/schemas/UpdateStatus'
+        version:
+          type: string
+        restartRequired:
+          type: boolean
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: Bearer
+servers:
+  - url: http://127.0.0.1:{port}
+    description: Per-cell loopback broker
+    variables:
+      port:
+        default: '0'

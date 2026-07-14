@@ -2,11 +2,9 @@ package harness
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +16,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
+	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
@@ -80,8 +79,11 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("mint-runtime-capability", err) {
 		return finish(report, started)
 	}
-	descriptor, err := json.Marshal(cellBroker.Descriptor())
-	if !check("encode-control-descriptor", err) {
+	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
+		Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
+		Namespace: identity.Namespace, Mode: string(lifecycle.ProfileHarness), Source: "oc-control",
+	})
+	if !check("encode-sidecar-launch-envelope", err) {
 		return finish(report, started)
 	}
 	logs := filepath.Join(workspace, "reports", "logs")
@@ -94,26 +96,20 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		return finish(report, started)
 	}
 	defer logFile.Close()
-	command := exec.CommandContext(ctx, launcherEntry, "--role", "l1", "--manifest", manifestPath)
-	command.Dir, command.Stdout, command.Stderr = versionRoot, logFile, logFile
-	command.Env = append(os.Environ(),
-		"OC_DELIVERY_HEADLESS=1",
-		"OC_SIDECAR_CONTROL="+string(descriptor),
-		"OC_SIDECAR_TOKEN="+runtimeToken,
-		"OC_SIDECAR_CHANNEL="+identity.Channel,
-		"OC_SIDECAR_NAMESPACE="+identity.Namespace,
-		"OC_SIDECAR_MODE=harness",
-		"OC_SIDECAR_SOURCE=oc-control",
-	)
-	if !check("start-versioned-runtime-runner", command.Start()) {
+	command, startErr := lifecycle.Start(ctx, lifecycle.VersionedProcess(launcherEntry, manifestPath, lifecycle.ProcessSpec{
+		Directory: versionRoot,
+		Stdout:    logFile,
+		Stderr:    logFile,
+		Profile:   lifecycle.ProfileHarness,
+		Env:       append(launchEnvironment, "OC_DELIVERY_HEADLESS=1"),
+	}))
+	if !check("start-versioned-runtime-runner", startErr) {
 		return finish(report, started)
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- command.Wait() }()
 	defer func() {
-		if command.Process != nil {
-			_ = command.Process.Kill()
-		}
+		_ = command.Kill()
 	}()
 	for _, subject := range []string{"payload", "api", "electron", "web"} {
 		readyContext, cancel := context.WithTimeout(ctx, fullPackReadyTimeout)
@@ -123,7 +119,6 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		select {
 		case readyErr = <-ready:
 		case exitErr := <-exited:
-			command.Process = nil
 			readyErr = fmt.Errorf("runtime runner exited before %s READY: %v", subject, exitErr)
 		}
 		cancel()
@@ -145,13 +140,12 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("packaged-tree-status", err) || !check("four-peer-ready-sessions", validateFullPackStatus(status)) {
 		return finish(report, started)
 	}
-	response, err := owner.Control(ctx, "shutdown")
+	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)
 	if !check("broadcast-shutdown", err) || !check("shutdown-reached-runtime-tree", acceptedSessions(response, 4)) {
 		return finish(report, started)
 	}
 	select {
 	case exitErr := <-exited:
-		command.Process = nil
 		check("runtime-runner-clean-exit", exitErr)
 	case <-time.After(10 * time.Second):
 		check("runtime-runner-clean-exit", errors.New("runtime runner did not exit after shutdown"))

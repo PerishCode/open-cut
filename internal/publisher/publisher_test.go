@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PerishCode/open-cut/internal/atomicfile"
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
-	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/verifier"
+	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 func TestCreateIsIdempotentAndVerifiable(t *testing.T) {

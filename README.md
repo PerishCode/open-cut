@@ -15,6 +15,7 @@ Start with [AGENTS.md](./AGENTS.md) and the specifications under [`specs/`](./sp
 pnpm install
 go install ./cmd/oc-control
 oc-control doctor
+oc-control protocol check
 oc-control clean --scope temp
 oc-control dev
 ```
@@ -45,6 +46,9 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
 - Sidecar state is continuously reconciled over TCP. Revisioned WebSocket snapshots
   provide low-latency changes, status polling repairs gaps, and the runner restarts
   unexpectedly exited peers without changing ownership boundaries.
+- The sidecar wire contract is authored only in `protocol/sidecar/v1/main.tsp`.
+  `oc-control protocol generate` produces OpenAPI, JSON Schema, and the Go/TypeScript
+  bindings; `oc-control protocol check` rejects generated drift.
 - `pack` discovers every app sidecar from its unique source entry, deploys their
   production trees, generates a platform-resolved generic runtime topology,
   builds the Electron full pack, and archives it with the versioned launcher.
@@ -109,4 +113,5 @@ Run repository checks with:
 ```sh
 go test ./...
 pnpm typecheck
+oc-control protocol check
 ```
