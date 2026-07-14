@@ -21,28 +21,50 @@ import (
 
 type Result struct {
 	Schema      int             `json:"schema"`
-	Workspace   string          `json:"workspace"`
+	BaseDir     string          `json:"baseDir"`
 	ControlFile string          `json:"controlFile"`
 	Apps        []string        `json:"apps"`
 	Status      protocol.Status `json:"status"`
 }
 
-func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, stderr io.Writer, skipBuild bool, ready chan<- Result) error {
+func ResolveBaseDir(repositoryRoot, requested string) (string, error) {
+	repositoryRoot, err := filepath.Abs(repositoryRoot)
+	if err != nil {
+		return "", err
+	}
+	identity, _ := cell.New("dev", "default")
+	baseDir := requested
+	if baseDir == "" {
+		baseDir = filepath.Join(repositoryRoot, ".tmp", "oc-control", "dev", identity.Suffix())
+	} else {
+		baseDir, err = filepath.Abs(baseDir)
+		if err != nil {
+			return "", err
+		}
+	}
+	commandRoot := filepath.Dir(filepath.Dir(baseDir))
+	if filepath.Join(commandRoot, identity.Suffix()) != baseDir {
+		return "", fmt.Errorf("development base directory must end in %s", identity.Suffix())
+	}
+	return baseDir, nil
+}
+
+func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.Writer, skipBuild bool, ready chan<- Result) error {
 	repositoryRoot, err := filepath.Abs(repositoryRoot)
 	if err != nil {
 		return err
 	}
-	developmentRoot, err = filepath.Abs(developmentRoot)
+	baseDir, err = filepath.Abs(baseDir)
 	if err != nil {
 		return err
 	}
 	if !skipBuild {
-		pnpm, err := tool.ResolveRepository(repositoryRoot, "pnpm")
+		pnpm, err := tool.Resolve("pnpm")
 		if err != nil {
 			return err
 		}
 		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-			Executable: pnpm.Executable, Args: pnpm.Arguments("-r", "--if-present", "run", "build"), Directory: repositoryRoot,
+			Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
 			Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		}); err != nil {
 			return fmt.Errorf("build workspace: %w", err)
@@ -64,10 +86,14 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	if err != nil {
 		return err
 	}
+	commandRoot := filepath.Dir(filepath.Dir(baseDir))
+	if filepath.Join(commandRoot, identity.Suffix()) != baseDir {
+		return fmt.Errorf("development base directory must end in %s", identity.Suffix())
+	}
 	paths, err := layout.Resolve(config.RootSet{
-		BootstrapRoot: filepath.Join(developmentRoot, "bootstrap"), StoreRoot: filepath.Join(developmentRoot, "store"),
-		CacheRoot: filepath.Join(developmentRoot, "cache"), RuntimeRoot: filepath.Join(developmentRoot, "runtime"),
-		LogRoot: filepath.Join(developmentRoot, "logs"),
+		BootstrapRoot: filepath.Join(commandRoot, "bootstrap"), StoreRoot: filepath.Join(commandRoot, "store"),
+		CacheRoot: filepath.Join(commandRoot, "cache"), RuntimeRoot: filepath.Join(commandRoot, "runtime"),
+		LogRoot: filepath.Join(commandRoot, "logs"),
 	}, identity)
 	if err != nil {
 		return err
@@ -86,7 +112,7 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	go func() {
 		done <- runtimehost.Run(ctx, runtimehost.Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
-			Channel: identity.Channel, Namespace: identity.Namespace, App: "runtime",
+			Channel: identity.Channel, Namespace: identity.Namespace, DataDir: baseDir, App: "runtime",
 			Mode: protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
 			Plan: plan, Stdout: stdout, Stderr: stderr,
 		}, runtimeReady)
@@ -94,7 +120,7 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 	select {
 	case runtimeResult := <-runtimeReady:
 		ready <- Result{
-			Schema: 1, Workspace: developmentRoot, ControlFile: paths.ControlFile,
+			Schema: 1, BaseDir: baseDir, ControlFile: paths.ControlFile,
 			Apps: runtimeResult.Apps, Status: runtimeResult.Status,
 		}
 		return <-done
@@ -106,7 +132,7 @@ func Run(ctx context.Context, repositoryRoot, developmentRoot string, stdout, st
 // ResolvePlan adapts the language-neutral app manifests into host commands for
 // checkout execution. Development and harness paths share this one resolver.
 func ResolvePlan(repositoryRoot string, config workspace.Config, topology workspace.Topology) (runtimetopology.Plan, error) {
-	var node *tool.Command
+	var node string
 	var electron string
 	plan := runtimetopology.Plan{Processes: make([]runtimetopology.ResolvedProcess, 0, len(topology.Sidecars))}
 	for _, sidecar := range topology.Sidecars {
@@ -128,15 +154,14 @@ func ResolvePlan(repositoryRoot string, config workspace.Config, topology worksp
 			process.UnsetEnv = []string{"ELECTRON_RUN_AS_NODE"}
 			process.Sandbox = lifecycle.SandboxChromium
 		case workspace.SidecarCommandNode:
-			if node == nil {
-				resolved, err := tool.ResolveRepository(repositoryRoot, "node")
+			if node == "" {
+				resolved, err := tool.Resolve("node")
 				if err != nil {
 					return runtimetopology.Plan{}, fmt.Errorf("resolve Node runtime: %w", err)
 				}
-				node = &resolved
+				node = resolved
 			}
-			process.Command = node.Executable
-			process.Args = node.Arguments(sidecar.Args...)
+			process.Command = node
 		default:
 			process.Command = filepath.Join(appRoot, filepath.FromSlash(sidecar.Command))
 		}

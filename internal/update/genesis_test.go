@@ -62,7 +62,7 @@ func TestBadSignatureNeverDownloadsBundle(t *testing.T) {
 	}
 	root := t.TempDir()
 	bootstrap := config.Bootstrap{
-		Schema: 1, Channel: "beta", Namespace: "test",
+		Schema: 1, Channel: "beta", Namespace: "test", DataDir: filepath.Join(root, "data", "beta", "test"),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),
@@ -119,6 +119,7 @@ func TestSignedOlderReleaseNeverDownloadsBundle(t *testing.T) {
 	root := t.TempDir()
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: "beta", Namespace: "rollback", ProtocolFloor: "bootstrap.v1",
+		DataDir: filepath.Join(root, "data", "beta", "rollback"),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),

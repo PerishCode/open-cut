@@ -10,21 +10,22 @@ import (
 )
 
 type CellPaths struct {
-	BootstrapRoot  string
-	Store          string
-	Cache          string
-	Runtime        string
-	Log            string
-	CellFile       string
-	StateFile      string
-	UpdateJournal  string
-	TrustRootFile  string
-	Versions       string
-	Incoming       string
-	Downloads      string
-	BrokerLock     string
-	ControlFile    string
-	OwnerTokenFile string
+	BootstrapRoot     string
+	Store             string
+	Cache             string
+	Runtime           string
+	Log               string
+	CellFile          string
+	StateFile         string
+	UpdateJournal     string
+	TrustRootFile     string
+	Versions          string
+	Incoming          string
+	Downloads         string
+	BrokerLock        string
+	ControlFile       string
+	OwnerTokenFile    string
+	ObserverTokenFile string
 }
 
 func Resolve(roots config.RootSet, identity cell.Identity) (CellPaths, error) {
@@ -42,16 +43,17 @@ func Resolve(roots config.RootSet, identity cell.Identity) (CellPaths, error) {
 	return CellPaths{
 		BootstrapRoot: roots.BootstrapRoot,
 		Store:         store, Cache: cache, Runtime: runtimeRoot, Log: logRoot,
-		CellFile:       filepath.Join(store, "cell.json"),
-		StateFile:      filepath.Join(store, "state", "runtime.json"),
-		UpdateJournal:  filepath.Join(store, "state", "update.json"),
-		TrustRootFile:  filepath.Join(store, "trust", "root.json"),
-		Versions:       filepath.Join(store, "versions"),
-		Incoming:       filepath.Join(store, "incoming"),
-		Downloads:      filepath.Join(cache, "downloads"),
-		BrokerLock:     filepath.Join(runtimeRoot, "broker.lock"),
-		ControlFile:    filepath.Join(runtimeRoot, "control.json"),
-		OwnerTokenFile: filepath.Join(runtimeRoot, "owner.token"),
+		CellFile:          filepath.Join(store, "cell.json"),
+		StateFile:         filepath.Join(store, "state", "runtime.json"),
+		UpdateJournal:     filepath.Join(store, "state", "update.json"),
+		TrustRootFile:     filepath.Join(store, "trust", "root.json"),
+		Versions:          filepath.Join(store, "versions"),
+		Incoming:          filepath.Join(store, "incoming"),
+		Downloads:         filepath.Join(cache, "downloads"),
+		BrokerLock:        filepath.Join(runtimeRoot, "broker.lock"),
+		ControlFile:       filepath.Join(runtimeRoot, "control.json"),
+		OwnerTokenFile:    filepath.Join(runtimeRoot, "owner.token"),
+		ObserverTokenFile: filepath.Join(runtimeRoot, "observer.token"),
 	}, nil
 }
 

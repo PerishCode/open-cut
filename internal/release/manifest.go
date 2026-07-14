@@ -14,6 +14,8 @@ import (
 
 const ManifestSchema = 1
 
+const CLIBaseName = "open-cut"
+
 type Entry struct {
 	Entry string `json:"entry"`
 }
@@ -102,6 +104,21 @@ func ResolveEntry(versionRoot, entry, kind string) (string, error) {
 		return "", fmt.Errorf("%s entry is not a regular file", kind)
 	}
 	return resolved, nil
+}
+
+func CLIEntry(buildTarget target.Target) (string, error) {
+	if err := buildTarget.Validate(); err != nil {
+		return "", err
+	}
+	return path.Join("payload", "bin", buildTarget.ExecutableName(CLIBaseName)), nil
+}
+
+func ResolveCLI(versionRoot string, manifest Manifest) (string, error) {
+	entry, err := CLIEntry(target.Target{Platform: manifest.Platform, Arch: manifest.Arch})
+	if err != nil {
+		return "", err
+	}
+	return ResolveEntry(versionRoot, entry, "payload")
 }
 
 func validateEntry(entry, kind string) (string, error) {

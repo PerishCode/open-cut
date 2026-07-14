@@ -159,6 +159,9 @@ func (installer Installer) installFromOrigin(ctx context.Context, client *http.C
 	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
 		return "", err
 	}
+	if _, err := release.ResolveCLI(tree, manifest); err != nil {
+		return "", err
+	}
 	destination := filepath.Join(paths.Versions, descriptor.Version)
 	if _, err := os.Stat(destination); errors.Is(err, os.ErrNotExist) {
 		if err := os.Rename(tree, destination); err != nil {

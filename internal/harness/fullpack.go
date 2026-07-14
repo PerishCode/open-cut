@@ -57,6 +57,10 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("load-generated-runtime-topology", err) || !check("topology-has-peer-apps", requireApps(runtimetopology.Apps(plan), "api", "electron", "web")) {
 		return finish(report, started)
 	}
+	_, err = release.ResolveCLI(versionRoot, manifest)
+	if !check("resolve-versioned-product-cli", err) {
+		return finish(report, started)
+	}
 
 	identity, err := cell.New(manifest.Channel, "full-pack")
 	if !check("cell-identity", err) {
@@ -75,13 +79,14 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		return finish(report, started)
 	}
 	defer cellBroker.Close()
+	dataDir := filepath.Join(workspace, identity.Suffix())
 	runtimeToken, err := cellBroker.MintRuntimeToken("payload", time.Minute)
 	if !check("mint-runtime-capability", err) {
 		return finish(report, started)
 	}
 	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
 		App: "runtime", Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
-		Namespace: identity.Namespace, Mode: protocol.LifecycleModeHarness,
+		Namespace: identity.Namespace, DataDir: dataDir, Mode: protocol.LifecycleModeHarness,
 		Presentation: protocol.PresentationHeadless, Source: "oc-control",
 	})
 	if !check("encode-sidecar-launch-envelope", err) {
@@ -134,12 +139,27 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 			return finish(report, started)
 		}
 	}
+	if !check("packaged-api-sqlite-at-ready", func() error {
+		info, err := os.Stat(filepath.Join(dataDir, "api", "database", "open-cut.db"))
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("packaged API database is not a regular file")
+		}
+		return nil
+	}()) {
+		return finish(report, started)
+	}
 	owner, err := client.Load(paths.ControlFile, paths.OwnerTokenFile)
 	if !check("owner-rendezvous", err) {
 		return finish(report, started)
 	}
 	status, err := owner.Status(ctx)
 	if !check("packaged-tree-status", err) || !check("four-peer-ready-sessions", validateFullPackStatus(status)) {
+		return finish(report, started)
+	}
+	if !check("packaged-api-sqlite-repository-at-ready", validateAPIRepository(ctx, status)) {
 		return finish(report, started)
 	}
 	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)

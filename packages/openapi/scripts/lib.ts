@@ -39,9 +39,9 @@ export async function renderArtifacts(destination: string, baseUrl: string): Pro
   const options: Options = {
     input: { target: specPath },
     output: {
-      target: generatedRoot,
+      target: join(generatedRoot, "index.ts"),
       schemas: join(generatedRoot, "model"),
-      mode: "tags-split",
+      mode: "single",
       client: "fetch",
       baseUrl,
       clean: true,

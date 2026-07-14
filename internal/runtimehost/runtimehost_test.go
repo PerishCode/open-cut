@@ -57,10 +57,14 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	counter := filepath.Join(base, "starts.txt")
+	dataDir := filepath.Join(base, "data", identity.Suffix())
 	plan := runtimetopology.Plan{Processes: []runtimetopology.ResolvedProcess{{
 		App: "recovering-peer", Command: executable,
 		Args: []string{"-test.run=^TestRuntimeHostHelperProcess$"}, WorkingDirectory: base,
-		Env: map[string]string{"OC_RUNTIMEHOST_HELPER": "1", "OC_RUNTIMEHOST_COUNTER": counter},
+		Env: map[string]string{
+			"OC_RUNTIMEHOST_HELPER": "1", "OC_RUNTIMEHOST_COUNTER": counter,
+			"OC_RUNTIMEHOST_EXPECTED_DATA_DIR": dataDir, protocol.SidecarEnvDataDir: filepath.Join(base, "escape"),
+		},
 	}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -69,7 +73,8 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 	go func() {
 		done <- Run(ctx, Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
-			Channel: identity.Channel, Namespace: identity.Namespace, App: "runtime",
+			Channel: identity.Channel, Namespace: identity.Namespace,
+			DataDir: dataDir, App: "runtime",
 			Mode: protocol.LifecycleModeHarness, Presentation: protocol.PresentationHeadless, Source: "harness",
 			Plan: plan, ReadyTimeout: 5 * time.Second,
 		}, ready)
@@ -112,6 +117,9 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 func TestRuntimeHostHelperProcess(t *testing.T) {
 	if os.Getenv("OC_RUNTIMEHOST_HELPER") != "1" {
 		return
+	}
+	if os.Getenv(protocol.SidecarEnvDataDir) != os.Getenv("OC_RUNTIMEHOST_EXPECTED_DATA_DIR") {
+		os.Exit(89)
 	}
 	counter := os.Getenv("OC_RUNTIMEHOST_COUNTER")
 	starts := 0

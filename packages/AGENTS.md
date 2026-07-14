@@ -1,13 +1,17 @@
 # Package boundaries
 
 - Packages are reusable TypeScript libraries and may not import app source.
-- `contracts` contains pure product peer identifiers and has no sidecar or HTTP
-  schema dependency.
+- `contracts` is the sole Web-facing product communication boundary. It owns
+  stable read/write types and ports, runtime DTO validation, EventBus/SSE
+  reconciliation, and React Provider/hooks. It may consume generated operations
+  from `openapi`, but it never exposes Orval DTOs as its public contract.
+  Sidecar-only peer identifiers use the narrow `contracts/runtime-peer` subpath
+  so native sidecars do not load the React/OpenAPI application graph.
 - `components` is the sole atomic component and style owner. Its public props
   never expose `className`, `style`, or raw DOM attribute inheritance.
-- `openapi` is the sole product OpenAPI/Orval generation layer. Its committed
-  generated code is updated only with an explicitly supplied base URL; Web may
-  consume the package but may not recreate request DTOs or clients.
+- `openapi` is the sole product OpenAPI/Orval generation layer. Its package root
+  points directly at the single generated entry; do not add handwritten exports.
+  Only Contracts consumes it from application code.
 - `sidecar-protocol` contains the pure generated language binding and generic
   zero-dependency decoding runtime for `protocol/sidecar/v1`.
 - `sidecar-client` implements transport, reconnection, reconciliation, and

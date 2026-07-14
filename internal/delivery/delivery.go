@@ -16,6 +16,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/install"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/publisher"
+	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/verifier"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
@@ -44,6 +45,7 @@ type InstallResult struct {
 	Receipt     string          `json:"receipt"`
 	InstallRoot string          `json:"installRoot"`
 	Bootstrap   string          `json:"bootstrap"`
+	CLI         string          `json:"cli"`
 	HostPID     int             `json:"hostPid"`
 	Status      protocol.Status `json:"status"`
 }
@@ -101,7 +103,9 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 		return InstallResult{}, err
 	}
 	for _, build := range []struct{ output, source string }{
-		{installLayout.HostPath, "./cmd/platform-host"}, {installLayout.LauncherPath, "./cmd/launcher"},
+		{installLayout.HostPath, "./cmd/platform-host"},
+		{installLayout.LauncherPath, "./cmd/launcher"},
+		{installLayout.CLIPath, "./cmd/cli"},
 	} {
 		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 			Executable: goTool, Args: []string{"build", "-trimpath", "-o", build.output, build.source},
@@ -117,8 +121,13 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 		BootstrapRoot: filepath.Join(userRoot, "bootstrap"), StoreRoot: filepath.Join(userRoot, "store"),
 		CacheRoot: filepath.Join(userRoot, "cache"), RuntimeRoot: filepath.Join(userRoot, "runtime"), LogRoot: filepath.Join(userRoot, "logs"),
 	}
+	identity, _ := cell.New(options.Channel, options.Namespace)
+	dataDir, err := lifecycle.ResolveProductDataDir(filepath.Join(userRoot, "data"), "open-cut", options.Channel, options.Namespace)
+	if err != nil {
+		return InstallResult{}, err
+	}
 	bootstrap := config.Bootstrap{
-		Schema: 1, Channel: options.Channel, Namespace: options.Namespace, Roots: roots,
+		Schema: 1, Channel: options.Channel, Namespace: options.Namespace, DataDir: dataDir, Roots: roots,
 		UpdateOrigins: []string{options.OriginURL}, ProtocolFloor: "bootstrap.v1",
 		InitialTrustRoot: config.TrustConfig{Threshold: 1, Keys: []config.TrustKey{{ID: key.KeyID, PublicKey: key.PublicKey}}},
 	}
@@ -126,11 +135,16 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 	if err := atomicfile.WriteJSON(bootstrapPath, bootstrap, 0o600); err != nil {
 		return InstallResult{}, err
 	}
+	paths, err := layout.Resolve(roots, identity)
+	if err != nil {
+		return InstallResult{}, err
+	}
 	receiptPath := filepath.Join(options.Workspace, "receipts", "install-receipt.json")
 	receipt := install.Receipt{
 		Schema: install.ReceiptSchema, Target: options.Target, InstallRoot: installLayout.InstallRoot,
-		HostPath: installLayout.HostPath, LauncherPath: installLayout.LauncherPath, BootstrapPath: bootstrapPath,
-		ManagedRoots: []string{roots.BootstrapRoot, roots.StoreRoot, roots.CacheRoot, roots.RuntimeRoot, roots.LogRoot},
+		HostPath: installLayout.HostPath, LauncherPath: installLayout.LauncherPath,
+		CLIPath: installLayout.CLIPath, BootstrapPath: bootstrapPath,
+		ManagedRoots: []string{roots.BootstrapRoot, paths.Store, paths.Cache, paths.Runtime, paths.Log, dataDir},
 		Channel:      options.Channel, Namespace: options.Namespace,
 	}
 	for _, destination := range []string{installLayout.InternalReceiptPath, receiptPath} {
@@ -147,6 +161,17 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 	})
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("installed runtime %s did not become ready: %w", verified.Version, err)
+	}
+	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: installLayout.CLIPath,
+		Args:       []string{"status", "--receipt", receiptPath},
+		Directory:  installLayout.InstallRoot,
+		Env:        os.Environ(),
+		Stdout:     io.Discard,
+		Stderr:     options.Stderr,
+		Profile:    lifecycle.ProfileProduction,
+	}); err != nil {
+		return InstallResult{}, fmt.Errorf("installed product CLI could not inspect active cell: %w", err)
 	}
 	return result, nil
 }
@@ -174,9 +199,19 @@ func Run(ctx context.Context, options RunOptions) (InstallResult, error) {
 	}
 	if owner, loadErr := client.Load(paths.ControlFile, paths.OwnerTokenFile); loadErr == nil {
 		if status, statusErr := owner.Status(ctx); statusErr == nil {
+			if runtimeState, stateErr := state.Load(paths.StateFile, status.Channel); stateErr == nil && runtimeState.Active != "" {
+				return InstallResult{
+					Schema: 1, Receipt: options.Receipt, InstallRoot: receipt.InstallRoot,
+					Bootstrap: receipt.BootstrapPath, CLI: receipt.CLIPath, Status: status,
+				}, nil
+			}
+			status, waitErr := waitInstalledReady(ctx, paths, 2*time.Minute)
+			if waitErr != nil {
+				return InstallResult{}, waitErr
+			}
 			return InstallResult{
 				Schema: 1, Receipt: options.Receipt, InstallRoot: receipt.InstallRoot,
-				Bootstrap: receipt.BootstrapPath, Status: status,
+				Bootstrap: receipt.BootstrapPath, CLI: receipt.CLIPath, Status: status,
 			}, nil
 		}
 	}
@@ -208,7 +243,7 @@ func Run(ctx context.Context, options RunOptions) (InstallResult, error) {
 	}
 	return InstallResult{
 		Schema: 1, Receipt: options.Receipt, InstallRoot: receipt.InstallRoot,
-		Bootstrap: receipt.BootstrapPath, HostPID: process.PID(), Status: status,
+		Bootstrap: receipt.BootstrapPath, CLI: receipt.CLIPath, HostPID: process.PID(), Status: status,
 	}, nil
 }
 
@@ -226,7 +261,7 @@ func Inspect(receiptPath string) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	owner, err := client.Load(paths.ControlFile, paths.OwnerTokenFile)
+	owner, err := client.Load(paths.ControlFile, paths.ObserverTokenFile)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -236,7 +271,7 @@ func Inspect(receiptPath string) (InstallResult, error) {
 	}
 	return InstallResult{
 		Schema: 1, Receipt: receiptPath, InstallRoot: receipt.InstallRoot,
-		Bootstrap: receipt.BootstrapPath, HostPID: receipt.HostPID, Status: status,
+		Bootstrap: receipt.BootstrapPath, CLI: receipt.CLIPath, HostPID: receipt.HostPID, Status: status,
 	}, nil
 }
 
@@ -333,7 +368,10 @@ func waitInstalledReady(ctx context.Context, paths layout.CellPaths, timeout tim
 			if statusErr == nil {
 				for _, session := range status.Sessions {
 					if session.Subject == "payload" && session.Ready {
-						return status, nil
+						runtimeState, stateErr := state.Load(paths.StateFile, status.Channel)
+						if stateErr == nil && runtimeState.Active != "" {
+							return status, nil
+						}
 					}
 				}
 			}

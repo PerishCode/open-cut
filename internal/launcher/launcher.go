@@ -187,7 +187,7 @@ func runManagedRelease(
 	}
 	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
 		App: "runtime", Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
-		Namespace: identity.Namespace, Mode: protocol.LifecycleModePackaged,
+		Namespace: identity.Namespace, DataDir: bootstrap.DataDir, Mode: protocol.LifecycleModePackaged,
 		Presentation: sidecarPresentation(presentation), Source: "launcher",
 	})
 	if err != nil {
@@ -303,7 +303,7 @@ func RunL1(ctx context.Context, options L1Options) error {
 	}
 	return runtimehost.Run(ctx, runtimehost.Options{
 		Descriptor: launch.Control, Token: launch.Token,
-		Channel: launch.Channel, Namespace: launch.Namespace,
+		Channel: launch.Channel, Namespace: launch.Namespace, DataDir: launch.DataDir,
 		App: launch.App, Mode: launch.Mode, Presentation: launch.Presentation, Source: launch.Source,
 		Plan: plan, Stdout: options.Stdout, Stderr: options.Stderr,
 	}, nil)

@@ -90,6 +90,27 @@
   font-size: 13px;
 }
 
+.button {
+  align-self: flex-start;
+  padding: 11px 16px;
+  border: 1px solid rgb(181 255 88 / 45%);
+  background: rgb(181 255 88 / 10%);
+  color: #d8ffab;
+  cursor: pointer;
+  font:
+    600 13px / 1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
 .ready,
 .pending,
 .unavailable {

@@ -18,7 +18,7 @@ import (
 func TestCreateIsIdempotentAndVerifiable(t *testing.T) {
 	root := t.TempDir()
 	tree := filepath.Join(root, "tree")
-	for _, entry := range []string{"launcher/launcher", "payload/bin/runtime"} {
+	for _, entry := range []string{"launcher/launcher", "payload/bin/runtime", "payload/bin/open-cut"} {
 		path := filepath.Join(tree, filepath.FromSlash(entry))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

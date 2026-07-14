@@ -10,12 +10,13 @@ const (
 	SidecarEnvApp           = "OC_SIDECAR_APP"
 	SidecarEnvChannel       = "OC_SIDECAR_CHANNEL"
 	SidecarEnvControl       = "OC_SIDECAR_CONTROL"
+	SidecarEnvDataDir       = "OC_SIDECAR_DATA_DIR"
 	SidecarEnvMode          = "OC_SIDECAR_MODE"
 	SidecarEnvNamespace     = "OC_SIDECAR_NAMESPACE"
 	SidecarEnvPresentation  = "OC_SIDECAR_PRESENTATION"
 	SidecarEnvSource        = "OC_SIDECAR_SOURCE"
 	SidecarEnvToken         = "OC_SIDECAR_TOKEN"
-	SidecarEnvironmentCount = 8
+	SidecarEnvironmentCount = 9
 )
 
 const (
@@ -265,6 +266,7 @@ type SidecarLaunch struct {
 	App          string            `json:"app"`
 	Channel      string            `json:"channel"`
 	Control      ControlDescriptor `json:"control"`
+	DataDir      string            `json:"dataDir"`
 	Mode         LifecycleMode     `json:"mode"`
 	Namespace    string            `json:"namespace"`
 	Presentation Presentation      `json:"presentation"`

@@ -23,6 +23,7 @@ const validEnvironment = {
     sessionId: "session",
     startedAt: "2026-07-14T00:00:00Z",
   }),
+  [sidecarEnvironment.dataDir]: "/tmp/open-cut/beta/tests",
   [sidecarEnvironment.mode]: lifecycleMode.harness,
   [sidecarEnvironment.namespace]: "tests",
   [sidecarEnvironment.presentation]: presentation.headless,

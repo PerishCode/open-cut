@@ -80,6 +80,9 @@ model SidecarLaunch {
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_NAMESPACE")
   @minLength(1) `namespace`: string;
 
+  @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_DATA_DIR")
+  @minLength(1) dataDir: string;
+
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_MODE")
   mode: LifecycleMode;
 

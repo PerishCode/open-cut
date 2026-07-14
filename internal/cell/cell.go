@@ -34,7 +34,7 @@ func (i Identity) Validate() error {
 }
 
 func (i Identity) Suffix() string {
-	return filepath.Join("channels", i.Channel, "namespaces", i.Namespace)
+	return filepath.Join(i.Channel, i.Namespace)
 }
 
 func validateSegment(name, value string) error {

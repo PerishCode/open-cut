@@ -1,4 +1,4 @@
-import { runtimePeer } from "@open-cut/contracts";
+import { runtimePeer } from "@open-cut/contracts/runtime-peer";
 import { controlCommand, presentation, type SessionStatus, SidecarConnection } from "@open-cut/sidecar-client";
 import { app } from "electron";
 import { type ElectronApp, startElectronApp } from "../src/main/app.js";

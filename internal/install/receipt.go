@@ -18,6 +18,7 @@ type Receipt struct {
 	InstallRoot   string        `json:"installRoot"`
 	HostPath      string        `json:"hostPath"`
 	LauncherPath  string        `json:"launcherPath"`
+	CLIPath       string        `json:"cliPath"`
 	BootstrapPath string        `json:"bootstrapPath"`
 	ManagedRoots  []string      `json:"managedRoots"`
 	Channel       string        `json:"channel"`
@@ -56,7 +57,7 @@ func (receipt Receipt) Validate() error {
 	}
 	for name, value := range map[string]string{
 		"installRoot": receipt.InstallRoot, "hostPath": receipt.HostPath,
-		"launcherPath": receipt.LauncherPath, "bootstrapPath": receipt.BootstrapPath,
+		"launcherPath": receipt.LauncherPath, "cliPath": receipt.CLIPath, "bootstrapPath": receipt.BootstrapPath,
 	} {
 		if value == "" || !filepath.IsAbs(value) || filepath.Clean(value) != value {
 			return fmt.Errorf("%s must be a clean absolute path", name)

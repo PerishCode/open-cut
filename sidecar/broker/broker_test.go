@@ -70,6 +70,16 @@ func TestBrokerRegistrationReadyAndSingleInstance(t *testing.T) {
 	if len(status.Sessions) != 1 || !status.Sessions[0].Ready || status.Sessions[0].App != "web" {
 		t.Fatalf("unexpected status: %+v", status)
 	}
+	observer, err := client.Load(paths.ControlFile, paths.ObserverTokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := observer.Status(context.Background()); err != nil {
+		t.Fatalf("observer could not read status: %v", err)
+	}
+	if _, err := observer.Control(context.Background(), protocol.ControlCommandShutdown); err == nil {
+		t.Fatal("observer capability controlled lifecycle")
+	}
 }
 
 func TestBrokerStreamsReversibleRevisionedPeerState(t *testing.T) {

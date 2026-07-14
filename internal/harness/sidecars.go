@@ -2,8 +2,10 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -57,6 +59,7 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 		return finish(report, started)
 	}
 	defer cellBroker.Close()
+	dataDir := filepath.Join(workspaceRoot, identity.Suffix())
 
 	logRoot := filepath.Join(workspaceRoot, "reports", "logs")
 	if !check("create-log-root", os.MkdirAll(logRoot, 0o700)) {
@@ -94,7 +97,7 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 		}
 		launchEnvironment, launchErr := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
 			App: app, Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
-			Namespace: identity.Namespace, Mode: protocol.LifecycleModeHarness,
+			Namespace: identity.Namespace, DataDir: dataDir, Mode: protocol.LifecycleModeHarness,
 			Presentation: protocol.PresentationHeadless, Source: "oc-control",
 		})
 		if !check("encode-"+app+"-launch-envelope", launchErr) {
@@ -131,6 +134,18 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 			return finish(report, started)
 		}
 	}
+	if !check("api-sqlite-at-ready", func() error {
+		info, err := os.Stat(filepath.Join(dataDir, "api", "database", "open-cut.db"))
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("API database is not a regular file")
+		}
+		return nil
+	}()) {
+		return finish(report, started)
+	}
 	owner, err := client.Load(paths.ControlFile, paths.OwnerTokenFile)
 	if !check("owner-rendezvous", err) {
 		return finish(report, started)
@@ -140,6 +155,9 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 		return finish(report, started)
 	}
 	check("two-independent-sidecars", validateSidecarStatus(status))
+	if !check("api-sqlite-repository-at-ready", validateAPIRepository(ctx, status)) {
+		return finish(report, started)
+	}
 	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)
 	if !check("broadcast-shutdown", err) {
 		return finish(report, started)
@@ -197,6 +215,44 @@ func validateSidecarStatus(status protocol.Status) error {
 	}
 	if !seen["web"] || !seen["api"] {
 		return fmt.Errorf("status did not contain both web and api")
+	}
+	return nil
+}
+
+func validateAPIRepository(ctx context.Context, status protocol.Status) error {
+	var endpoint string
+	for _, session := range status.Sessions {
+		if session.App == "api" && len(session.Endpoints) == 1 && session.Endpoints[0].Name == "http" {
+			endpoint = session.Endpoints[0].URL
+			break
+		}
+	}
+	if endpoint == "" {
+		return fmt.Errorf("API endpoint is unavailable")
+	}
+	requestContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint+"/v1/projects", nil)
+	if err != nil {
+		return err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("API project snapshot returned %s", response.Status)
+	}
+	var snapshot struct {
+		Revision uint64            `json:"revision"`
+		Projects []json.RawMessage `json:"projects"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&snapshot); err != nil {
+		return err
+	}
+	if snapshot.Projects == nil {
+		return fmt.Errorf("API project snapshot omitted the projects collection at revision %d", snapshot.Revision)
 	}
 	return nil
 }

@@ -50,10 +50,12 @@ import "./forbidden.css";
 const view = <div className="bad" />;
 element.style.color = "red";
 document.createElement("style");
+fetch("/api");
+new EventSource("/api/events");
 const sheet = css` + "`body { color: red; }`" + `;
 `
 	violations := inspectWebSource("apps/web/src/components/example.tsx", lexTypeScript(source))
-	want := map[string]bool{"atomic-components": false, "style-boundary": false, "web-api-boundary": false}
+	want := map[string]bool{"atomic-components": false, "style-boundary": false, "web-contracts": false}
 	for _, violation := range violations {
 		if _, ok := want[violation.Rule]; ok {
 			want[violation.Rule] = true

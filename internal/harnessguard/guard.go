@@ -14,9 +14,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/PerishCode/open-cut/internal/buildinfo"
-	"github.com/PerishCode/open-cut/internal/sourcefingerprint"
 )
 
 const (
@@ -60,19 +57,6 @@ func Run(_ context.Context, repositoryRoot string) Result {
 	for _, marker := range []string{".git", "go.mod", "package.json", "pnpm-workspace.yaml"} {
 		if _, statErr := os.Stat(filepath.Join(root, marker)); statErr != nil {
 			result.Violations = append(result.Violations, Violation{Rule: "repository", Path: marker, Detail: "required repository marker is unavailable"})
-		}
-	}
-	if expected := buildinfo.DevelopmentSourceFingerprint; expected != "" {
-		actual, fingerprintErr := sourcefingerprint.Calculate(root)
-		if fingerprintErr != nil {
-			result.Violations = append(result.Violations, Violation{
-				Rule: "control-fingerprint", Path: ".oc-control/bin/oc-control", Detail: fingerprintErr.Error(),
-			})
-		} else if actual != expected {
-			result.Violations = append(result.Violations, Violation{
-				Rule: "control-fingerprint", Path: ".oc-control/bin/oc-control",
-				Detail: "checkout control sources changed; run: go install ./cmd/oc-control && oc-control bootstrap",
-			})
 		}
 	}
 	result.Violations = append(result.Violations, inspectTree(root)...)
@@ -161,7 +145,7 @@ func inspectLayout(root string) []Violation {
 			})
 		}
 	}
-	for name := range allowedDirectories {
+	for _, name := range []string{"components", "views"} {
 		if info, statErr := os.Stat(filepath.Join(webSource, name)); statErr != nil || !info.IsDir() {
 			violations = append(violations, Violation{Rule: "web-layout", Path: "apps/web/src/" + name, Detail: "required Web directory is unavailable"})
 		}
@@ -258,7 +242,7 @@ func finish(result Result, started time.Time) Result {
 
 func ignoredDirectory(name string) bool {
 	switch name {
-	case ".git", ".task", ".tmp", ".oc-control", "coverage", "dist", "node_modules":
+	case ".git", ".task", ".tmp", "coverage", "dist", "node_modules":
 		return true
 	default:
 		return false

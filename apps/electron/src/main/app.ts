@@ -3,6 +3,7 @@ import { app, BrowserWindow } from "electron";
 import { registerOcWebProtocol } from "./oc-protocol-electron.js";
 
 const navigationTimeoutMs = 15_000;
+const startupPlaceholderDelayMs = 500;
 const unavailableDocument = encodeURIComponent(`<!doctype html>
 <html><head><meta charset="utf-8"><style>
   :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #11120f; color: #f4f1ea; }
@@ -24,15 +25,22 @@ export async function startElectronApp(): Promise<ElectronApp> {
   const webProtocol = registerOcWebProtocol();
   const window = new BrowserWindow({ width: 1100, height: 760, show: false });
   let navigation = 0;
+  let startupPlaceholder: NodeJS.Timeout | undefined;
 
-  const load = async (url: string): Promise<void> => {
+  const cancelStartupPlaceholder = (): void => {
+    if (!startupPlaceholder) return;
+    clearTimeout(startupPlaceholder);
+    startupPlaceholder = undefined;
+  };
+
+  const load = async (url: string, reveal = true): Promise<void> => {
     const current = ++navigation;
     console.info(`[open-cut electron] navigating ${url}`);
     try {
       await withTimeout(window.loadURL(url), navigationTimeoutMs, () => window.webContents.stop());
       if (current !== navigation || window.isDestroyed()) return;
       console.info(`[open-cut electron] loaded ${window.webContents.getURL()}`);
-      window.show();
+      if (reveal) window.show();
     } catch (error) {
       if (current !== navigation) return;
       throw error;
@@ -40,10 +48,16 @@ export async function startElectronApp(): Promise<ElectronApp> {
   };
 
   app.on("window-all-closed", () => app.quit());
-  await load(`data:text/html;charset=utf-8,${unavailableDocument}`);
+  await load(`data:text/html;charset=utf-8,${unavailableDocument}`, false);
+  startupPlaceholder = setTimeout(() => {
+    startupPlaceholder = undefined;
+    if (!window.isDestroyed()) window.show();
+  }, startupPlaceholderDelayMs);
+  startupPlaceholder.unref();
 
   return {
     async activateWeb(webRuntimeUrl) {
+      cancelStartupPlaceholder();
       webProtocol.setWebRuntime(webRuntimeUrl);
       try {
         await load(webProtocol.entryUrl);
@@ -53,11 +67,16 @@ export async function startElectronApp(): Promise<ElectronApp> {
       }
     },
     unavailable() {
+      cancelStartupPlaceholder();
       webProtocol.setWebRuntime(undefined);
       return load(`data:text/html;charset=utf-8,${unavailableDocument}`);
     },
-    show: () => window.show(),
+    show: () => {
+      cancelStartupPlaceholder();
+      window.show();
+    },
     close: () => {
+      cancelStartupPlaceholder();
       webProtocol.close();
       app.quit();
     },
