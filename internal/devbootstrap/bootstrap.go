@@ -95,6 +95,10 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	if err := tool.WriteRepositoryShims(root, map[string]tool.Command{"pnpm": pnpmCommand}); err != nil {
 		return Result{}, err
 	}
+	repositoryPnpmCommand, err := tool.RepositoryShimCommand(root, "pnpm")
+	if err != nil {
+		return Result{}, err
+	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 		Executable: pnpmCommand.Executable,
 		Args:       pnpmCommand.Arguments("install", "--frozen-lockfile"),
@@ -110,7 +114,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	}
 	if err := tool.SaveRepositoryState(root, tool.RepositoryState{
 		Schema: tool.RepositoryStateSchema,
-		Tools:  map[string]tool.Command{"pnpm": pnpmCommand},
+		Tools:  map[string]tool.Command{"pnpm": repositoryPnpmCommand},
 	}); err != nil {
 		return Result{}, err
 	}

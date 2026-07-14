@@ -44,10 +44,6 @@ func Resolve(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve absolute tool path %s: %w", name, err)
 	}
-	path, err = filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", fmt.Errorf("resolve physical tool path %s: %w", name, err)
-	}
 	return path, nil
 }
 
@@ -110,16 +106,28 @@ func WriteRepositoryShims(repositoryRoot string, commands map[string]Command) er
 			return err
 		}
 		arguments := append([]string{command.Executable}, command.Prefix...)
-		posix := "#!/bin/sh\nexec " + shellJoin(arguments) + " \"$@\"\n"
+		posix := "#!/bin/sh\n" +
+			"case $0 in */*) tool_bin=${0%/*} ;; *) tool_bin=. ;; esac\n" +
+			"tool_bin=$(CDPATH= cd -- \"$tool_bin\" && pwd)\n" +
+			"PATH=\"$tool_bin:$PATH\"\nexport PATH\n" +
+			"exec " + shellJoin(arguments) + " \"$@\"\n"
 		if err := atomicfile.Write(filepath.Join(binRoot, name), []byte(posix), 0o755); err != nil {
 			return fmt.Errorf("write %s shim: %w", name, err)
 		}
-		windows := "@echo off\r\n" + windowsJoin(arguments) + " %*\r\n"
+		windows := "@echo off\r\nset \"PATH=%~dp0;%PATH%\"\r\n" + windowsJoin(arguments) + " %*\r\n"
 		if err := atomicfile.Write(filepath.Join(binRoot, name+".cmd"), []byte(windows), 0o644); err != nil {
 			return fmt.Errorf("write %s Windows shim: %w", name, err)
 		}
 	}
 	return nil
+}
+
+func RepositoryShimCommand(repositoryRoot, name string) (Command, error) {
+	root, err := filepath.Abs(repositoryRoot)
+	if err != nil {
+		return Command{}, fmt.Errorf("resolve repository root for %s shim: %w", name, err)
+	}
+	return repositoryShimCommand(root, name)
 }
 
 func Inspect(ctx context.Context, name string) (Info, error) {

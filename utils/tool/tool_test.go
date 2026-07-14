@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -57,5 +58,32 @@ func TestShellJoin(t *testing.T) {
 	want := "'/path with spaces/node' 'it'\"'\"'s/pnpm.cjs'"
 	if got != want {
 		t.Fatalf("shellJoin = %q, want %q", got, want)
+	}
+}
+
+func TestRepositoryShimExportsItsToolDirectory(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := WriteRepositoryShims(root, map[string]Command{
+		"pnpm": {Executable: executable},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".oc-control", "bin", "pnpm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `PATH="$tool_bin:$PATH"`) {
+		t.Fatalf("POSIX shim does not export its tool directory: %s", data)
+	}
+	windows, err := os.ReadFile(filepath.Join(root, ".oc-control", "bin", "pnpm.cmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(windows), `set "PATH=%~dp0;%PATH%"`) {
+		t.Fatalf("Windows shim does not export its tool directory: %s", windows)
 	}
 }
