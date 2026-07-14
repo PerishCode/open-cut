@@ -22,28 +22,60 @@ Initial capabilities:
 - `delegate-sidecar`: runtime-role only; request one short-lived, subject-bound
   child token whose lifetime cannot exceed the parent runtime token.
 
-Sidecars send a registration message first, then heartbeat, endpoint, READY, and
-exit messages. The broker rejects mismatched channel, namespace, session,
-generation, subject, or capability. A session token becomes invalid when B0 exits
-or the generation changes.
+Active runtime and sidecar sessions renew their own capability lease through
+`POST /v1/capabilities/renew`. Renewal copies the authenticated subject, role,
+delegation ancestry, and exact capability set; it cannot add authority. The Go
+runner and TypeScript sidecar client renew before expiry, while B0 rotates the
+owner capability file atomically for the lifetime of the broker generation.
 
-Sidecar-role tokens are app-subject-bound. The one opaque root receives a
-runtime-role token: its registered app label remains opaque to B0, while the
-token subject remains the broker-visible `payload` session used for confirmation.
-The runtime may request distinct child tokens from
+Sidecars send a registration message first, then heartbeat, endpoint, reversible
+READY state, and exit messages. The broker rejects mismatched channel, namespace,
+session, generation, subject, process instance, or capability. A session token
+becomes invalid when B0 exits or the generation changes.
+
+Every material state mutation increments a cell-local `revision`: registration,
+endpoint replacement, READY transition, and session removal. The registered
+WebSocket carries full revisioned status snapshots alongside lifecycle commands.
+Clients also poll `GET /v1/status` at a lower frequency and accept the newest
+snapshot, closing subscription races and repairing missed frames.
+
+The client transport is reconnecting. It retains only its own desired endpoints
+and READY state, re-registers with the same process `instanceId`, and replays that
+state after reconnect. Observed peer endpoints are never retained as authority
+when the observer loses synchronization. A restarted process has a new
+`instanceId`; its endpoint is a new lease even when the URL happens to be equal.
+
+READY is reversible for app sessions. Transitioning to not-ready clears published
+endpoints. The aggregate `payload` READY remains a one-time candidate confirmation
+gate: later peer degradation drives recovery but does not undo release activation.
+
+Sidecar-role tokens are app-subject-bound and may observe peer READY/endpoints
+within the same authenticated cell. The shared Go runtime runner receives the
+runtime-role token; its registered app label remains generic while the token
+subject remains the broker-visible `payload` session used for confirmation.
+The runner may request distinct child tokens from
 `POST /v1/capabilities/sidecar`; delegated tokens contain `delegatedBy=payload`,
-cannot delegate again, and never receive observe or update capabilities.
+cannot delegate again, and never receive update capabilities.
 
-The payload root consumes generated topology and performs one delegation request
-per child subject. It passes only that child's launch envelope to the child
-process. No cell-wide token is placed in the payload tree or shared between web,
-API, and the root runtime.
+The runner consumes generated topology and performs one delegation request per
+peer subject. It passes only that peer's launch envelope to the process. No
+cell-wide token is placed in the payload tree or shared between Electron, web,
+API, and the aggregate runtime session. App sidecars never spawn or own peers.
+Base delegated capabilities are READY/lifecycle/observe. A topology process may
+explicitly request `update-transition`; it is never granted implicitly, and no
+other capability escalation is accepted.
+
+Within a live broker generation, unexpected peer exits are restarted with bounded
+exponential backoff. An explicit broker `shutdown` command is the only app-visible
+request to end the entire cell tree. Loss of B0/broker ends the generation; a new
+launcher invocation creates a new authority rather than resurrecting the old one.
 
 ## Steady-state transition
 
 `POST /v1/update/transition` currently accepts only `prepare-latest`. The
-runtime-role capability may call it; delegated app tokens and the owner control
-token may not. The broker serializes requests and invokes a B0-owned handler.
+runtime-role capability or an explicitly topology-authorized app capability may
+call it; ordinary app tokens and the owner control token may not. The broker
+serializes requests and invokes a B0-owned handler.
 B0 alone fetches root/release metadata, verifies, downloads, promotes, journals,
 and prepares activation state. A `prepared` response includes the canonical
 version and `restartRequired=true`; lifecycle shutdown then lets B0 hand off the

@@ -19,6 +19,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/target"
 )
@@ -151,7 +152,11 @@ func (installer Installer) installFromOrigin(ctx context.Context, client *http.C
 	if _, err := release.ResolveEntry(tree, manifest.Launcher.Entry, "launcher"); err != nil {
 		return "", err
 	}
-	if _, err := release.ResolveEntry(tree, manifest.Payload.Entry, "payload"); err != nil {
+	topologyEntry, err := release.ResolveEntry(tree, manifest.Payload.Entry, "payload")
+	if err != nil {
+		return "", err
+	}
+	if _, err := runtimetopology.Resolve(topologyEntry); err != nil {
 		return "", err
 	}
 	destination := filepath.Join(paths.Versions, descriptor.Version)

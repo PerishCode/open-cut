@@ -14,18 +14,27 @@ local policy to justify one.
   handoff, activation state, and the cell TCP broker.
 - `cmd/oc-control` is the only development and operations control CLI. Do not
   recreate `tools/*`, `tools-*`, or `apps/packaged` orchestration layers.
-- The launcher treats the built Electron tree as one opaque payload. It does not
-  model Electron, web, API, product identity, or the payload's process graph.
+- The launcher and `oc-control dev` consume the same generic runtime-topology
+  contract. They execute declared commands but do not model Electron, web, API,
+  product identity, application dependencies, or business startup semantics.
 - `apps/api` is a product API. It does not host or proxy the sidecar control plane.
 - B0 is the only writer of activation state. Tools and children request live-cell
   transitions through the loopback TCP broker.
 
 ## Sidecar entry contract
 
-- `apps/web/sidecar/index.ts` and `apps/api/sidecar/index.ts` are the sole
-  sidecar-mode source entries for those apps.
-- Both compile to `dist/sidecar/index.js`. Development, Electron packaging, and
-  harnesses consume that same output; do not add dev- or packaged-only entries.
+- `apps/electron/sidecar/index.ts`, `apps/web/sidecar/index.ts`, and
+  `apps/api/sidecar/index.ts` are the sole sidecar-mode source entries for those apps.
+- They compile to `dist/sidecar/index.js`. Development, packaged execution, and
+  harnesses consume those same outputs; do not add dev- or packaged-only entries.
+- App sidecars are peer processes. Electron must discover web state/endpoints
+  through sidecar IPC and must never spawn, supervise, or stop web/API itself.
+- Cross-sidecar state is a continuous TCP subscription plus reconciliation
+  relationship, never a one-shot startup query. Peer sessions and endpoints are
+  leases tied to broker generation, state revision, and process instance.
+- Performance work may optimize transport and state propagation inside a layer,
+  but must never bypass or collapse launcher, runner, broker/client, app sidecar,
+  and business boundaries.
 - Business source must not import sidecar, channel, namespace, broker, capability,
   heartbeat, READY, or packaged-mode concepts.
 - Sidecar entries may import normal app startup primitives and shared

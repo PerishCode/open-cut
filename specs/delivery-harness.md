@@ -18,8 +18,9 @@ oc-control harness uninstall --workspace <path> --receipt <path> [--purge]
 `install` verifies the target origin, creates the platform launcher installation,
 writes injected absolute roots and initial trust, then starts the installed
 platform host. `run` starts that same installed host again. Both return only
-after the opaque payload and its required sidecars report READY through the cell
-TCP broker. `inspect` reads live broker state using the receipt-derived cell.
+after the generic runtime runner and every declared peer sidecar report READY
+through the cell TCP broker. `inspect` reads live broker state using the
+receipt-derived cell.
 
 The authoritative harness receipt is outside the installed application. A copy
 inside the platform application is consumed by the platform host, but uninstall

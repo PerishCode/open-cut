@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -19,6 +17,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
@@ -26,36 +25,9 @@ import (
 
 const fullPackReadyTimeout = 45 * time.Second
 
-const fullPackDriver = `const [clientURL, supervisorURL, resourcesRoot] = process.argv.slice(2);
-const { SidecarConnection, loadSidecarLaunch } = await import(clientURL);
-const { startPayloadChildren } = await import(supervisorURL);
-const launch = loadSidecarLaunch();
-let runtime;
-let children;
-let stopping = false;
-async function stop(code = 0) {
-  if (stopping) return;
-  stopping = true;
-  await children?.stop();
-  runtime?.close(code);
-  setTimeout(() => process.exit(code), 25);
-}
-runtime = await SidecarConnection.connect({
-  app: "electron",
-  launch,
-  onCommand: async (command) => {
-    if (command === "shutdown") await stop();
-  },
-});
-children = await startPayloadChildren(resourcesRoot, runtime, launch);
-runtime.ready();
-process.once("SIGINT", () => void stop(130));
-process.once("SIGTERM", () => void stop(143));
-`
-
 func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	started := time.Now()
-	report := Report{Schema: 1, Scenario: "electron-full-pack-sidecar-tree"}
+	report := Report{Schema: 1, Scenario: "runtime-topology-peer-sidecars"}
 	check := func(name string, err error) bool {
 		entry := Check{Name: name, Passed: err == nil}
 		if err != nil {
@@ -69,34 +41,22 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("extract-bundle", bundle.Extract(bundlePath, versionRoot)) {
 		return finish(report, started)
 	}
-	manifest, err := release.LoadManifest(filepath.Join(versionRoot, "manifest.json"))
+	manifestPath := filepath.Join(versionRoot, "manifest.json")
+	manifest, err := release.LoadManifest(manifestPath)
 	if !check("load-release-manifest", err) || !check("manifest-matches-host", manifest.ValidateHost(manifest.Channel, "bootstrap.v1")) {
 		return finish(report, started)
 	}
-	payloadEntry, err := release.ResolveEntry(versionRoot, manifest.Payload.Entry, "payload")
-	if !check("resolve-opaque-payload-entry", err) {
+	launcherEntry, err := release.ResolveEntry(versionRoot, manifest.Launcher.Entry, "launcher")
+	if !check("resolve-versioned-launcher", err) {
 		return finish(report, started)
 	}
-	resourcesRoot, err := fullPackResources(payloadEntry)
-	if !check("resolve-electron-resources", err) {
+	topologyEntry, err := release.ResolveEntry(versionRoot, manifest.Payload.Entry, "payload")
+	if !check("resolve-opaque-runtime-topology", err) {
 		return finish(report, started)
 	}
-	payloadResources := filepath.Join(resourcesRoot, "payload")
-	topologyPath := filepath.Join(payloadResources, "payload-topology.json")
-	topology, err := loadHarnessTopology(topologyPath)
-	if !check("load-generated-topology", err) || !check("topology-has-web-api", requireApps(topology, "api", "web")) {
+	plan, err := runtimetopology.Resolve(topologyEntry)
+	if !check("load-generated-runtime-topology", err) || !check("topology-has-peer-apps", requireApps(runtimetopology.Apps(plan), "api", "electron", "web")) {
 		return finish(report, started)
-	}
-	supervisor := filepath.Join(resourcesRoot, "app", "dist", "sidecar", "supervisor.js")
-	clientModule := filepath.Join(resourcesRoot, "app", "node_modules", "@open-cut", "sidecar-client", "dist", "index.js")
-	for name, path := range map[string]string{"packaged-supervisor-exists": supervisor, "packaged-client-exists": clientModule} {
-		info, statErr := os.Stat(path)
-		if statErr == nil && !info.Mode().IsRegular() {
-			statErr = fmt.Errorf("%s is not a regular file", path)
-		}
-		if !check(name, statErr) {
-			return finish(report, started)
-		}
 	}
 
 	identity, err := cell.New(manifest.Channel, "full-pack")
@@ -124,10 +84,6 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("encode-control-descriptor", err) {
 		return finish(report, started)
 	}
-	driver := filepath.Join(workspace, "full-pack-driver.mjs")
-	if !check("write-full-pack-driver", os.WriteFile(driver, []byte(fullPackDriver), 0o600)) {
-		return finish(report, started)
-	}
 	logs := filepath.Join(workspace, "reports", "logs")
 	if !check("create-log-root", os.MkdirAll(logs, 0o700)) {
 		return finish(report, started)
@@ -138,11 +94,10 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		return finish(report, started)
 	}
 	defer logFile.Close()
-	command := exec.CommandContext(ctx, payloadEntry, driver, fileURL(clientModule), fileURL(supervisor), payloadResources)
+	command := exec.CommandContext(ctx, launcherEntry, "--role", "l1", "--manifest", manifestPath)
 	command.Dir, command.Stdout, command.Stderr = versionRoot, logFile, logFile
 	command.Env = append(os.Environ(),
-		"ELECTRON_RUN_AS_NODE=1",
-		"OC_PAYLOAD_RESOURCES="+payloadResources,
+		"OC_DELIVERY_HEADLESS=1",
 		"OC_SIDECAR_CONTROL="+string(descriptor),
 		"OC_SIDECAR_TOKEN="+runtimeToken,
 		"OC_SIDECAR_CHANNEL="+identity.Channel,
@@ -150,7 +105,7 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		"OC_SIDECAR_MODE=harness",
 		"OC_SIDECAR_SOURCE=oc-control",
 	)
-	if !check("start-packaged-electron-runtime", command.Start()) {
+	if !check("start-versioned-runtime-runner", command.Start()) {
 		return finish(report, started)
 	}
 	exited := make(chan error, 1)
@@ -160,7 +115,7 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 			_ = command.Process.Kill()
 		}
 	}()
-	for _, subject := range append([]string{"payload"}, topology...) {
+	for _, subject := range []string{"payload", "api", "electron", "web"} {
 		readyContext, cancel := context.WithTimeout(ctx, fullPackReadyTimeout)
 		ready := make(chan error, 1)
 		go func() { ready <- cellBroker.WaitReady(readyContext, subject) }()
@@ -169,7 +124,7 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		case readyErr = <-ready:
 		case exitErr := <-exited:
 			command.Process = nil
-			readyErr = fmt.Errorf("packaged runtime exited before %s READY: %v", subject, exitErr)
+			readyErr = fmt.Errorf("runtime runner exited before %s READY: %v", subject, exitErr)
 		}
 		cancel()
 		if readyErr != nil {
@@ -187,19 +142,19 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		return finish(report, started)
 	}
 	status, err := owner.Status(ctx)
-	if !check("packaged-tree-status", err) || !check("three-scoped-ready-sessions", validateFullPackStatus(status)) {
+	if !check("packaged-tree-status", err) || !check("four-peer-ready-sessions", validateFullPackStatus(status)) {
 		return finish(report, started)
 	}
 	response, err := owner.Control(ctx, "shutdown")
-	if !check("broadcast-shutdown", err) || !check("shutdown-reached-runtime-tree", acceptedSessions(response, 3)) {
+	if !check("broadcast-shutdown", err) || !check("shutdown-reached-runtime-tree", acceptedSessions(response, 4)) {
 		return finish(report, started)
 	}
 	select {
 	case exitErr := <-exited:
 		command.Process = nil
-		check("packaged-runtime-clean-exit", exitErr)
+		check("runtime-runner-clean-exit", exitErr)
 	case <-time.After(10 * time.Second):
-		check("packaged-runtime-clean-exit", errors.New("packaged runtime did not exit after shutdown"))
+		check("runtime-runner-clean-exit", errors.New("runtime runner did not exit after shutdown"))
 	}
 	return finish(report, started)
 }
@@ -219,61 +174,8 @@ func readLogTail(path string, maximum int) (string, error) {
 	return tail, nil
 }
 
-func fullPackResources(payloadEntry string) (string, error) {
-	var resources string
-	if runtime.GOOS == "darwin" {
-		resources = filepath.Join(filepath.Dir(filepath.Dir(payloadEntry)), "Resources")
-	} else {
-		resources = filepath.Join(filepath.Dir(payloadEntry), "resources")
-	}
-	info, err := os.Stat(resources)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("Electron resources path is not a directory")
-	}
-	return resources, nil
-}
-
-func fileURL(path string) string {
-	slashed := filepath.ToSlash(path)
-	if runtime.GOOS == "windows" {
-		slashed = "/" + slashed
-	}
-	return (&url.URL{Scheme: "file", Path: slashed}).String()
-}
-
-func loadHarnessTopology(path string) ([]string, error) {
-	var document struct {
-		Schema   int `json:"schema"`
-		Sidecars []struct {
-			App   string `json:"app"`
-			Entry string `json:"entry"`
-		} `json:"sidecars"`
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(data, &document); err != nil {
-		return nil, err
-	}
-	if document.Schema != 1 || len(document.Sidecars) == 0 {
-		return nil, fmt.Errorf("invalid payload topology")
-	}
-	apps := make([]string, 0, len(document.Sidecars))
-	for _, sidecar := range document.Sidecars {
-		if sidecar.App == "" || sidecar.Entry == "" {
-			return nil, fmt.Errorf("invalid payload topology sidecar")
-		}
-		apps = append(apps, sidecar.App)
-	}
-	sort.Strings(apps)
-	return apps, nil
-}
-
 func requireApps(actual []string, expected ...string) error {
+	sort.Strings(actual)
 	sort.Strings(expected)
 	if fmt.Sprint(actual) != fmt.Sprint(expected) {
 		return fmt.Errorf("topology apps = %v, want %v", actual, expected)
@@ -282,8 +184,8 @@ func requireApps(actual []string, expected ...string) error {
 }
 
 func validateFullPackStatus(status protocol.Status) error {
-	if len(status.Sessions) != 3 {
-		return fmt.Errorf("got %d sessions, want 3", len(status.Sessions))
+	if len(status.Sessions) != 4 {
+		return fmt.Errorf("got %d sessions, want 4", len(status.Sessions))
 	}
 	seen := make(map[string]protocol.SessionStatus)
 	for _, session := range status.Sessions {
@@ -292,8 +194,11 @@ func validateFullPackStatus(status protocol.Status) error {
 		}
 		seen[session.Subject] = session
 	}
-	if seen["payload"].App != "electron" {
-		return fmt.Errorf("opaque payload session did not register the Electron carrier")
+	if seen["payload"].App != "runtime" {
+		return fmt.Errorf("aggregate payload session did not register the generic runtime runner")
+	}
+	if seen["electron"].App != "electron" {
+		return fmt.Errorf("Electron did not register as an independent peer")
 	}
 	for _, app := range []string{"api", "web"} {
 		session, ok := seen[app]

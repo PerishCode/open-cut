@@ -48,6 +48,7 @@ type Endpoint struct {
 type SessionStatus struct {
 	Subject       string     `json:"subject"`
 	App           string     `json:"app"`
+	InstanceID    string     `json:"instanceId"`
 	Mode          string     `json:"mode"`
 	Source        string     `json:"source"`
 	Ready         bool       `json:"ready"`
@@ -58,6 +59,7 @@ type SessionStatus struct {
 
 type Status struct {
 	Schema     int             `json:"schema"`
+	Revision   uint64          `json:"revision"`
 	Channel    string          `json:"channel"`
 	Namespace  string          `json:"namespace"`
 	SessionID  string          `json:"sessionId"`
@@ -72,16 +74,19 @@ type ClientEvent struct {
 	SessionID  string `json:"sessionId,omitempty"`
 	Generation uint64 `json:"generation,omitempty"`
 	App        string `json:"app,omitempty"`
+	InstanceID string `json:"instanceId,omitempty"`
 	Mode       string `json:"mode,omitempty"`
 	Source     string `json:"source,omitempty"`
 	Name       string `json:"name,omitempty"`
 	URL        string `json:"url,omitempty"`
 	Code       int    `json:"code,omitempty"`
+	Ready      *bool  `json:"ready,omitempty"`
 }
 
 type ServerEvent struct {
-	Type    string `json:"type"`
-	Command string `json:"command,omitempty"`
+	Type    string  `json:"type"`
+	Command string  `json:"command,omitempty"`
+	Status  *Status `json:"status,omitempty"`
 }
 
 type ControlRequest struct {
@@ -93,11 +98,22 @@ type ControlResponse struct {
 }
 
 type DelegateRequest struct {
-	Subject    string `json:"subject"`
-	TTLSeconds int64  `json:"ttlSeconds,omitempty"`
+	Subject      string       `json:"subject"`
+	TTLSeconds   int64        `json:"ttlSeconds,omitempty"`
+	Capabilities []Capability `json:"capabilities,omitempty"`
 }
 
 type DelegateResponse struct {
+	Subject   string    `json:"subject"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type RenewRequest struct {
+	TTLSeconds int64 `json:"ttlSeconds,omitempty"`
+}
+
+type RenewResponse struct {
 	Subject   string    `json:"subject"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expiresAt"`

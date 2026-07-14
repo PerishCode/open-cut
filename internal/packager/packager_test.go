@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/internal/workspace"
 )
 
 func TestRemoveExternalDeploySelfLink(t *testing.T) {
@@ -52,6 +53,41 @@ func TestLocateLinuxPackSelectsSluggedProductExecutable(t *testing.T) {
 	}
 	if packRoot != root || entry != "open-cut" {
 		t.Fatalf("root=%q entry=%q", packRoot, entry)
+	}
+}
+
+func TestPackagedRuntimeTopologyKeepsElectronAndAppsAsPeers(t *testing.T) {
+	packRoot := t.TempDir()
+	helper := filepath.Join(packRoot, "Open Cut.app", "Contents", "Frameworks", "Open Cut Helper.app", "Contents", "MacOS", "Open Cut Helper")
+	if err := os.MkdirAll(filepath.Dir(helper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(helper, []byte("helper"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	topology, err := packagedRuntimeTopology(
+		packRoot,
+		"Open Cut.app/Contents/MacOS/Open Cut",
+		target.Target{Platform: target.Mac, Arch: target.ARM64},
+		"electron",
+		workspace.Topology{Schema: 1, Sidecars: []workspace.Sidecar{{App: "api"}, {App: "electron"}, {App: "web"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topology.Processes) != 3 {
+		t.Fatalf("processes=%+v", topology.Processes)
+	}
+	for _, process := range topology.Processes {
+		if process.App == "electron" {
+			if process.Command != "app/Open Cut.app/Contents/MacOS/Open Cut" || len(process.UnsetEnv) != 1 {
+				t.Fatalf("electron process=%+v", process)
+			}
+			continue
+		}
+		if process.Command != "app/Open Cut.app/Contents/Frameworks/Open Cut Helper.app/Contents/MacOS/Open Cut Helper" || process.Env["ELECTRON_RUN_AS_NODE"] != "1" {
+			t.Fatalf("sidecar process=%+v", process)
+		}
 	}
 }
 

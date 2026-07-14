@@ -67,7 +67,7 @@ func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {
 	}
 	sidecars := make([]Sidecar, 0)
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == config.PayloadWorkspace || !appPattern.MatchString(entry.Name()) {
+		if !entry.IsDir() || !appPattern.MatchString(entry.Name()) {
 			continue
 		}
 		sourceEntry := filepath.Join(appsRoot, entry.Name(), "sidecar", "index.ts")

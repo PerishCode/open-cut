@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.sidecar.json",
-    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit"
+    "build": "vite build && tsc -p tsconfig.sidecar.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.sidecar.json --noEmit"
   },
   "dependencies": {
     "@open-cut/sidecar-client": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.1.4"
   }
 }

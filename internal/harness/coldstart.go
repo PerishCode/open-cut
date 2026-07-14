@@ -23,8 +23,10 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/target"
+	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
 const harnessVersion = "1.0.0-harness.1"
@@ -60,9 +62,11 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	releaseTree := filepath.Join(workspace, "fixture-origin", "tree")
 	versionedLauncher := filepath.Join(releaseTree, "launcher", executableName("launcher"))
 	payload := filepath.Join(releaseTree, "payload", executableName("fixture-runtime"))
+	topologyPath := filepath.Join(releaseTree, "payload", "runtime-topology.json")
 	if !check("install-bootstrap-launcher", copyExecutable(launcherArtifact, bootstrapLauncher)) ||
 		!check("stage-versioned-launcher", copyExecutable(launcherArtifact, versionedLauncher)) ||
-		!check("stage-fixture-payload", copyExecutable(payloadArtifact, payload)) {
+		!check("stage-fixture-payload", copyExecutable(payloadArtifact, payload)) ||
+		!check("write-fixture-topology", writeFixtureTopology(topologyPath, payload)) {
 		return finish(report, started)
 	}
 
@@ -70,7 +74,7 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		Schema: release.ManifestSchema, Channel: identity.Channel, Version: harnessVersion,
 		Platform: target.Host().Platform, Arch: target.Host().Arch,
 		Launcher:                 release.Entry{Entry: filepath.ToSlash(filepath.Join("launcher", filepath.Base(versionedLauncher)))},
-		Payload:                  release.Entry{Entry: filepath.ToSlash(filepath.Join("payload", filepath.Base(payload)))},
+		Payload:                  release.Entry{Entry: filepath.ToSlash(filepath.Join("payload", filepath.Base(topologyPath)))},
 		MinimumBootstrapProtocol: "bootstrap.v1", PublishedAt: time.Now().UTC(),
 	}
 	if !check("write-release-manifest", atomicfile.WriteJSON(filepath.Join(releaseTree, "manifest.json"), manifest, 0o600)) {
@@ -91,12 +95,14 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	steadyTree := filepath.Join(workspace, "fixture-origin", "tree-v2")
 	steadyLauncher := filepath.Join(steadyTree, "launcher", executableName("launcher"))
 	steadyPayload := filepath.Join(steadyTree, "payload", executableName("fixture-runtime"))
+	steadyTopology := filepath.Join(steadyTree, "payload", "runtime-topology.json")
 	steadyManifest := manifest
 	steadyManifest.Version = steadyHarnessVersion
 	steadyManifest.PublishedAt = time.Now().UTC()
 	steadyBundlePath := filepath.Join(workspace, "fixture-origin", "release-bundle-v2.tar.zst")
 	if !check("stage-steady-launcher", copyExecutable(launcherArtifact, steadyLauncher)) ||
 		!check("stage-steady-payload", copyExecutable(payloadArtifact, steadyPayload)) ||
+		!check("write-steady-topology", writeFixtureTopology(steadyTopology, steadyPayload)) ||
 		!check("write-steady-manifest", atomicfile.WriteJSON(filepath.Join(steadyTree, "manifest.json"), steadyManifest, 0o600)) ||
 		!check("pack-steady-bundle", bundle.Pack(steadyTree, steadyBundlePath)) {
 		return finish(report, started)
@@ -247,8 +253,10 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 	failingRoot := filepath.Join(paths.Versions, failingHarnessVersion)
 	failingLauncher := filepath.Join(failingRoot, "launcher", filepath.Base(versionedLauncher))
 	failingPayload := filepath.Join(failingRoot, "payload", filepath.Base(payload))
+	failingTopology := filepath.Join(failingRoot, "payload", "runtime-topology.json")
 	if !check("install-failing-launcher", copyExecutable(launcherArtifact, failingLauncher)) ||
-		!check("install-failing-payload", copyExecutable(payloadArtifact, failingPayload)) {
+		!check("install-failing-payload", copyExecutable(payloadArtifact, failingPayload)) ||
+		!check("write-failing-topology", writeFixtureTopology(failingTopology, failingPayload)) {
 		return finish(report, started)
 	}
 	failingManifest := manifest
@@ -282,6 +290,13 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		return nil
 	}())
 	return finish(report, started)
+}
+
+func writeFixtureTopology(filename, payload string) error {
+	return runtimetopology.Write(filename, runtimetopology.Topology{Schema: runtimetopology.Schema, Processes: []runtimetopology.Process{{
+		App: "fixture-runtime", Command: filepath.Base(payload), WorkingDirectory: ".",
+		Capabilities: []protocol.Capability{protocol.CapabilityUpdateTransition},
+	}}})
 }
 
 func runLauncher(ctx context.Context, launcherPath, bootstrapPath, logPath string, extraEnv []string) error {

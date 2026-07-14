@@ -15,6 +15,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/target"
 )
@@ -44,10 +45,22 @@ func TestRecoverPromotedReleasePreparesCandidate(t *testing.T) {
 	manifest := release.Manifest{
 		Schema: release.ManifestSchema, Channel: bootstrap.Channel, Version: version,
 		Platform: target.Host().Platform, Arch: target.Host().Arch,
-		Launcher: release.Entry{Entry: "launcher/launcher"}, Payload: release.Entry{Entry: "payload/runtime"},
+		Launcher: release.Entry{Entry: "launcher/launcher"}, Payload: release.Entry{Entry: "payload/runtime-topology.json"},
 		MinimumBootstrapProtocol: bootstrap.ProtocolFloor, PublishedAt: time.Now().UTC(),
 	}
 	if err := atomicfile.WriteJSON(filepath.Join(versionRoot, "manifest.json"), manifest, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := filepath.Join(versionRoot, "payload", "bin", "runtime")
+	if err := os.MkdirAll(filepath.Dir(command), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(command, []byte("runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimetopology.Write(filepath.Join(versionRoot, "payload", "runtime-topology.json"), runtimetopology.Topology{
+		Schema: 1, Processes: []runtimetopology.Process{{App: "app", Command: "bin/runtime", WorkingDirectory: "."}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	transaction := filepath.Join(paths.Incoming, "interrupted")

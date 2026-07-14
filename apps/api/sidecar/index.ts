@@ -3,10 +3,14 @@ import { startApiServer, type ApiServer } from "../src/server.js";
 
 let api: ApiServer | undefined;
 let sidecar: SidecarConnection | undefined;
+let stopping: Promise<void> | undefined;
 
-async function stop(code = 0): Promise<void> {
-  await api?.close();
-  sidecar?.close(code);
+function stop(code = 0): Promise<void> {
+  stopping ??= (async () => {
+    await api?.close();
+    sidecar?.close(code);
+  })();
+  return stopping;
 }
 
 sidecar = await SidecarConnection.connect({

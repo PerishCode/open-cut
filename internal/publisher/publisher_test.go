@@ -10,6 +10,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/target"
 	"github.com/PerishCode/open-cut/internal/verifier"
 )
@@ -17,7 +18,7 @@ import (
 func TestCreateIsIdempotentAndVerifiable(t *testing.T) {
 	root := t.TempDir()
 	tree := filepath.Join(root, "tree")
-	for _, entry := range []string{"launcher/launcher", "payload/runtime"} {
+	for _, entry := range []string{"launcher/launcher", "payload/bin/runtime"} {
 		path := filepath.Join(tree, filepath.FromSlash(entry))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
@@ -26,11 +27,16 @@ func TestCreateIsIdempotentAndVerifiable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := runtimetopology.Write(filepath.Join(tree, "payload", "runtime-topology.json"), runtimetopology.Topology{
+		Schema: 1, Processes: []runtimetopology.Process{{App: "app", Command: "bin/runtime", WorkingDirectory: "."}},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 	manifest := release.Manifest{
 		Schema: release.ManifestSchema, Channel: "beta", Version: "0.1.0-beta.1",
 		Platform: target.Mac, Arch: target.ARM64,
-		Launcher: release.Entry{Entry: "launcher/launcher"}, Payload: release.Entry{Entry: "payload/runtime"},
+		Launcher: release.Entry{Entry: "launcher/launcher"}, Payload: release.Entry{Entry: "payload/runtime-topology.json"},
 		MinimumBootstrapProtocol: "bootstrap.v1", PublishedAt: now,
 	}
 	if err := atomicfile.WriteJSON(filepath.Join(tree, "manifest.json"), manifest, 0o600); err != nil {

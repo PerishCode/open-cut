@@ -14,23 +14,30 @@ For Open Cut the payload is assembled from `apps/web`, `apps/api`, and
 `apps/electron` into a full Electron pack. That source graph is build-plane
 knowledge and is absent from launcher state and release manifests.
 
-`oc-control pack` discovers every non-carrier `apps/*/sidecar/index.ts`, requires
-its compiled `dist/sidecar/index.js`, production-deploys each app independently,
-and writes one generated `payload-topology.json`. Electron consumes that artifact;
-there is no second hand-maintained list of app entries.
+`oc-control pack` discovers every `apps/*/sidecar/index.ts`, including the
+carrier, requires its compiled `dist/sidecar/index.js`, production-deploys each
+app independently, and writes one generated `runtime-topology.json`. The shared
+Go runtime runner consumes that artifact; there is no second hand-maintained
+list of app entries and Electron never consumes or owns the topology.
 
 The opaque payload currently contains this carrier-owned shape (platform wrapper
 details omitted):
 
 ```text
+payload/runtime-topology.json             # sole opaque payload entry
 payload/app/
   <Electron executable and frameworks>
-  resources/app/                         # Electron root runtime
-  resources/payload/payload-topology.json
+  resources/app/                          # Electron app source + sidecar entry
   resources/payload/sidecars/<app>/
-    dist/sidecar/index.js                 # sole compiled sidecar entry
-    node_modules/                         # app-scoped production dependencies
+    dist/sidecar/index.js                  # sole compiled sidecar entry
+    node_modules/                          # app-scoped production dependencies
 ```
+
+The generated topology contains only generic process descriptors: app subject,
+relative command, arguments, working directory, environment additions, and
+environment removals. Platform-specific pack adapters may encode Electron or
+Node invocation details into those values. Launcher code only validates and
+executes the descriptors; it has no carrier-specific branch.
 
 The packer preserves only relative symlinks that remain inside the full-pack
 root. A `pnpm deploy` self-reference that points back to the source workspace is

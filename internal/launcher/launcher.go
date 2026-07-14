@@ -16,6 +16,8 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
+	"github.com/PerishCode/open-cut/internal/runtimehost"
+	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/update"
 	"github.com/PerishCode/open-cut/sidecar/broker"
@@ -24,6 +26,8 @@ import (
 )
 
 var ErrRecoveryRequired = errors.New("no installed release is available; recovery download is required")
+
+const runtimeCapabilityTTL = 7 * 24 * time.Hour
 
 type B0Options struct {
 	BootstrapPath  string
@@ -172,7 +176,7 @@ func runManagedRelease(
 	if err != nil {
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
 	}
-	runtimeToken, err := cellBroker.MintRuntimeToken("payload", options.ReadyTimeout+options.StabilityHold+time.Minute)
+	runtimeToken, err := cellBroker.MintRuntimeToken("payload", runtimeCapabilityTTL)
 	if err != nil {
 		return failCandidate(paths.StateFile, identity.Channel, runtimeState, isCandidate, err)
 	}
@@ -264,17 +268,30 @@ func RunL1(ctx context.Context, options L1Options) error {
 		return err
 	}
 	versionRoot := filepath.Dir(options.ManifestPath)
-	payloadEntry, err := release.ResolveEntry(versionRoot, manifest.Payload.Entry, "payload")
+	topologyEntry, err := release.ResolveEntry(versionRoot, manifest.Payload.Entry, "payload")
 	if err != nil {
 		return err
 	}
-	command := exec.CommandContext(ctx, payloadEntry)
-	command.Env = append(os.Environ(), "OC_RELEASE_VERSION="+manifest.Version)
-	command.Stdout, command.Stderr = options.Stdout, options.Stderr
-	if err := command.Run(); err != nil {
-		return fmt.Errorf("payload exited: %w", err)
+	plan, err := runtimetopology.Resolve(topologyEntry)
+	if err != nil {
+		return err
 	}
-	return nil
+	for index := range plan.Processes {
+		if plan.Processes[index].Env == nil {
+			plan.Processes[index].Env = make(map[string]string)
+		}
+		plan.Processes[index].Env["OC_RELEASE_VERSION"] = manifest.Version
+	}
+	var descriptor protocol.ControlDescriptor
+	if err := json.Unmarshal([]byte(os.Getenv("OC_SIDECAR_CONTROL")), &descriptor); err != nil {
+		return fmt.Errorf("decode L1 control descriptor: %w", err)
+	}
+	return runtimehost.Run(ctx, runtimehost.Options{
+		Descriptor: descriptor, Token: os.Getenv("OC_SIDECAR_TOKEN"),
+		Channel: os.Getenv("OC_SIDECAR_CHANNEL"), Namespace: os.Getenv("OC_SIDECAR_NAMESPACE"),
+		Mode: os.Getenv("OC_SIDECAR_MODE"), Source: os.Getenv("OC_SIDECAR_SOURCE"),
+		Plan: plan, Stdout: options.Stdout, Stderr: options.Stderr,
+	}, nil)
 }
 
 func ensureCellSnapshot(path string, identity cell.Identity) error {

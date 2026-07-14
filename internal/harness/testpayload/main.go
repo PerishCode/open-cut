@@ -67,6 +67,9 @@ func main() {
 			}
 			updateTimer = nil
 		case <-lifetimeTimer.C:
+			if _, err := control.Control(context.Background(), "shutdown"); err != nil {
+				fatal(err)
+			}
 			return
 		}
 	}
