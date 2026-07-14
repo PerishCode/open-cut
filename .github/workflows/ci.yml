@@ -76,7 +76,7 @@ jobs:
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
       - name: Bootstrap development environment
         shell: bash
-        run: "${{ matrix.control }}" bootstrap --repo .
+        run: ${{ matrix.control }} bootstrap --repo .
       - name: Pack, publish, and verify native full pack
         shell: bash
         env:
