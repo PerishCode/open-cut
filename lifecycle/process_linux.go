@@ -3,8 +3,14 @@
 package lifecycle
 
 func applyPlatformProcessPolicy(spec ProcessSpec) ProcessSpec {
-	if spec.Profile == ProfileHarness && spec.Sandbox == SandboxChromium && !containsArgument(spec.Args, "--no-sandbox") {
-		spec.Args = append(append([]string(nil), spec.Args...), "--no-sandbox")
+	if spec.Profile == ProfileHarness && spec.Sandbox == SandboxChromium {
+		arguments := append([]string(nil), spec.Args...)
+		for _, argument := range []string{"--no-sandbox", "--ozone-platform=headless"} {
+			if !containsArgument(arguments, argument) {
+				arguments = append(arguments, argument)
+			}
+		}
+		spec.Args = arguments
 	}
 	return spec
 }
