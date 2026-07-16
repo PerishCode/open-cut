@@ -209,11 +209,8 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		"PKG_CONFIG_PATH":   filepath.Join(dependencyRoot, "lib", "pkgconfig"),
 		"PKG_CONFIG_LIBDIR": filepath.Join(dependencyRoot, "lib", "pkgconfig"),
 	})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: shell, Args: append([]string{filepath.Join(sourceRoot, "configure")}, configuration...),
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return BuildResult{}, fmt.Errorf("configure FFmpeg media toolchain: %w", err)
 	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{

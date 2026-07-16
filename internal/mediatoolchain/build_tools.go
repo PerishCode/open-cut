@@ -73,7 +73,7 @@ func runConfigure(
 	stdout, stderr io.Writer,
 ) error {
 	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: shell, Args: append([]string{script}, arguments...), Directory: directory, Env: env,
+		Executable: shell, Args: append([]string{shellBuildPath(script)}, arguments...), Directory: directory, Env: env,
 		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		Presentation: lifecycle.PresentationHeadless,
 	})
