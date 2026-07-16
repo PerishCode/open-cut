@@ -1,6 +1,12 @@
 import { net, protocol } from "electron";
 
-import { handleOcWebRequest, normalizeWebRuntimeUrl, OC_WEB_ENTRY_URL, OC_WEB_SCHEME } from "./oc-protocol.js";
+import {
+  handleOcWebRequest,
+  normalizeWebRuntimeUrl,
+  OC_WEB_ENTRY_URL,
+  OC_WEB_SCHEME,
+  type PlatformRequestHandler,
+} from "./oc-protocol.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -18,24 +24,29 @@ protocol.registerSchemesAsPrivileged([
 export type OcWebProtocol = {
   readonly entryUrl: string;
   setWebRuntime(url: string | undefined): void;
+  setUISession(session: string | undefined): void;
   verifyEntry(): Promise<void>;
   close(): void;
 };
 
-export function registerOcWebProtocol(): OcWebProtocol {
+export function registerOcWebProtocol(platformRequest?: PlatformRequestHandler): OcWebProtocol {
   let webRuntimeUrl: string | undefined;
+  let uiSession: string | undefined;
   protocol.handle(OC_WEB_SCHEME, (request) => {
     // Keep the proxy hop in Node's HTTP stack. Electron net.fetch() rejects a
     // Request cloned from oc:// with net::ERR_FAILED before it reaches the
     // loopback Web server, while global fetch returns a normal web Response
     // that protocol.handle can stream back under the stable oc:// origin.
-    return handleOcWebRequest(request, webRuntimeUrl, (target) => fetch(target));
+    return handleOcWebRequest(request, webRuntimeUrl, (target) => fetch(target), {}, uiSession, platformRequest);
   });
 
   return {
     entryUrl: OC_WEB_ENTRY_URL,
     setWebRuntime(url) {
       webRuntimeUrl = url === undefined ? undefined : normalizeWebRuntimeUrl(url);
+    },
+    setUISession(session) {
+      uiSession = session;
     },
     async verifyEntry() {
       const response = await net.fetch(OC_WEB_ENTRY_URL, { cache: "no-store" });
@@ -50,6 +61,7 @@ export function registerOcWebProtocol(): OcWebProtocol {
     },
     close() {
       webRuntimeUrl = undefined;
+      uiSession = undefined;
       if (protocol.isProtocolHandled(OC_WEB_SCHEME)) protocol.unhandle(OC_WEB_SCHEME);
     },
   };

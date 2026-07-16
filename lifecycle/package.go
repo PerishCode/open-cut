@@ -44,7 +44,7 @@ func NativePackagingPolicy(buildTarget target.Target) (PackagingPolicy, error) {
 func ElectronBuilderConfig(productName, electronVersion, appRoot, outputRoot, resourcesRoot string) map[string]any {
 	return map[string]any{
 		"productName":     productName,
-		"asar":            false,
+		"asar":            true,
 		"npmRebuild":      false,
 		"electronVersion": electronVersion,
 		"directories":     map[string]string{"app": appRoot, "output": outputRoot},

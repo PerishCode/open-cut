@@ -169,6 +169,10 @@ func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtif
 		DataDir: filepath.Join(workspace, identity.Suffix()), Roots: roots,
 		ProtocolFloor: "bootstrap.v1", UpdateOrigins: []string{fixtureServer.URL},
 	}
+	bootstrap.Installation, err = harnessInstallation(workspace, []string{"harness"})
+	if !check("installation-identity", err) {
+		return finish(report, started)
+	}
 	bootstrap.InitialTrustRoot = config.TrustConfig{Threshold: 1, Keys: []config.TrustKey{{ID: "fixture", PublicKey: base64.StdEncoding.EncodeToString(publicKey)}}}
 	bootstrapPath := filepath.Join(roots.BootstrapRoot, "bootstrap.json")
 	if !check("write-bootstrap-config", atomicfile.WriteJSON(bootstrapPath, bootstrap, 0o600)) {

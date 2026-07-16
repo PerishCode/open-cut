@@ -10,6 +10,33 @@ versioned product CLI at `payload/bin/open-cut[.exe]`.
 
 Start with [AGENTS.md](./AGENTS.md) and the specifications under [`specs/`](./specs/).
 
+The business baseline is split across
+[`product.md`](./specs/product.md),
+[`business-kernel.md`](./specs/business-kernel.md),
+[`domain-model.md`](./specs/domain-model.md),
+[`persistence.md`](./specs/persistence.md),
+[`agent-native.md`](./specs/agent-native.md),
+[`agent-bridge.md`](./specs/agent-bridge.md),
+[`local-authorization.md`](./specs/local-authorization.md),
+[`ui-session.md`](./specs/ui-session.md),
+[`wire-contract.md`](./specs/wire-contract.md),
+[`canonicalization.md`](./specs/canonicalization.md),
+[`read-activity.md`](./specs/read-activity.md),
+[`media-pipeline.md`](./specs/media-pipeline.md),
+[`source-access.md`](./specs/source-access.md),
+[`media-delivery.md`](./specs/media-delivery.md),
+[`timeline.md`](./specs/timeline.md),
+[`transcript-caption.md`](./specs/transcript-caption.md),
+[`rendering.md`](./specs/rendering.md),
+[`durable-work.md`](./specs/durable-work.md),
+[`job-scheduler.md`](./specs/job-scheduler.md),
+[`project-lifecycle.md`](./specs/project-lifecycle.md),
+[`editing-interaction.md`](./specs/editing-interaction.md),
+[`playback.md`](./specs/playback.md),
+[`workspace-ui.md`](./specs/workspace-ui.md) and
+[`business-harness.md`](./specs/business-harness.md). These sit above the
+product-independent cold-start, sidecar, release, and delivery contracts.
+
 ## Day 0 development path
 
 Install the Go version declared by `go.mod` and a Node version satisfying the
@@ -115,8 +142,11 @@ oc-control harness uninstall --workspace "$workspace" --receipt "$receipt" --pur
 The receipt lives outside the installed application so uninstall is repeatable.
 `harness run` executes the installed platform host, not a source-tree shortcut.
 The installed CLI resolver reads `runtime.json.active`, dispatches to the fixed
-CLI path in that version, and uses the broker's observe-only token; it neither
-calls nor inherits lifecycle from the product API.
+CLI path in that version, and uses the broker's observe-only token only for
+control-plane discovery. A non-help business command asks the installed
+lifecycle host to ensure readiness, then the versioned CLI reaches the product
+API with a separate absorbed business grant; it never joins runtime topology or
+inherits lifecycle authority from the API.
 The public CI builds and verifies native `mac-arm64`, `win-x64`, and `linux-x64`
 full packs; macOS additionally runs the install/offline-relaunch/uninstall loop.
 

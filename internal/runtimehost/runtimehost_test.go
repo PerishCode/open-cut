@@ -74,7 +74,7 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 		done <- Run(ctx, Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
 			Channel: identity.Channel, Namespace: identity.Namespace,
-			DataDir: dataDir, App: "runtime",
+			DataDir: dataDir, Installation: runtimeHostTestInstallation(), App: "runtime",
 			Mode: protocol.LifecycleModeHarness, Presentation: protocol.PresentationHeadless, Source: "harness",
 			Plan: plan, ReadyTimeout: 5 * time.Second,
 		}, ready)
@@ -111,6 +111,16 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
+	}
+}
+
+func runtimeHostTestInstallation() protocol.InstallationAssertion {
+	return protocol.InstallationAssertion{
+		Schema: 1, InstallationID: "installation-runtime-host-test", Generation: 1,
+		Keys: []protocol.InstallationPublicKey{{
+			Role: "harness", Algorithm: protocol.InstallationKeyAlgorithmEd25519,
+			PublicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		}},
 	}
 }
 

@@ -1,6 +1,13 @@
-import { app, BrowserWindow } from "electron";
+import { fileURLToPath } from "node:url";
 
+import { app, BrowserWindow, shell } from "electron";
+
+import { registerDroppedSourceIPC } from "./dropped-source-ipc.js";
+import { DeliveryReceiptStore, handleExportRevealRequest } from "./export-reveal.js";
+import { DestinationGrantStore, handleExportSaveRequest } from "./export-save.js";
+import { OC_PLATFORM_EXPORT_REVEAL_PATH, OC_PLATFORM_EXPORT_SAVE_PATH } from "./oc-protocol.js";
 import { registerOcWebProtocol } from "./oc-protocol-electron.js";
+import { handleSourcePickerRequest } from "./source-picker.js";
 
 const navigationTimeoutMs = 15_000;
 const startupPlaceholderDelayMs = 500;
@@ -14,7 +21,7 @@ const unavailableDocument = encodeURIComponent(`<!doctype html>
 </style></head><body><main><h1><span></span>Open Cut</h1><p>Waiting for the Web sidecar…</p></main></body></html>`);
 
 export type ElectronApp = {
-  activateWeb(webRuntimeUrl: string): Promise<void>;
+  activateWeb(webRuntimeUrl: string, apiRuntimeUrl: string, uiSession: string): Promise<void>;
   unavailable(): Promise<void>;
   show(): void;
   close(): void;
@@ -22,8 +29,43 @@ export type ElectronApp = {
 
 export async function startElectronApp(): Promise<ElectronApp> {
   await app.whenReady();
-  const webProtocol = registerOcWebProtocol();
-  const window = new BrowserWindow({ width: 1100, height: 760, show: false });
+  const window = new BrowserWindow({
+    width: 1100,
+    height: 760,
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: fileURLToPath(new URL("../preload.cjs", import.meta.url)),
+      sandbox: true,
+    },
+  });
+  let apiRuntimeUrl: string | undefined;
+  let activeUISession: string | undefined;
+  const droppedSources = registerDroppedSourceIPC();
+  const destinationGrants = new DestinationGrantStore();
+  const deliveryReceipts = new DeliveryReceiptStore();
+  const webProtocol = registerOcWebProtocol((request) => {
+    const path = new URL(request.url).pathname;
+    if (path === OC_PLATFORM_EXPORT_SAVE_PATH) {
+      return handleExportSaveRequest(
+        request,
+        window,
+        apiRuntimeUrl,
+        activeUISession,
+        destinationGrants,
+        deliveryReceipts,
+      );
+    }
+    if (path === OC_PLATFORM_EXPORT_REVEAL_PATH) {
+      return handleExportRevealRequest(request, activeUISession, deliveryReceipts, (target) =>
+        shell.showItemInFolder(target),
+      );
+    }
+    return handleSourcePickerRequest(request, window, apiRuntimeUrl, activeUISession, (token) =>
+      droppedSources.consume(window.webContents, token),
+    );
+  });
   let navigation = 0;
   let startupPlaceholder: NodeJS.Timeout | undefined;
 
@@ -56,19 +98,34 @@ export async function startElectronApp(): Promise<ElectronApp> {
   startupPlaceholder.unref();
 
   return {
-    async activateWeb(webRuntimeUrl) {
+    async activateWeb(webRuntimeUrl, nextAPIRuntimeUrl, uiSession) {
       cancelStartupPlaceholder();
+      destinationGrants.clear();
+      deliveryReceipts.clear();
+      apiRuntimeUrl = nextAPIRuntimeUrl;
+      activeUISession = uiSession;
       webProtocol.setWebRuntime(webRuntimeUrl);
+      webProtocol.setUISession(uiSession);
       try {
         await load(webProtocol.entryUrl);
       } catch (error) {
+        apiRuntimeUrl = undefined;
+        activeUISession = undefined;
+        destinationGrants.clear();
+        deliveryReceipts.clear();
         webProtocol.setWebRuntime(undefined);
+        webProtocol.setUISession(undefined);
         throw error;
       }
     },
     unavailable() {
       cancelStartupPlaceholder();
+      apiRuntimeUrl = undefined;
+      activeUISession = undefined;
+      destinationGrants.clear();
+      deliveryReceipts.clear();
       webProtocol.setWebRuntime(undefined);
+      webProtocol.setUISession(undefined);
       return load(`data:text/html;charset=utf-8,${unavailableDocument}`);
     },
     show: () => {
@@ -77,6 +134,9 @@ export async function startElectronApp(): Promise<ElectronApp> {
     },
     close: () => {
       cancelStartupPlaceholder();
+      droppedSources.close();
+      destinationGrants.clear();
+      deliveryReceipts.clear();
       webProtocol.close();
       app.quit();
     },

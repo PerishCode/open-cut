@@ -24,6 +24,12 @@ const validEnvironment = {
     startedAt: "2026-07-14T00:00:00Z",
   }),
   [sidecarEnvironment.dataDir]: "/tmp/open-cut/beta/tests",
+  [sidecarEnvironment.installation]: JSON.stringify({
+    schema: 1,
+    installationId: "installation-test",
+    generation: 1,
+    keys: [{ role: "harness", algorithm: "ed25519", publicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }],
+  }),
   [sidecarEnvironment.mode]: lifecycleMode.harness,
   [sidecarEnvironment.namespace]: "tests",
   [sidecarEnvironment.presentation]: presentation.headless,

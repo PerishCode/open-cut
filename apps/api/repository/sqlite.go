@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync"
 
-	"github.com/PerishCode/open-cut/apps/api/model"
 	"github.com/ncruces/go-sqlite3"
 	sqliteDriver "github.com/ncruces/go-sqlite3/driver"
 )
@@ -33,8 +33,12 @@ type migration struct {
 }
 
 type SQLiteProjects struct {
-	db   *sql.DB
-	path string
+	db                     *sql.DB
+	path                   string
+	dataDir                string
+	artifactLifecycleMu    sync.Mutex
+	mediaVerificationMu    sync.Mutex
+	mediaVerificationCache map[string]verifiedMediaFile
 }
 
 func OpenSQLiteProjects(ctx context.Context, dataDir string) (*SQLiteProjects, error) {
@@ -59,7 +63,10 @@ PRAGMA synchronous = FULL;
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	repository := &SQLiteProjects{db: db, path: databasePath}
+	repository := &SQLiteProjects{
+		db: db, path: databasePath, dataDir: dataDir,
+		mediaVerificationCache: make(map[string]verifiedMediaFile),
+	}
 	closeOnError := func(cause error) (*SQLiteProjects, error) {
 		return nil, fmt.Errorf("initialize SQLite project repository: %w", cause)
 	}
@@ -84,66 +91,6 @@ func (repository *SQLiteProjects) Close() error {
 
 func (repository *SQLiteProjects) Path() string {
 	return repository.path
-}
-
-func (repository *SQLiteProjects) Snapshot(ctx context.Context) (model.ProjectSnapshot, error) {
-	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	defer tx.Rollback()
-	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT revision FROM project_state WHERE singleton = 1`).Scan(&revision); err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT id, name, description FROM projects ORDER BY id`)
-	if err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	defer rows.Close()
-	projects := make([]model.Project, 0)
-	for rows.Next() {
-		var project model.Project
-		if err := rows.Scan(&project.ID, &project.Name, &project.Description); err != nil {
-			return model.ProjectSnapshot{}, err
-		}
-		projects = append(projects, project)
-	}
-	if err := rows.Err(); err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	if err := rows.Close(); err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return model.ProjectSnapshot{}, err
-	}
-	return model.ProjectSnapshot{Revision: uint64(revision), Projects: projects}, nil
-}
-
-func (repository *SQLiteProjects) Put(ctx context.Context, project model.Project) (model.ProjectUpserted, error) {
-	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return model.ProjectUpserted{}, err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO projects (id, name, description) VALUES (?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description
-`, project.ID, project.Name, project.Description); err != nil {
-		return model.ProjectUpserted{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE project_state SET revision = revision + 1 WHERE singleton = 1`); err != nil {
-		return model.ProjectUpserted{}, err
-	}
-	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT revision FROM project_state WHERE singleton = 1`).Scan(&revision); err != nil {
-		return model.ProjectUpserted{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return model.ProjectUpserted{}, err
-	}
-	return model.ProjectUpserted{Revision: uint64(revision), Project: project}, nil
 }
 
 func (repository *SQLiteProjects) migrate(ctx context.Context) error {
@@ -196,26 +143,73 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 	}
 	for _, pending := range migrations[len(applied):] {
-		tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-		if err != nil {
+		if err := repository.applyMigration(ctx, pending); err != nil {
 			return err
-		}
-		if _, err := tx.ExecContext(ctx, pending.SQL); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("apply migration %04d_%s: %w", pending.Version, pending.Name, err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)`,
-			pending.Version, pending.Name, pending.Checksum,
-		); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("record migration %04d_%s: %w", pending.Version, pending.Name, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %04d_%s: %w", pending.Version, pending.Name, err)
 		}
 	}
 	return nil
+}
+
+func (repository *SQLiteProjects) applyMigration(ctx context.Context, pending migration) (resultErr error) {
+	connection, err := repository.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+	disableForeignKeys := pending.Version == 29 || pending.Version == 32 || pending.Version == 33
+	if disableForeignKeys {
+		if _, err := connection.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+			return fmt.Errorf("disable foreign keys for migration %04d_%s: %w", pending.Version, pending.Name, err)
+		}
+		defer func() {
+			if _, err := connection.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`); resultErr == nil && err != nil {
+				resultErr = fmt.Errorf("restore foreign keys after migration %04d_%s: %w", pending.Version, pending.Name, err)
+			}
+		}()
+	}
+	tx, err := connection.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, pending.SQL); err != nil {
+		return fmt.Errorf("apply migration %04d_%s: %w", pending.Version, pending.Name, err)
+	}
+	if err := applyDataMigration(ctx, tx, pending.Version); err != nil {
+		return fmt.Errorf("migrate data %04d_%s: %w", pending.Version, pending.Name, err)
+	}
+	if disableForeignKeys {
+		if err := assertNoForeignKeyViolations(ctx, tx); err != nil {
+			return fmt.Errorf("verify migration %04d_%s foreign keys: %w", pending.Version, pending.Name, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)`,
+		pending.Version, pending.Name, pending.Checksum,
+	); err != nil {
+		return fmt.Errorf("record migration %04d_%s: %w", pending.Version, pending.Name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration %04d_%s: %w", pending.Version, pending.Name, err)
+	}
+	return nil
+}
+
+func assertNoForeignKeyViolations(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table, parent string
+		var rowID, foreignKeyID int64
+		if err := rows.Scan(&table, &rowID, &parent, &foreignKeyID); err != nil {
+			return err
+		}
+		return fmt.Errorf("table %s row %d violates foreign key %d to %s", table, rowID, foreignKeyID, parent)
+	}
+	return rows.Err()
 }
 
 func loadMigrations() ([]migration, error) {

@@ -2,85 +2,119 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
-	"github.com/PerishCode/open-cut/apps/api/model"
 	"github.com/PerishCode/open-cut/apps/api/service"
+	"github.com/PerishCode/open-cut/product/application"
+	"github.com/PerishCode/open-cut/product/command"
+	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/sse"
 )
 
+type projectCreateInput struct {
+	Body application.CreateProjectInput
+}
+
+type projectCreateOutput struct {
+	Body application.CreateProjectResult
+}
+
+type projectListInput = command.ProjectListInput
+
 type projectListOutput struct {
-	Body model.ProjectSnapshot
+	Body command.ProjectListData
 }
 
-type projectPutInput struct {
-	ID   string `path:"id" minLength:"1" maxLength:"128"`
-	Body model.ProjectWrite
+type projectShowInput = command.ProjectShowInput
+
+type projectShowOutput struct {
+	Body command.ProjectShowData
 }
 
-type projectPutOutput struct {
-	Body model.ProjectUpserted
-}
+func RegisterProjects(
+	api huma.API,
+	projects *application.Projects,
+	reads *application.ProjectReads,
+	runs *application.AgentRuns,
+	authorizer service.Authorizer,
+) {
+	creatorAuthority := requireAuthority(api, authorizer)
+	huma.Register(api, huma.Operation{
+		OperationID: "create-project",
+		Method:      http.MethodPost,
+		Path:        "/v1/projects",
+		Summary:     "Create a Project with its initial narrative and Sequence",
+		Tags:        []string{"projects"},
+		Middlewares: creatorAuthority,
+		Extensions:  map[string]any{"x-open-cut-surface": "creator"},
+	}, func(ctx context.Context, input *projectCreateInput) (*projectCreateOutput, error) {
+		created, err := projects.Create(ctx, input.Body)
+		if err != nil {
+			return nil, projectError(err)
+		}
+		return &projectCreateOutput{Body: created}, nil
+	})
 
-func RegisterProjects(api huma.API, current service.Projects) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-projects",
 		Method:      http.MethodGet,
 		Path:        "/v1/projects",
-		Summary:     "List projects",
+		Summary:     "List a bounded page of Project summaries",
 		Tags:        []string{"projects"},
-	}, func(ctx context.Context, _ *struct{}) (*projectListOutput, error) {
-		snapshot, err := current.List(ctx)
+		Middlewares: requireCommandAuthority(api, runs, authorizer, "project", "list"),
+		Extensions:  commandExtensions("project", "list"),
+	}, func(ctx context.Context, input *projectListInput) (*projectListOutput, error) {
+		page, err := reads.List(ctx, application.ListProjectsInput{
+			Status: input.Status, After: input.After, Limit: input.Limit,
+		})
 		if err != nil {
-			return nil, huma.Error500InternalServerError("project repository failed", err)
+			return nil, projectError(err)
 		}
-		return &projectListOutput{Body: snapshot}, nil
+		return &projectListOutput{Body: page}, nil
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID: "put-project",
-		Method:      http.MethodPut,
-		Path:        "/v1/projects/{id}",
-		Summary:     "Create or replace a project",
-		Tags:        []string{"projects"},
-	}, func(ctx context.Context, input *projectPutInput) (*projectPutOutput, error) {
-		event, err := current.Put(ctx, model.Project{
-			ID: input.ID, Name: input.Body.Name, Description: input.Body.Description,
-		})
-		if err != nil {
-			return nil, huma.Error500InternalServerError("project repository failed", err)
-		}
-		return &projectPutOutput{Body: event}, nil
-	})
-
-	sse.Register(api, huma.Operation{
-		OperationID: "watch-projects",
+		OperationID: "show-project",
 		Method:      http.MethodGet,
-		Path:        "/v1/events",
-		Summary:     "Watch project state",
+		Path:        "/v1/projects/{id}",
+		Summary:     "Show one bounded Project overview",
 		Tags:        []string{"projects"},
-	}, map[string]any{
-		"project.snapshot": &model.ProjectSnapshot{},
-		"project.upserted": &model.ProjectUpserted{},
-	}, func(ctx context.Context, _ *struct{}, send sse.Sender) {
-		subscription, err := current.Subscribe(ctx)
+		Middlewares: requireCommandAuthority(api, runs, authorizer, "project", "show"),
+		Extensions:  commandExtensions("project", "show"),
+	}, func(ctx context.Context, input *projectShowInput) (*projectShowOutput, error) {
+		overview, err := reads.Show(ctx, input.ProjectID)
 		if err != nil {
-			return
+			return nil, projectError(err)
 		}
-		defer subscription.Close()
-		if err := send(sse.Message{ID: int(subscription.Snapshot.Revision), Retry: 1000, Data: subscription.Snapshot}); err != nil {
-			return
+		if err := recordCommandEvidence(
+			ctx, runs, input.ProjectID, overview, application.CommandReceiptSucceeded,
+			[]application.CommandReceiptRef{
+				commandReceiptRef("project", overview.Project.ID.String(), overview.Project.Revision),
+			}, overview.Project.Revision, overview.ActivityCursor,
+		); err != nil {
+			return nil, projectError(err)
 		}
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case event, ok := <-subscription.Events:
-				if !ok || send(sse.Message{ID: int(event.Revision), Data: event}) != nil {
-					return
-				}
-			}
-		}
+		return &projectShowOutput{Body: overview}, nil
 	})
+}
+
+func projectError(err error) error {
+	switch {
+	case errors.Is(err, application.ErrProjectNotFound):
+		return commandStatusError(command.StatusNotFound, huma.Error404NotFound("project not found"))
+	case errors.Is(err, application.ErrRequestIdentityReused),
+		errors.Is(err, application.ErrInvalidPageCursor),
+		errors.Is(err, application.ErrInvalidProjectStatus),
+		errors.Is(err, domain.ErrInvalidProjectName),
+		errors.Is(err, domain.ErrInvalidSequenceFormat),
+		errors.Is(err, domain.ErrInvalidRequestID):
+		return commandStatusError(command.StatusInvalid, huma.Error422UnprocessableEntity("project request is invalid", err))
+	case errors.Is(err, application.ErrAuthorityMissing),
+		errors.Is(err, application.ErrAuthorityInvalid),
+		errors.Is(err, application.ErrAuthorityScopeDenied):
+		return huma.Error403Forbidden("project authority denied")
+	default:
+		return commandStatusError(command.StatusFailed, huma.Error500InternalServerError("project operation failed", err))
+	}
 }

@@ -3,18 +3,28 @@ import { controlCommand, presentation, type SessionStatus, SidecarConnection } f
 import { app } from "electron";
 import { type ElectronApp, startElectronApp } from "../src/main/app.js";
 import { type OcWebProtocol, registerOcWebProtocol } from "../src/main/oc-protocol-electron.js";
+import { configureHarnessCDP } from "./harness-cdp.js";
+import { bootstrapUISession } from "./ui-session.js";
+
+configureHarnessCDP(app.commandLine, process.env);
 
 let electron: ElectronApp | undefined;
 let headlessWeb: OcWebProtocol | undefined;
 let sidecar: SidecarConnection | undefined;
-let unsubscribe: (() => void) | undefined;
+let unsubscribeWeb: (() => void) | undefined;
+let unsubscribeAPI: (() => void) | undefined;
+let renewal: NodeJS.Timeout | undefined;
 let stopping: Promise<void> | undefined;
-let webLease: string | undefined;
+let webPeer: SessionStatus | undefined;
+let apiPeer: SessionStatus | undefined;
+let activeLease: string | undefined;
 let reconciliation = Promise.resolve();
 
 function stop(code = 0, requestCellShutdown = false): Promise<void> {
   stopping ??= (async () => {
-    unsubscribe?.();
+    unsubscribeWeb?.();
+    unsubscribeAPI?.();
+    if (renewal) clearTimeout(renewal);
     if (requestCellShutdown) {
       try {
         await sidecar?.shutdownCell();
@@ -30,33 +40,59 @@ function stop(code = 0, requestCellShutdown = false): Promise<void> {
   return stopping;
 }
 
-async function reconcileWeb(web: SessionStatus | undefined): Promise<void> {
-  if (stopping) return;
-  const endpoint = web?.ready
-    ? web.endpoints?.find((candidate) => candidate.name === runtimePeer.web.httpEndpoint)?.url
-    : undefined;
-  if (!web?.ready || !endpoint) {
-    if (webLease === undefined) return;
-    webLease = undefined;
-    sidecar?.notReady();
-    headlessWeb?.setWebRuntime(undefined);
-    await electron?.unavailable();
-    return;
-  }
+function peerEndpoint(peer: SessionStatus | undefined, name: string): string | undefined {
+  return peer?.ready ? peer.endpoints?.find((candidate) => candidate.name === name)?.url : undefined;
+}
 
-  const lease = `${web.instanceId}\n${endpoint}`;
-  if (lease === webLease) return;
-  webLease = undefined;
+async function clearActiveLease(showUnavailable: boolean): Promise<void> {
+  activeLease = undefined;
+  if (renewal) clearTimeout(renewal);
+  renewal = undefined;
   sidecar?.notReady();
+  headlessWeb?.setUISession(undefined);
+  headlessWeb?.setWebRuntime(undefined);
+  if (showUnavailable) await electron?.unavailable();
+}
+
+async function reconcilePeers(force = false): Promise<void> {
+  if (stopping || !sidecar) return;
+  const webEndpoint = peerEndpoint(webPeer, runtimePeer.web.httpEndpoint);
+  const apiEndpoint = peerEndpoint(apiPeer, runtimePeer.api.httpEndpoint);
+  const lease =
+    webEndpoint && apiEndpoint && webPeer && apiPeer
+      ? `${webPeer.instanceId}\n${webEndpoint}\n${apiPeer.instanceId}\n${apiEndpoint}`
+      : undefined;
+  if (!force && lease === activeLease) return;
+  const wasActive = activeLease !== undefined;
+  await clearActiveLease(wasActive);
+  if (!lease || !webEndpoint || !apiEndpoint) return;
+
+  const session = await bootstrapUISession(apiEndpoint);
+  if (stopping) return;
   if (electron) {
-    await electron.activateWeb(endpoint);
+    await electron.activateWeb(webEndpoint, apiEndpoint, session.token);
   } else if (headlessWeb) {
-    headlessWeb.setWebRuntime(endpoint);
+    headlessWeb.setWebRuntime(webEndpoint);
+    headlessWeb.setUISession(session.token);
     await headlessWeb.verifyEntry();
   }
   if (stopping) return;
-  webLease = lease;
-  sidecar?.ready();
+  activeLease = lease;
+  const renewAfter = Math.max(1_000, Math.floor((session.expiresAt - Date.now()) / 2));
+  renewal = setTimeout(() => {
+    reconciliation = reconciliation.catch(() => undefined).then(() => reconcilePeers(true));
+  }, renewAfter);
+  renewal.unref();
+  sidecar.ready();
+}
+
+function scheduleReconciliation(): void {
+  reconciliation = reconciliation
+    .then(() => reconcilePeers())
+    .catch(async (error: unknown) => {
+      await clearActiveLease(true);
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    });
 }
 
 async function main(): Promise<void> {
@@ -73,16 +109,13 @@ async function main(): Promise<void> {
   } else {
     electron = await startElectronApp();
   }
-  unsubscribe = sidecar.watchApp(runtimePeer.web.app, (web) => {
-    reconciliation = reconciliation
-      .then(() => reconcileWeb(web))
-      .catch(async (error: unknown) => {
-        webLease = undefined;
-        sidecar?.notReady();
-        headlessWeb?.setWebRuntime(undefined);
-        console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-        await electron?.unavailable();
-      });
+  unsubscribeWeb = sidecar.watchApp(runtimePeer.web.app, (peer) => {
+    webPeer = peer;
+    scheduleReconciliation();
+  });
+  unsubscribeAPI = sidecar.watchApp(runtimePeer.api.app, (peer) => {
+    apiPeer = peer;
+    scheduleReconciliation();
   });
 }
 

@@ -1,0 +1,102 @@
+import type { Asset, Caption, DurableID, NarrativeNode, TranscriptCorrection } from "@open-cut/contracts";
+
+export function captionProvenanceLabel(caption: Caption): string {
+  if (caption.provenance.kind === "manual") return "MANUAL";
+  const status = caption.provenanceStatus;
+  if (!status) return "DERIVED";
+  return `DERIVED · ${status.content.toUpperCase()} · EVIDENCE ${status.evidence.toUpperCase()}`;
+}
+
+export function mergeTranscriptCorrections(
+  current: readonly TranscriptCorrection[],
+  incoming: readonly TranscriptCorrection[],
+): readonly TranscriptCorrection[] {
+  const corrections = new Map(current.map((correction) => [correction.id, correction]));
+  for (const correction of incoming) corrections.set(correction.id, correction);
+  return [...corrections.values()].sort((left, right) => {
+    const start = Number(left.sourceRange.start.value) / left.sourceRange.start.scale;
+    const otherStart = Number(right.sourceRange.start.value) / right.sourceRange.start.scale;
+    return start - otherStart || left.id.localeCompare(right.id);
+  });
+}
+
+export function narrativeNodeID(node: NarrativeNode): DurableID {
+  switch (node.kind) {
+    case "section":
+      return node.section.id;
+    case "authored-text":
+      return node.authoredText.id;
+    case "source-excerpt":
+      return node.sourceExcerpt.id;
+    case "visual-intent":
+      return node.visualIntent.id;
+    case "note":
+      return node.note.id;
+  }
+}
+
+export function narrativeNodeText(node: NarrativeNode): string {
+  switch (node.kind) {
+    case "section":
+      return node.section.title;
+    case "authored-text":
+      return node.authoredText.text;
+    case "source-excerpt":
+      return node.sourceExcerpt.effectiveText;
+    case "visual-intent":
+      return node.visualIntent.description;
+    case "note":
+      return node.note.text;
+  }
+}
+
+export function narrativeNodeLabel(node: NarrativeNode): string {
+  switch (node.kind) {
+    case "section":
+      return `SECTION · ${node.section.language} · r${node.section.revision}`;
+    case "authored-text":
+      return `${node.authoredText.purpose.toUpperCase()} · ${node.authoredText.language} · r${node.authoredText.revision}`;
+    case "source-excerpt": {
+      const range = node.sourceExcerpt.sourceRange;
+      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatTime(range.start)} → ${(
+        Number(range.start.value) / range.start.scale + Number(range.duration.value) / range.duration.scale
+      ).toFixed(2)} · r${node.sourceExcerpt.revision}`;
+    }
+    case "visual-intent":
+      return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${node.visualIntent.language} · r${node.visualIntent.revision}`;
+    case "note":
+      return `NOTE · ${node.note.language} · r${node.note.revision}`;
+  }
+}
+
+export function formatTime(value: { value: string; scale: number }): string {
+  return (Number(value.value) / value.scale).toFixed(2);
+}
+
+export function formatTimeEnd(range: {
+  start: { value: string; scale: number };
+  duration: { value: string; scale: number };
+}): string {
+  return (Number(range.start.value) / range.start.scale + Number(range.duration.value) / range.duration.scale).toFixed(
+    2,
+  );
+}
+
+export function formatMediaFacts(facts: NonNullable<Asset["facts"]>): string {
+  const video = facts.streams.find((stream) => stream.descriptor.video)?.descriptor.video;
+  const audio = facts.streams.find((stream) => stream.descriptor.audio)?.descriptor.audio;
+  return [
+    facts.container,
+    facts.duration ? `${formatTime(facts.duration)}s` : "duration unknown",
+    video ? `${video.width} × ${video.height}` : undefined,
+    audio ? `${audio.sampleRate} Hz · ${audio.channels} ch` : undefined,
+    `${facts.streams.length} streams`,
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(" · ");
+}
+
+export function scheduleTimer(callback: () => void, delay: number): () => void {
+  const timer = setTimeout(callback, delay);
+  return () => clearTimeout(timer);
+}

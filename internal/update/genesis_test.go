@@ -18,6 +18,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/state"
+	"github.com/PerishCode/open-cut/internal/testfixture"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -63,6 +64,7 @@ func TestBadSignatureNeverDownloadsBundle(t *testing.T) {
 	root := t.TempDir()
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: "beta", Namespace: "test", DataDir: filepath.Join(root, "data", "beta", "test"),
+		Installation: testfixture.InstallationAssertion(),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),
@@ -119,7 +121,8 @@ func TestSignedOlderReleaseNeverDownloadsBundle(t *testing.T) {
 	root := t.TempDir()
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: "beta", Namespace: "rollback", ProtocolFloor: "bootstrap.v1",
-		DataDir: filepath.Join(root, "data", "beta", "rollback"),
+		DataDir:      filepath.Join(root, "data", "beta", "rollback"),
+		Installation: testfixture.InstallationAssertion(),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/PerishCode/open-cut/internal/cell"
+	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
 type RootSet struct {
@@ -67,14 +68,15 @@ func (trust TrustConfig) Validate(label string) error {
 }
 
 type Bootstrap struct {
-	Schema           int         `json:"schema"`
-	Channel          string      `json:"channel"`
-	Namespace        string      `json:"namespace"`
-	DataDir          string      `json:"dataDir"`
-	Roots            RootSet     `json:"roots"`
-	UpdateOrigins    []string    `json:"updateOrigins"`
-	ProtocolFloor    string      `json:"protocolFloor"`
-	InitialTrustRoot TrustConfig `json:"initialTrustRoot"`
+	Schema           int                            `json:"schema"`
+	Channel          string                         `json:"channel"`
+	Namespace        string                         `json:"namespace"`
+	DataDir          string                         `json:"dataDir"`
+	Roots            RootSet                        `json:"roots"`
+	Installation     protocol.InstallationAssertion `json:"installation"`
+	UpdateOrigins    []string                       `json:"updateOrigins"`
+	ProtocolFloor    string                         `json:"protocolFloor"`
+	InitialTrustRoot TrustConfig                    `json:"initialTrustRoot"`
 }
 
 func LoadBootstrap(path string) (Bootstrap, error) {
@@ -107,6 +109,9 @@ func (bootstrap Bootstrap) Validate() error {
 	}
 	if bootstrap.ProtocolFloor == "" {
 		return fmt.Errorf("protocolFloor is required")
+	}
+	if err := bootstrap.Installation.Validate(); err != nil {
+		return fmt.Errorf("installation assertion: %w", err)
 	}
 	return bootstrap.InitialTrustRoot.Validate("initialTrustRoot")
 }

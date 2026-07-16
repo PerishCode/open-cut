@@ -18,6 +18,8 @@ type InstallProduct struct {
 	BundleID       string
 }
 
+const PlatformHostEnvironment = "OC_PLATFORM_HOST"
+
 type InstallLayout struct {
 	InstallRoot         string
 	HostPath            string

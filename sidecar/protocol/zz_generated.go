@@ -11,12 +11,13 @@ const (
 	SidecarEnvChannel       = "OC_SIDECAR_CHANNEL"
 	SidecarEnvControl       = "OC_SIDECAR_CONTROL"
 	SidecarEnvDataDir       = "OC_SIDECAR_DATA_DIR"
+	SidecarEnvInstallation  = "OC_SIDECAR_INSTALLATION"
 	SidecarEnvMode          = "OC_SIDECAR_MODE"
 	SidecarEnvNamespace     = "OC_SIDECAR_NAMESPACE"
 	SidecarEnvPresentation  = "OC_SIDECAR_PRESENTATION"
 	SidecarEnvSource        = "OC_SIDECAR_SOURCE"
 	SidecarEnvToken         = "OC_SIDECAR_TOKEN"
-	SidecarEnvironmentCount = 9
+	SidecarEnvironmentCount = 10
 )
 
 const (
@@ -78,6 +79,12 @@ type ControlCommand string
 const (
 	ControlCommandShow     ControlCommand = "show"
 	ControlCommandShutdown ControlCommand = "shutdown"
+)
+
+type InstallationKeyAlgorithm string
+
+const (
+	InstallationKeyAlgorithmEd25519 InstallationKeyAlgorithm = "ed25519"
 )
 
 type LifecycleMode string
@@ -200,6 +207,19 @@ type HeartbeatEvent struct {
 	Type EventType `json:"type"`
 }
 
+type InstallationAssertion struct {
+	Generation     uint64                  `json:"generation"`
+	InstallationID string                  `json:"installationId"`
+	Keys           []InstallationPublicKey `json:"keys"`
+	Schema         int                     `json:"schema"`
+}
+
+type InstallationPublicKey struct {
+	Algorithm InstallationKeyAlgorithm `json:"algorithm"`
+	PublicKey string                   `json:"publicKey"`
+	Role      string                   `json:"role"`
+}
+
 type RegisterEvent struct {
 	App        string        `json:"app"`
 	Channel    string        `json:"channel"`
@@ -263,15 +283,16 @@ type SidecarEvent struct {
 }
 
 type SidecarLaunch struct {
-	App          string            `json:"app"`
-	Channel      string            `json:"channel"`
-	Control      ControlDescriptor `json:"control"`
-	DataDir      string            `json:"dataDir"`
-	Mode         LifecycleMode     `json:"mode"`
-	Namespace    string            `json:"namespace"`
-	Presentation Presentation      `json:"presentation"`
-	Source       string            `json:"source"`
-	Token        string            `json:"token"`
+	App          string                `json:"app"`
+	Channel      string                `json:"channel"`
+	Control      ControlDescriptor     `json:"control"`
+	DataDir      string                `json:"dataDir"`
+	Installation InstallationAssertion `json:"installation"`
+	Mode         LifecycleMode         `json:"mode"`
+	Namespace    string                `json:"namespace"`
+	Presentation Presentation          `json:"presentation"`
+	Source       string                `json:"source"`
+	Token        string                `json:"token"`
 }
 
 type StateEvent struct {

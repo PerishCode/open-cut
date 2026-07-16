@@ -414,6 +414,51 @@ components:
           type: string
           enum:
             - heartbeat
+    InstallationAssertion:
+      type: object
+      required:
+        - schema
+        - installationId
+        - generation
+        - keys
+      properties:
+        schema:
+          type: number
+          enum:
+            - 1
+        installationId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        generation:
+          type: integer
+          format: double-int
+          minimum: 1
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstallationPublicKey'
+          minItems: 1
+    InstallationKeyAlgorithm:
+      type: string
+      enum:
+        - ed25519
+    InstallationPublicKey:
+      type: object
+      required:
+        - role
+        - algorithm
+        - publicKey
+      properties:
+        role:
+          type: string
+          minLength: 1
+          maxLength: 64
+        algorithm:
+          $ref: '#/components/schemas/InstallationKeyAlgorithm'
+        publicKey:
+          type: string
+          minLength: 1
     LifecycleMode:
       type: string
       enum:
@@ -561,6 +606,7 @@ components:
         - channel
         - namespace
         - dataDir
+        - installation
         - mode
         - presentation
         - source
@@ -589,6 +635,10 @@ components:
           type: string
           minLength: 1
           x-environment: OC_SIDECAR_DATA_DIR
+        installation:
+          allOf:
+            - $ref: '#/components/schemas/InstallationAssertion'
+          x-environment: OC_SIDECAR_INSTALLATION
         mode:
           allOf:
             - $ref: '#/components/schemas/LifecycleMode'

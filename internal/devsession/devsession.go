@@ -98,6 +98,17 @@ func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.
 	if err != nil {
 		return err
 	}
+	installation, err := lifecycle.EnsureDevelopmentInstallationIdentity(
+		filepath.Join(commandRoot, "identity"), controlConfig.InstallationKeyRoles,
+	)
+	if err != nil {
+		return fmt.Errorf("load development installation identity: %w", err)
+	}
+	signer, err := lifecycle.StartDevelopmentSigner(filepath.Join(paths.Runtime, "signer.sock"), installation)
+	if err != nil {
+		return fmt.Errorf("start development lifecycle signer: %w", err)
+	}
+	defer signer.Close()
 	cellBroker, err := broker.Start(broker.Options{Identity: identity, Paths: paths, Generation: 1})
 	if err != nil {
 		return err
@@ -112,8 +123,10 @@ func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.
 	go func() {
 		done <- runtimehost.Run(ctx, runtimehost.Options{
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
-			Channel: identity.Channel, Namespace: identity.Namespace, DataDir: baseDir, App: "runtime",
-			Mode: protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
+			Channel: identity.Channel, Namespace: identity.Namespace, DataDir: baseDir,
+			Installation: installation.Assertion(), App: "runtime",
+			Environment: map[string]string{lifecycle.SignerSocketEnvironment: signer.Socket()},
+			Mode:        protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
 			Plan: plan, Stdout: stdout, Stderr: stderr,
 		}, runtimeReady)
 	}()

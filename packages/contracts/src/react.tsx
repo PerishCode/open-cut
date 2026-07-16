@@ -8,8 +8,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-
-import { type Contracts, createContracts, type Project, type ProjectState, type ProjectUpserted } from "./projects.js";
+import type { CLIPairing, CLIScopeUpgrade, CLIScopeUpgradeDecision } from "./authorization.js";
+import type { DurableID } from "./exact.js";
+import {
+  type Contracts,
+  type CreateProjectInput,
+  createContracts,
+  type ProjectCreated,
+  type ProjectState,
+} from "./projects.js";
 
 const ContractsContext = createContext<Contracts | undefined>(undefined);
 
@@ -40,22 +47,22 @@ export function useProjects(): ProjectState {
   );
 }
 
-export type PutProjectHook = Readonly<{
-  put(project: Project): Promise<ProjectUpserted>;
+export type CreateProjectHook = Readonly<{
+  create(input: CreateProjectInput): Promise<ProjectCreated>;
   pending: boolean;
   error?: Error;
 }>;
 
-export function usePutProject(): PutProjectHook {
+export function useCreateProject(): CreateProjectHook {
   const contracts = useContracts();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error>();
-  const put = useCallback(
-    async (project: Project) => {
+  const create = useCallback(
+    async (input: CreateProjectInput) => {
       setPending(true);
       setError(undefined);
       try {
-        return await contracts.projects.write.put(project);
+        return await contracts.projects.write.create(input);
       } catch (value) {
         const next = value instanceof Error ? value : new Error(String(value));
         setError(next);
@@ -66,5 +73,100 @@ export function usePutProject(): PutProjectHook {
     },
     [contracts],
   );
-  return useMemo(() => ({ put, pending, error }), [put, pending, error]);
+  return useMemo(() => ({ create, pending, error }), [create, pending, error]);
+}
+
+export type CLIAuthorizationHook = Readonly<{
+  pairings: readonly CLIPairing[];
+  scopeUpgrades: readonly CLIScopeUpgrade[];
+  pending: boolean;
+  error?: Error;
+  refresh(): Promise<void>;
+  approve(id: DurableID): Promise<CLIPairing>;
+  deny(id: DurableID): Promise<CLIPairing>;
+  revoke(id: DurableID): Promise<CLIPairing>;
+  approveScopeUpgrade(id: DurableID): Promise<CLIScopeUpgradeDecision>;
+  denyScopeUpgrade(id: DurableID): Promise<CLIScopeUpgradeDecision>;
+}>;
+
+export function useCLIAuthorization(): CLIAuthorizationHook {
+  const contracts = useContracts();
+  const [pairings, setPairings] = useState<readonly CLIPairing[]>([]);
+  const [scopeUpgrades, setScopeUpgrades] = useState<readonly CLIScopeUpgrade[]>([]);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<Error>();
+  const run = useCallback(async <Result,>(operation: () => Promise<Result>): Promise<Result> => {
+    setPending(true);
+    setError(undefined);
+    try {
+      return await operation();
+    } catch (value) {
+      const next = value instanceof Error ? value : new Error(String(value));
+      setError(next);
+      throw next;
+    } finally {
+      setPending(false);
+    }
+  }, []);
+  const refresh = useCallback(
+    () =>
+      run(async () => {
+        const next = await contracts.authorization.readCLI();
+        setPairings(next.pairings);
+        setScopeUpgrades(next.scopeUpgrades);
+      }),
+    [contracts, run],
+  );
+  const decide = useCallback(
+    (id: DurableID, approve: boolean) =>
+      run(async () => {
+        const result = approve
+          ? await contracts.authorization.approveCLIPairing(id)
+          : await contracts.authorization.denyCLIPairing(id);
+        setPairings((current) => current.map((pairing) => (pairing.id === result.id ? result : pairing)));
+        return result;
+      }),
+    [contracts, run],
+  );
+  const revoke = useCallback(
+    (id: DurableID) =>
+      run(async () => {
+        const result = await contracts.authorization.revokeCLIPairing(id);
+        setPairings((current) => current.map((pairing) => (pairing.id === result.id ? result : pairing)));
+        return result;
+      }),
+    [contracts, run],
+  );
+  const decideScopeUpgrade = useCallback(
+    (id: DurableID, approve: boolean) =>
+      run(async () => {
+        const result = approve
+          ? await contracts.authorization.approveCLIScopeUpgrade(id)
+          : await contracts.authorization.denyCLIScopeUpgrade(id);
+        setScopeUpgrades((current) =>
+          current.map((upgrade) => (upgrade.id === result.upgrade.id ? result.upgrade : upgrade)),
+        );
+        setPairings((current) => current.map((pairing) => (pairing.id === result.grant.id ? result.grant : pairing)));
+        return result;
+      }),
+    [contracts, run],
+  );
+  useEffect(() => {
+    void refresh().catch(() => undefined);
+  }, [refresh]);
+  return useMemo(
+    () => ({
+      pairings,
+      scopeUpgrades,
+      pending,
+      error,
+      refresh,
+      approve: (id) => decide(id, true),
+      deny: (id) => decide(id, false),
+      revoke,
+      approveScopeUpgrade: (id) => decideScopeUpgrade(id, true),
+      denyScopeUpgrade: (id) => decideScopeUpgrade(id, false),
+    }),
+    [pairings, scopeUpgrades, pending, error, refresh, decide, revoke, decideScopeUpgrade],
+  );
 }

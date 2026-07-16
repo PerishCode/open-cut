@@ -1,0 +1,36 @@
+
+export type EditOperationInputType = typeof EditOperationInputType[keyof typeof EditOperationInputType];
+
+
+export const EditOperationInputType = {
+  'insert-section': 'insert-section',
+  'update-section': 'update-section',
+  'insert-authored-text': 'insert-authored-text',
+  'update-authored-text': 'update-authored-text',
+  'insert-visual-intent': 'insert-visual-intent',
+  'update-visual-intent': 'update-visual-intent',
+  'insert-note': 'insert-note',
+  'update-note': 'update-note',
+  'insert-source-excerpt': 'insert-source-excerpt',
+  'move-narrative-node': 'move-narrative-node',
+  'remove-narrative-node': 'remove-narrative-node',
+  'add-transcript-correction': 'add-transcript-correction',
+  'update-transcript-correction': 'update-transcript-correction',
+  'remove-transcript-correction': 'remove-transcript-correction',
+  'derive-captions': 'derive-captions',
+  'derive-rough-cut': 'derive-rough-cut',
+  'add-caption': 'add-caption',
+  'update-caption': 'update-caption',
+  'remove-caption': 'remove-caption',
+  'bind-alignment': 'bind-alignment',
+  'remap-alignment': 'remap-alignment',
+  'mark-alignment-stale': 'mark-alignment-stale',
+  'unbind-alignment': 'unbind-alignment',
+  'add-clip': 'add-clip',
+  'move-clip': 'move-clip',
+  'trim-clip': 'trim-clip',
+  'split-clip': 'split-clip',
+  'remove-clip': 'remove-clip',
+  'link-clips': 'link-clips',
+  'unlink-clips': 'unlink-clips',
+} as const;

@@ -1,4 +1,10 @@
 {
   "schema": 1,
-  "command": "dist/sidecar/api-sidecar.exe"
+  "command": "dist/sidecar/api-sidecar.exe",
+  "artifactChecks": [
+    {
+      "command": "dist/sidecar/api-sidecar.exe",
+      "args": ["media-tools", "check"]
+    }
+  ]
 }

@@ -13,7 +13,8 @@ func TestLaunchEnvironmentUsesGeneratedBindings(t *testing.T) {
 			SessionID: "session", Generation: 2, StartedAt: time.Unix(1, 0).UTC(),
 		},
 		App: "web", Token: "token", Channel: "beta", Namespace: "test", DataDir: "/tmp/open-cut/beta/test",
-		Mode: LifecycleModeHarness, Presentation: PresentationHeadless, Source: "test",
+		Installation: testInstallationAssertion(),
+		Mode:         LifecycleModeHarness, Presentation: PresentationHeadless, Source: "test",
 	}
 	values, err := LaunchEnvironmentMap(launch)
 	if err != nil {
@@ -40,5 +41,15 @@ func TestLaunchEnvironmentUsesGeneratedBindings(t *testing.T) {
 	if loaded.Control.SessionID != launch.Control.SessionID || loaded.Namespace != launch.Namespace || loaded.DataDir != launch.DataDir ||
 		loaded.App != launch.App || loaded.Presentation != launch.Presentation {
 		t.Fatalf("loaded=%+v", loaded)
+	}
+}
+
+func testInstallationAssertion() InstallationAssertion {
+	return InstallationAssertion{
+		Schema: 1, InstallationID: "installation-test", Generation: 1,
+		Keys: []InstallationPublicKey{{
+			Role: "harness", Algorithm: InstallationKeyAlgorithmEd25519,
+			PublicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		}},
 	}
 }

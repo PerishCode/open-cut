@@ -1,8 +1,6 @@
 package tests
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,71 +8,43 @@ import (
 	"testing"
 
 	"github.com/PerishCode/open-cut/apps/api/controller"
-	"github.com/PerishCode/open-cut/apps/api/model"
 	"github.com/PerishCode/open-cut/apps/api/repository"
 	"github.com/PerishCode/open-cut/apps/api/service"
+	"github.com/PerishCode/open-cut/product/application"
 )
 
-func TestProjectHTTPAndSSEContract(t *testing.T) {
-	projects := service.NewProjects(repository.NewMemoryProjects())
-	mux, _ := controller.NewRouter(service.NewHealth(repository.StaticHealth{}), projects)
+func TestProjectHTTPUsesCreatorGenesisAndExactReadModels(t *testing.T) {
+	store := repository.NewMemoryProjects()
+	projects, reads, activity, runs := testProjectApplications(t, store)
+	edits, editReads := testEditingApplications(t, store)
+	media, assetReads, sourceAccess := testMediaApplications(t, store)
+	mux, _ := controller.NewRouter(
+		service.NewHealth(repository.StaticHealth{}), nil, nil, projects, reads, activity, runs, edits, editReads,
+		media, assetReads, sourceAccess, nil, nil, nil, nil, nil, creatorAuthorizer{},
+	)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/v1/events", nil)
+	createRequest, _ := http.NewRequest(
+		http.MethodPost, server.URL+"/v1/projects",
+		strings.NewReader(`{"requestId":"gesture:create-project:001","name":"Launch story"}`),
+	)
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse, err := server.Client().Do(createRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream, err := server.Client().Do(request)
-	if err != nil {
+	defer createResponse.Body.Close()
+	if createResponse.StatusCode != http.StatusOK {
+		t.Fatalf("create status=%d body=%s", createResponse.StatusCode, readBody(t, createResponse))
+	}
+	var created application.CreateProjectResult
+	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-	defer stream.Body.Close()
-	if stream.StatusCode != http.StatusOK || stream.Header.Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("stream status=%d content-type=%q", stream.StatusCode, stream.Header.Get("Content-Type"))
-	}
-	scanner := bufio.NewScanner(stream.Body)
-	snapshotEvent, snapshotData := readSSE(t, scanner)
-	if snapshotEvent != "project.snapshot" {
-		t.Fatalf("snapshot event=%q data=%s", snapshotEvent, snapshotData)
-	}
-	var snapshot model.ProjectSnapshot
-	if err := json.Unmarshal([]byte(snapshotData), &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.Revision != 0 || len(snapshot.Projects) != 0 {
-		t.Fatalf("snapshot=%+v", snapshot)
-	}
-
-	body := strings.NewReader(`{"name":"Day 0","description":"Cold-start project"}`)
-	putRequest, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/projects/project-1", body)
-	putRequest.Header.Set("Content-Type", "application/json")
-	putResponse, err := server.Client().Do(putRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer putResponse.Body.Close()
-	if putResponse.StatusCode != http.StatusOK {
-		t.Fatalf("put status=%d", putResponse.StatusCode)
-	}
-	var written model.ProjectUpserted
-	if err := json.NewDecoder(putResponse.Body).Decode(&written); err != nil {
-		t.Fatal(err)
-	}
-	if written.Revision != 1 || written.Project.ID != "project-1" {
-		t.Fatalf("written=%+v", written)
-	}
-
-	upsertEvent, upsertData := readSSE(t, scanner)
-	if upsertEvent != "project.upserted" {
-		t.Fatalf("upsert event=%q data=%s", upsertEvent, upsertData)
-	}
-	var upserted model.ProjectUpserted
-	if err := json.Unmarshal([]byte(upsertData), &upserted); err != nil {
-		t.Fatal(err)
-	}
-	if upserted != written {
-		t.Fatalf("event=%+v response=%+v", upserted, written)
+	if created.Project.Project.Revision.String() != "1" || created.Project.ActivityCursor.String() != "1" ||
+		len(created.Project.Tracks) != 3 || created.Project.Format.CanvasWidth != 1920 {
+		t.Fatalf("created=%+v", created)
 	}
 
 	listResponse, err := server.Client().Get(server.URL + "/v1/projects")
@@ -82,30 +52,51 @@ func TestProjectHTTPAndSSEContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listResponse.Body.Close()
-	var listed model.ProjectSnapshot
+	var listed application.ListProjectsResult
 	if err := json.NewDecoder(listResponse.Body).Decode(&listed); err != nil {
 		t.Fatal(err)
 	}
-	if listed.Revision != 1 || len(listed.Projects) != 1 || listed.Projects[0] != written.Project {
+	if len(listed.Projects) != 1 || listed.Projects[0].ID != created.Project.Project.ID || listed.ActivityCursor.String() != "1" {
 		t.Fatalf("listed=%+v", listed)
+	}
+
+	showResponse, err := server.Client().Get(server.URL + "/v1/projects/" + created.Project.Project.ID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer showResponse.Body.Close()
+	var shown application.ProjectOverview
+	if err := json.NewDecoder(showResponse.Body).Decode(&shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown.Project.ID != created.Project.Project.ID || shown.ActivityCursor.String() != "1" {
+		t.Fatalf("shown=%+v", shown)
 	}
 }
 
-func readSSE(t *testing.T, scanner *bufio.Scanner) (string, string) {
-	t.Helper()
-	event, data := "", ""
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			return event, data
-		}
-		if strings.HasPrefix(line, "event: ") {
-			event = strings.TrimPrefix(line, "event: ")
-		}
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-		}
+func TestProjectRoutesFailClosedWithoutAuthority(t *testing.T) {
+	store := repository.NewMemoryProjects()
+	projects, reads, activity, runs := testProjectApplications(t, store)
+	edits, editReads := testEditingApplications(t, store)
+	media, assetReads, sourceAccess := testMediaApplications(t, store)
+	mux, _ := controller.NewRouter(
+		service.NewHealth(repository.StaticHealth{}), nil, nil, projects, reads, activity, runs, edits, editReads,
+		media, assetReads, sourceAccess, nil, nil, nil, nil, nil, service.RejectAuthorizer{},
+	)
+	request := httptest.NewRequest(http.MethodGet, "/v1/projects", nil)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	t.Fatalf("SSE stream ended: %v", scanner.Err())
-	return "", ""
+}
+
+func readBody(t *testing.T, response *http.Response) string {
+	t.Helper()
+	var body any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		return err.Error()
+	}
+	encoded, _ := json.Marshal(body)
+	return string(encoded)
 }
