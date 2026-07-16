@@ -92,7 +92,7 @@ func qualifyModifiedRendererRelink(
 	}
 	output := filepath.Join(qualificationRoot, buildTarget.ExecutableName("open-cut-render-modified-relink"))
 	if err := buildRendererFromRelinkKit(
-		ctx, goTool, sourceRoot, modifiedNative, output, stdout, stderr,
+		ctx, goTool, sourceRoot, modifiedNative, output, buildTarget, stdout, stderr,
 	); err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
 	}

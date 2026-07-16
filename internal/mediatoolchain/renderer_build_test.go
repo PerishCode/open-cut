@@ -32,6 +32,23 @@ func TestRendererBuildNormalizationRemovesPhysicalRoots(t *testing.T) {
 	}
 }
 
+func TestWindowsRendererLinksToolchainRuntimeStatically(t *testing.T) {
+	flags := rendererNativeLinkFlags(`C:\native`, target.Target{Platform: target.Win, Arch: target.X64})
+	if !reflect.DeepEqual(flags, []string{`-LC:\native/lib`, "-static"}) {
+		t.Fatalf("flags=%v", flags)
+	}
+	for _, library := range []string{
+		"libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll",
+	} {
+		if reason := forbiddenRendererDynamicLibrary(library); reason != "unshipped MinGW runtime library" {
+			t.Fatalf("library=%s reason=%q", library, reason)
+		}
+	}
+	if reason := forbiddenRendererDynamicLibrary("KERNEL32.dll"); reason != "" {
+		t.Fatalf("system library reason=%q", reason)
+	}
+}
+
 func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
 	fontRoot := os.Getenv("OPEN_CUT_NATIVE_TEXT_FONT_ROOT")
 	if fontRoot == "" {

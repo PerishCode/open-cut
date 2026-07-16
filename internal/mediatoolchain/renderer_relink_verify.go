@@ -90,7 +90,7 @@ func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 	}
 	baseline := filepath.Join(root, verified.Manifest.Target.ExecutableName("open-cut-render-baseline-check"))
 	if err := buildRendererFromRelinkKit(
-		ctx, goTool, sourceRoot, nativeRoot, baseline, io.Discard, io.Discard,
+		ctx, goTool, sourceRoot, nativeRoot, baseline, verified.Manifest.Target, io.Discard, io.Discard,
 	); err != nil {
 		return err
 	}
