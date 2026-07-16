@@ -140,6 +140,8 @@ func buildFreeType(
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
+	shellCompiler := shellBuildPath(compiler)
+	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
 		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--enable-pic",
 		"--disable-freetype-config", "--with-zlib=no", "--with-bzip2=no", "--with-png=no",
@@ -148,7 +150,7 @@ func buildFreeType(
 		"--without-quickdraw-carbon", "--without-ats",
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC": shellCompiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + shellSourceRoot + "=.",
 	})
 	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
@@ -169,12 +171,14 @@ func buildFriBidi(
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
+	shellCompiler := shellBuildPath(compiler)
+	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
 		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--with-pic",
 		"--disable-dependency-tracking", "--disable-debug", "--disable-deprecated",
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC": shellCompiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + shellSourceRoot + "=.",
 	})
 	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {

@@ -192,7 +192,9 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err != nil {
 		return BuildResult{}, err
 	}
-	configuration := buildConfiguration(compiler, buildRoot, dependencyRoot)
+	configuration := buildConfiguration(
+		shellBuildPath(compiler), shellBuildPath(buildRoot), shellBuildPath(dependencyRoot),
+	)
 	if !validLGPLConfiguration(configuration) {
 		return BuildResult{}, fmt.Errorf("generated media configuration violates the LGPL-only profile")
 	}
@@ -430,8 +432,11 @@ func normalizeBuildConfiguration(
 	result := make([]string, len(configuration))
 	replacements := []struct{ actual, token string }{
 		{dependencyRoot, "$deps"},
+		{shellBuildPath(dependencyRoot), "$deps"},
 		{buildRoot, "$build"},
+		{shellBuildPath(buildRoot), "$build"},
 		{compiler, "$cc"},
+		{shellBuildPath(compiler), "$cc"},
 	}
 	for index, value := range configuration {
 		for _, replacement := range replacements {
@@ -453,7 +458,7 @@ func buildLibVPX(
 	if err != nil {
 		return nil, err
 	}
-	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": compiler})
+	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": shellBuildPath(compiler)})
 	if err := runConfigure(
 		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr,
@@ -499,7 +504,8 @@ func buildOpus(
 ) ([]string, error) {
 	configuration := opusConfiguration(sourceRoot, prefix)
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC":     shellBuildPath(compiler),
+		"CFLAGS": "-O2 -ffile-prefix-map=" + shellBuildPath(sourceRoot) + "=.",
 	})
 	if err := runConfigure(
 		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,

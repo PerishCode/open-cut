@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/PerishCode/open-cut/lifecycle"
@@ -76,6 +77,22 @@ func runConfigure(
 		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		Presentation: lifecycle.PresentationHeadless,
 	})
+}
+
+func shellBuildPath(value string) string {
+	return shellBuildPathForOS(runtime.GOOS, value)
+}
+
+func shellBuildPathForOS(goos, value string) string {
+	if goos != "windows" {
+		return value
+	}
+	normalized := strings.ReplaceAll(value, `\`, "/")
+	if len(normalized) >= 3 && normalized[1] == ':' && normalized[2] == '/' &&
+		((normalized[0] >= 'A' && normalized[0] <= 'Z') || (normalized[0] >= 'a' && normalized[0] <= 'z')) {
+		return "/" + strings.ToLower(normalized[:1]) + normalized[2:]
+	}
+	return normalized
 }
 
 func repositoryMarker(root string) bool {
