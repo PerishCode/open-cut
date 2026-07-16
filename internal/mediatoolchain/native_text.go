@@ -143,7 +143,7 @@ func buildFreeType(
 	shellCompiler := shellBuildPath(compiler)
 	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
-		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--enable-pic",
+		"--prefix=" + shellBuildPath(prefix), "--disable-shared", "--enable-static", "--enable-pic",
 		"--disable-freetype-config", "--with-zlib=no", "--with-bzip2=no", "--with-png=no",
 		"--with-harfbuzz=no", "--with-brotli=no", "--with-librsvg=no",
 		"--without-old-mac-fonts", "--without-fsspec", "--without-fsref", "--without-quickdraw-toolbox",
@@ -174,7 +174,7 @@ func buildFriBidi(
 	shellCompiler := shellBuildPath(compiler)
 	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
-		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--with-pic",
+		"--prefix=" + shellBuildPath(prefix), "--disable-shared", "--enable-static", "--with-pic",
 		"--disable-dependency-tracking", "--disable-debug", "--disable-deprecated",
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
@@ -280,6 +280,12 @@ func normalizeNativeTextConfiguration(
 		{roots["freetype"], "$freetype"}, {roots["fribidi"], "$fribidi"},
 		{roots["harfbuzz"], "$harfbuzz"}, {prefix, "$deps"},
 		{compiler, "$cc"}, {cxx, "$cxx"}, {archiver, "$ar"}, {makeTool, "$make"},
+		{shellBuildPath(roots["freetype"]), "$freetype"},
+		{shellBuildPath(roots["fribidi"]), "$fribidi"},
+		{shellBuildPath(roots["harfbuzz"]), "$harfbuzz"},
+		{shellBuildPath(prefix), "$deps"},
+		{shellBuildPath(compiler), "$cc"}, {shellBuildPath(cxx), "$cxx"},
+		{shellBuildPath(archiver), "$ar"}, {shellBuildPath(makeTool), "$make"},
 	}
 	result := make([]string, len(configuration))
 	for index, value := range configuration {

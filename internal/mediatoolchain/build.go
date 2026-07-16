@@ -454,7 +454,7 @@ func buildLibVPX(
 	buildTarget target.Target,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
-	configuration, err := libVPXConfiguration(sourceRoot, prefix, buildTarget)
+	configuration, err := libVPXConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix), buildTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +502,7 @@ func buildOpus(
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
-	configuration := opusConfiguration(sourceRoot, prefix)
+	configuration := opusConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix))
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
 		"CC":     shellBuildPath(compiler),
 		"CFLAGS": "-O2 -ffile-prefix-map=" + shellBuildPath(sourceRoot) + "=.",
