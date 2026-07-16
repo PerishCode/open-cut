@@ -50,35 +50,24 @@ func ResolveBaseDir(repositoryRoot, requested string) (string, error) {
 }
 
 func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.Writer, skipBuild bool, ready chan<- Result) error {
+	return run(ctx, repositoryRoot, baseDir, stdout, stderr, skipBuild, ready, buildWorkspace)
+}
+
+type workspaceBuilder func(context.Context, string, io.Writer) error
+
+func run(
+	ctx context.Context,
+	repositoryRoot, baseDir string,
+	stdout, stderr io.Writer,
+	skipBuild bool,
+	ready chan<- Result,
+	build workspaceBuilder,
+) error {
 	repositoryRoot, err := filepath.Abs(repositoryRoot)
 	if err != nil {
 		return err
 	}
 	baseDir, err = filepath.Abs(baseDir)
-	if err != nil {
-		return err
-	}
-	if !skipBuild {
-		pnpm, err := tool.Resolve("pnpm")
-		if err != nil {
-			return err
-		}
-		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-			Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
-			Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
-		}); err != nil {
-			return fmt.Errorf("build workspace: %w", err)
-		}
-	}
-	controlConfig, err := workspace.Load(repositoryRoot)
-	if err != nil {
-		return err
-	}
-	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
-	if err != nil {
-		return err
-	}
-	plan, err := ResolvePlan(repositoryRoot, controlConfig, topology)
 	if err != nil {
 		return err
 	}
@@ -98,6 +87,30 @@ func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.
 	if err != nil {
 		return err
 	}
+	// The broker lock is the cell reservation. Acquire it before workspace build
+	// so competing dev invocations cannot amplify CPU and memory usage.
+	cellBroker, err := broker.Start(broker.Options{Identity: identity, Paths: paths, Generation: 1})
+	if err != nil {
+		return err
+	}
+	defer cellBroker.Close()
+	if !skipBuild {
+		if err := build(ctx, repositoryRoot, stderr); err != nil {
+			return fmt.Errorf("build workspace: %w", err)
+		}
+	}
+	controlConfig, err := workspace.Load(repositoryRoot)
+	if err != nil {
+		return err
+	}
+	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
+	if err != nil {
+		return err
+	}
+	plan, err := ResolvePlan(repositoryRoot, controlConfig, topology)
+	if err != nil {
+		return err
+	}
 	installation, err := lifecycle.EnsureDevelopmentInstallationIdentity(
 		filepath.Join(commandRoot, "identity"), controlConfig.InstallationKeyRoles,
 	)
@@ -109,11 +122,6 @@ func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.
 		return fmt.Errorf("start development lifecycle signer: %w", err)
 	}
 	defer signer.Close()
-	cellBroker, err := broker.Start(broker.Options{Identity: identity, Paths: paths, Generation: 1})
-	if err != nil {
-		return err
-	}
-	defer cellBroker.Close()
 	runtimeToken, err := cellBroker.MintRuntimeToken("payload", 7*24*time.Hour)
 	if err != nil {
 		return err
@@ -140,6 +148,17 @@ func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.
 	case err := <-done:
 		return err
 	}
+}
+
+func buildWorkspace(ctx context.Context, repositoryRoot string, output io.Writer) error {
+	pnpm, err := tool.Resolve("pnpm")
+	if err != nil {
+		return err
+	}
+	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+		Stdout: output, Stderr: output, Profile: lifecycle.ProfileDevelopment,
+	})
 }
 
 // ResolvePlan adapts the language-neutral app manifests into host commands for
