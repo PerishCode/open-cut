@@ -214,7 +214,9 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, fmt.Errorf("configure FFmpeg media toolchain: %w", err)
 	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: makeTool, Args: []string{"-j", fmt.Sprint(parallelism), "ffprobe", "ffmpeg"},
+		Executable: makeTool, Args: []string{
+			"-j", fmt.Sprint(parallelism), options.Target.ExecutableName("ffprobe"), options.Target.ExecutableName("ffmpeg"),
+		},
 		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
 		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
 	}); err != nil {
