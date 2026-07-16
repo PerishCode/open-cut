@@ -78,13 +78,22 @@ func runRendererHelperSmoke(
 	}
 	executionContext, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	var diagnostic rendererBoundedBuffer
+	diagnostic.limit = 64 << 10
 	if err := lifecycle.Run(executionContext, lifecycle.ProcessSpec{
 		Executable: executable, Args: []string{"--execution", executionPath}, Directory: attemptRoot,
-		Env: []string{"LANG=C"}, Stdin: nil, Stdout: io.Discard, Stderr: io.Discard,
+		Env: []string{"LANG=C"}, Stdin: nil, Stdout: io.Discard, Stderr: &diagnostic,
 		Profile: lifecycle.ProfilePackaged, Presentation: lifecycle.PresentationHeadless,
 		ContainProcessTree: true, TerminationGrace: 5 * time.Second,
 	}); err != nil {
-		return RendererSmokeObservation{}, fmt.Errorf("run relinked renderer smoke: %w", err)
+		detail := strings.TrimSpace(diagnostic.String())
+		if diagnostic.exceeded {
+			detail += " [diagnostic truncated]"
+		}
+		if detail == "" {
+			detail = "no diagnostic"
+		}
+		return RendererSmokeObservation{}, fmt.Errorf("run relinked renderer smoke: %w: %s", err, detail)
 	}
 	resultBytes, err := os.ReadFile(filepath.Join(attemptRoot, renderengine.ResultFilename))
 	if err != nil {

@@ -26,6 +26,12 @@ func TestWhisperConfigurationPinsPortablePublicTargetCPU(t *testing.T) {
 				"-DGGML_AVX2=OFF", "-DGGML_FMA=OFF", "-DGGML_F16C=OFF",
 			},
 		},
+		{
+			target: target.Target{Platform: target.Win, Arch: target.X64},
+			required: []string{
+				"-DGGML_NATIVE=OFF", "-DGGML_AVX=OFF", "-DCMAKE_EXE_LINKER_FLAGS=-static",
+			},
+		},
 	} {
 		configuration, err := whisperConfiguration(fixture.target, "$whisper", "$cc", "$cxx")
 		if err != nil || !validWhisperConfiguration(configuration, fixture.target) {

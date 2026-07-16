@@ -193,7 +193,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 	configuration := buildConfiguration(
-		shellBuildPath(compiler), shellBuildPath(buildRoot), shellBuildPath(dependencyRoot),
+		shellBuildPath(compiler), shellBuildPath(buildRoot), shellBuildPath(dependencyRoot), options.Target,
 	)
 	if !validLGPLConfiguration(configuration) {
 		return BuildResult{}, fmt.Errorf("generated media configuration violates the LGPL-only profile")
@@ -230,11 +230,21 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if info, statErr := os.Stat(builtFrameDecoder); statErr != nil || !info.Mode().IsRegular() {
 		return BuildResult{}, fmt.Errorf("FFmpeg build did not produce ffmpeg")
 	}
+	for _, current := range []struct{ name, path string }{
+		{"ffprobe", builtProbe}, {"ffmpeg", builtFrameDecoder},
+	} {
+		if err := verifyPackagedExecutableDynamicClosure(current.path); err != nil {
+			return BuildResult{}, fmt.Errorf("verify %s runtime closure: %w", current.name, err)
+		}
+	}
 	builtWhisper, recordedWhisperConfiguration, err := buildWhisperCLI(
 		ctx, whisperRoot, buildRoot, cmake, compiler, cxx, parallelism, options.Target, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
+	}
+	if err := verifyPackagedExecutableDynamicClosure(builtWhisper); err != nil {
+		return BuildResult{}, fmt.Errorf("verify whisper-cli runtime closure: %w", err)
 	}
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
@@ -403,23 +413,6 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		Transcriber: transcriber.Path, TranscriberSHA256: transcriber.SHA256,
 		SourceSHA256: sourceDigests(manifest.Sources), RecipeSHA256: manifest.Build.RecipeSHA256,
 	}, nil
-}
-
-func buildConfiguration(compiler, buildRoot, dependencyRoot string) []string {
-	return []string{
-		"--disable-gpl", "--disable-nonfree", "--disable-version3", "--disable-network",
-		"--disable-protocols", "--enable-protocol=file,pipe,fd", "--disable-demuxer=hls,concat,image2",
-		"--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-ffmpeg", "--disable-ffplay",
-		"--enable-ffprobe", "--disable-avdevice", "--enable-libvpx", "--enable-libopus",
-		"--pkg-config-flags=--static",
-		"--disable-encoders", "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus",
-		"--disable-muxers", "--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska", "--disable-filters",
-		"--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat",
-		"--enable-swscale", "--enable-swresample",
-		"--disable-asm", "--disable-stripping", "--cc=" + compiler,
-		"--extra-cflags=-I" + filepath.Join(dependencyRoot, "include") + " -ffile-prefix-map=" + buildRoot + "=.",
-		"--extra-ldflags=-L" + filepath.Join(dependencyRoot, "lib"),
-	}
 }
 
 func normalizeBuildConfiguration(

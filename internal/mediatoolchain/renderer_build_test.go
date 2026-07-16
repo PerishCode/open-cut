@@ -40,11 +40,11 @@ func TestWindowsRendererLinksToolchainRuntimeStatically(t *testing.T) {
 	for _, library := range []string{
 		"libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll",
 	} {
-		if reason := forbiddenRendererDynamicLibrary(library); reason != "unshipped MinGW runtime library" {
+		if reason := forbiddenPackagedDynamicLibrary(library); reason != "unshipped MinGW runtime library" {
 			t.Fatalf("library=%s reason=%q", library, reason)
 		}
 	}
-	if reason := forbiddenRendererDynamicLibrary("KERNEL32.dll"); reason != "" {
+	if reason := forbiddenPackagedDynamicLibrary("KERNEL32.dll"); reason != "" {
 		t.Fatalf("system library reason=%q", reason)
 	}
 }

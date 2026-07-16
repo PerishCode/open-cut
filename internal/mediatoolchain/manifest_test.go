@@ -374,6 +374,22 @@ func TestBuildConfigurationNormalizationRemovesEphemeralPaths(t *testing.T) {
 	}
 }
 
+func TestWindowsFFmpegConfigurationLinksToolchainRuntimeStatically(t *testing.T) {
+	windows := buildConfiguration(
+		"$cc", "$build", "$deps", target.Target{Platform: target.Win, Arch: target.X64},
+	)
+	if !validLGPLConfiguration(windows) ||
+		!slices.Contains(windows, "--extra-ldflags=-L$deps/lib -static") {
+		t.Fatalf("windows configuration=%q", windows)
+	}
+	mac := buildConfiguration(
+		"$cc", "$build", "$deps", target.Target{Platform: target.Mac, Arch: target.ARM64},
+	)
+	if slices.Contains(mac, "--extra-ldflags=-L$deps/lib -static") {
+		t.Fatalf("mac configuration=%q", mac)
+	}
+}
+
 func TestLibVPXConfigurationPinsBaselineCPUFeatures(t *testing.T) {
 	for _, fixture := range []struct {
 		buildTarget target.Target

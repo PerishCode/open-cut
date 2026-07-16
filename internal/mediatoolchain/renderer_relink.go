@@ -422,7 +422,7 @@ func buildRendererFromRelinkKit(
 	}); err != nil {
 		return fmt.Errorf("build renderer from relink kit: %w", err)
 	}
-	return verifyRendererDynamicClosure(output)
+	return verifyPackagedExecutableDynamicClosure(output)
 }
 
 func rendererKitSourceClosure(root string) ([]RendererSourceFile, string, error) {

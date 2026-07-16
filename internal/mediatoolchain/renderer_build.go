@@ -95,7 +95,7 @@ func buildRendererHelper(
 		}); err != nil {
 			return RendererHelperBuild{}, fmt.Errorf("build pinned renderer helper: %w", err)
 		}
-		if err := verifyRendererDynamicClosure(output); err != nil {
+		if err := verifyPackagedExecutableDynamicClosure(output); err != nil {
 			return RendererHelperBuild{}, err
 		}
 		digest, size, err := digestFile(output)
@@ -194,20 +194,20 @@ func normalizeRendererBuildValues(values []string, replacements map[string]strin
 	return result
 }
 
-func verifyRendererDynamicClosure(filename string) error {
+func verifyPackagedExecutableDynamicClosure(filename string) error {
 	libraries, err := rendererImportedLibraries(filename)
 	if err != nil {
-		return fmt.Errorf("inspect renderer dynamic closure: %w", err)
+		return fmt.Errorf("inspect executable dynamic closure: %w", err)
 	}
 	for _, library := range libraries {
-		if reason := forbiddenRendererDynamicLibrary(library); reason != "" {
-			return fmt.Errorf("renderer dynamically links %s %s", reason, library)
+		if reason := forbiddenPackagedDynamicLibrary(library); reason != "" {
+			return fmt.Errorf("packaged executable dynamically links %s %s", reason, library)
 		}
 	}
 	return nil
 }
 
-func forbiddenRendererDynamicLibrary(library string) string {
+func forbiddenPackagedDynamicLibrary(library string) string {
 	lower := strings.ToLower(filepath.Base(filepath.ToSlash(library)))
 	if strings.Contains(lower, "harfbuzz") || strings.Contains(lower, "fribidi") ||
 		strings.Contains(lower, "freetype") {
