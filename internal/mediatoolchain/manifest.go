@@ -645,6 +645,7 @@ func validLGPLConfiguration(configuration []string) bool {
 		!slices.Contains(configuration, "--disable-demuxer=hls,concat,image2") ||
 		!slices.Contains(configuration, "--enable-libvpx") ||
 		!slices.Contains(configuration, "--enable-libopus") ||
+		!slices.Contains(configuration, "--pkg-config-flags=--static") ||
 		!slices.Contains(configuration, "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus") ||
 		!slices.Contains(configuration, "--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska") ||
 		!slices.Contains(configuration, "--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat") ||

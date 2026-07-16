@@ -410,6 +410,7 @@ func buildConfiguration(compiler, buildRoot, dependencyRoot string) []string {
 		"--disable-protocols", "--enable-protocol=file,pipe,fd", "--disable-demuxer=hls,concat,image2",
 		"--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-ffmpeg", "--disable-ffplay",
 		"--enable-ffprobe", "--disable-avdevice", "--enable-libvpx", "--enable-libopus",
+		"--pkg-config-flags=--static",
 		"--disable-encoders", "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus",
 		"--disable-muxers", "--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska", "--disable-filters",
 		"--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat",

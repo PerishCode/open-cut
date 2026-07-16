@@ -339,6 +339,7 @@ func fixtureConfiguration() []string {
 		"--disable-gpl", "--disable-nonfree", "--disable-version3", "--disable-network",
 		"--disable-protocols", "--enable-protocol=file,pipe,fd", "--disable-demuxer=hls,concat,image2",
 		"--enable-libvpx", "--enable-libopus", "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus",
+		"--pkg-config-flags=--static",
 		"--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska",
 		"--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat",
 		"--enable-swresample", "--cc=$cc", "--extra-cflags=-I$deps/include",
