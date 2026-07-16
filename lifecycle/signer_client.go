@@ -24,7 +24,7 @@ func RequestSignature(ctx context.Context, role string, payload []byte) (SignerR
 	var response SignerResponse
 	var err error
 	if socket := os.Getenv(SignerSocketEnvironment); socket != "" {
-		response, err = requestUnixSignature(ctx, socket, request)
+		response, err = requestSocketSignature(ctx, socket, request)
 	} else if host := os.Getenv(PlatformHostEnvironment); host != "" {
 		response, err = requestPlatformSignature(ctx, host, request)
 	} else {
@@ -44,14 +44,14 @@ func RequestSignature(ctx context.Context, role string, payload []byte) (SignerR
 	return response, nil
 }
 
-func requestUnixSignature(
+func requestSocketSignature(
 	ctx context.Context,
 	socket string,
 	request SignerRequest,
 ) (SignerResponse, error) {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", socket)
+			return dialDevelopmentSigner(ctx, socket)
 		},
 	}
 	defer transport.CloseIdleConnections()

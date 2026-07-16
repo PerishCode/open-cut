@@ -31,19 +31,16 @@ func TestDevelopmentSignerKeepsPrivateKeysBehindRestrictedSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer signer.Close()
-	info, err := os.Stat(socket)
-	if err != nil || info.Mode().Perm() != 0o600 || info.Mode()&os.ModeSocket == 0 {
-		t.Fatalf("socket info=%+v err=%v", info, err)
-	}
+	assertDevelopmentSignerEndpoint(t, socket, signer.Socket())
 	payload := []byte("single-use API challenge")
 	encoded, _ := json.Marshal(SignerRequest{
 		Schema: SignerRequestSchema, Role: "first-party-ui",
 		Payload: base64.RawURLEncoding.EncodeToString(payload),
 	})
 	client := &http.Client{Transport: &http.Transport{DialContext: func(
-		_ context.Context, _, _ string,
+		ctx context.Context, _, _ string,
 	) (net.Conn, error) {
-		return net.Dial("unix", socket)
+		return dialDevelopmentSigner(ctx, signer.Socket())
 	}}}
 	response, err := client.Post("http://lifecycle"+SignerPath, "application/json", bytes.NewReader(encoded))
 	if err != nil {

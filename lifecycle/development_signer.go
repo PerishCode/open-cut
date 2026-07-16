@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -35,35 +34,18 @@ type SignerResponse struct {
 }
 
 type DevelopmentSigner struct {
-	socket   string
+	endpoint string
 	server   *http.Server
 	listener net.Listener
+	cleanup  func() error
 }
 
 func StartDevelopmentSigner(socket string, identity DevelopmentInstallationIdentity) (*DevelopmentSigner, error) {
 	if socket == "" || !filepath.IsAbs(socket) || filepath.Clean(socket) != socket {
 		return nil, fmt.Errorf("development signer socket must be a clean absolute path")
 	}
-	if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
-		return nil, err
-	}
-	if info, err := os.Lstat(socket); err == nil {
-		if info.Mode()&os.ModeSocket == 0 {
-			return nil, fmt.Errorf("development signer path exists and is not a socket")
-		}
-		if err := os.Remove(socket); err != nil {
-			return nil, err
-		}
-	} else if !os.IsNotExist(err) {
-		return nil, err
-	}
-	listener, err := net.Listen("unix", socket)
+	endpoint, listener, cleanup, err := listenDevelopmentSigner(socket)
 	if err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(socket, 0o600); err != nil {
-		listener.Close()
-		os.Remove(socket)
 		return nil, err
 	}
 	assertion := identity.Assertion()
@@ -101,7 +83,7 @@ func StartDevelopmentSigner(socket string, identity DevelopmentInstallationIdent
 		})
 	})
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 2 * time.Second}
-	signer := &DevelopmentSigner{socket: socket, server: server, listener: listener}
+	signer := &DevelopmentSigner{endpoint: endpoint, server: server, listener: listener, cleanup: cleanup}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			_ = listener.Close()
@@ -111,7 +93,7 @@ func StartDevelopmentSigner(socket string, identity DevelopmentInstallationIdent
 }
 
 func (signer *DevelopmentSigner) Socket() string {
-	return signer.socket
+	return signer.endpoint
 }
 
 func (signer *DevelopmentSigner) Close() error {
@@ -119,9 +101,9 @@ func (signer *DevelopmentSigner) Close() error {
 	defer cancel()
 	shutdownErr := signer.server.Shutdown(ctx)
 	listenerErr := signer.listener.Close()
-	removeErr := os.Remove(signer.socket)
-	if os.IsNotExist(removeErr) {
-		removeErr = nil
+	var cleanupErr error
+	if signer.cleanup != nil {
+		cleanupErr = signer.cleanup()
 	}
-	return errors.Join(shutdownErr, listenerErr, removeErr)
+	return errors.Join(shutdownErr, listenerErr, cleanupErr)
 }
