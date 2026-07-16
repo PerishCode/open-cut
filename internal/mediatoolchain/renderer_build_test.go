@@ -15,13 +15,13 @@ import (
 
 func TestRendererBuildNormalizationRemovesPhysicalRoots(t *testing.T) {
 	values := []string{
-		"-I/work/dependencies/include", "-ffile-prefix-map=/work/repository=.",
+		"-I/work/dependencies/include", "-ffile-prefix-map=/work/repository=.", `-IC:\native\include`,
 	}
 	normalized := normalizeRendererBuildValues(values, map[string]string{
-		"/work/repository": "$source", "/work/dependencies": "$native",
+		"/work/repository": "$source", "/work/dependencies": "$native", `C:\native`: "$native",
 	})
 	if !reflect.DeepEqual(normalized, []string{
-		"-I$native/include", "-ffile-prefix-map=$source=.",
+		"-I$native/include", "-ffile-prefix-map=$source=.", "-I$native/include",
 	}) {
 		t.Fatalf("normalized=%v", normalized)
 	}
@@ -29,6 +29,21 @@ func TestRendererBuildNormalizationRemovesPhysicalRoots(t *testing.T) {
 		if strings.Contains(value, "/work/") {
 			t.Fatalf("physical root survived: %q", value)
 		}
+	}
+}
+
+func TestRendererBuildRecordPinsTargetRuntimeClosure(t *testing.T) {
+	record := fixtureRendererBuildRecord()
+	record.LDFlags = []string{"-L$native/lib", "-static"}
+	if err := validateRendererBuildRecord(
+		record, target.Target{Platform: target.Win, Arch: target.X64},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRendererBuildRecord(
+		record, target.Target{Platform: target.Mac, Arch: target.ARM64},
+	); err == nil {
+		t.Fatal("Windows static renderer flags were accepted for macOS")
 	}
 }
 
@@ -133,7 +148,7 @@ func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	notice, err := stageRendererRelinkArchive(archiveStage, kit, record)
+	notice, err := stageRendererRelinkArchive(archiveStage, kit, record, target.Host())
 	if err != nil {
 		t.Fatal(err)
 	}

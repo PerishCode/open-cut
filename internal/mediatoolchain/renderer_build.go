@@ -189,7 +189,7 @@ func normalizeRendererBuildValues(values []string, replacements map[string]strin
 		for _, actual := range keys {
 			value = strings.ReplaceAll(value, actual, replacements[actual])
 		}
-		result[index] = value
+		result[index] = strings.ReplaceAll(value, `\`, "/")
 	}
 	return result
 }

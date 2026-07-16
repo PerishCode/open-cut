@@ -21,7 +21,8 @@ import (
 
 func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 	record := verified.Manifest.Build.Renderer
-	if record == nil || validateRendererBuildRecord(record) != nil || verified.Manifest.Target != target.Host() {
+	if record == nil || validateRendererBuildRecord(record, verified.Manifest.Target) != nil ||
+		verified.Manifest.Target != target.Host() {
 		return fmt.Errorf("renderer relink verification input is invalid")
 	}
 	notice := noticeRecord(verified.Manifest.Notices, record.RelinkNoticeID)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/PerishCode/open-cut/utils/target"
 )
 
 const RendererRelinkNoticeID = "open-cut-render-relink"
@@ -46,7 +48,7 @@ func newRendererBuildRecord(build RendererHelperBuild, kit RendererRelinkKit) Re
 	}
 }
 
-func validateRendererBuildRecord(record *RendererBuildRecord) error {
+func validateRendererBuildRecord(record *RendererBuildRecord, buildTarget target.Target) error {
 	expectedArguments := []string{
 		"build", "-buildvcs=false", "-trimpath", "-mod=readonly", "-tags", RendererBuildTag,
 		"-ldflags=-buildid=", "-o", "$output", RendererBuildPackage,
@@ -55,12 +57,17 @@ func validateRendererBuildRecord(record *RendererBuildRecord) error {
 		"-I$native/include/freetype2", "-I$native/include/fribidi", "-I$harfbuzz/src",
 		"-ffile-prefix-map=$source=.",
 	}
+	expectedLDFlags := []string{"-L$native/lib"}
+	if buildTarget.Platform == target.Win {
+		expectedLDFlags = append(expectedLDFlags, "-static")
+	}
 	if record == nil || record.Schema != 1 || record.ToolID != "open-cut-render" ||
+		buildTarget.Validate() != nil ||
 		record.BuildTag != RendererBuildTag || strings.TrimSpace(record.GoVersion) != record.GoVersion ||
 		record.GoVersion == "" || len(record.GoVersion) > 1024 ||
 		!reflect.DeepEqual(record.Arguments, expectedArguments) ||
 		!reflect.DeepEqual(record.CFlags, expectedCFlags) ||
-		!reflect.DeepEqual(record.LDFlags, []string{"-L$native/lib"}) ||
+		!reflect.DeepEqual(record.LDFlags, expectedLDFlags) ||
 		!validDigest(record.SourceSHA256) || record.SourceFileCount == 0 || record.SourceFileCount > 65_536 ||
 		record.RelinkNoticeID != RendererRelinkNoticeID ||
 		!validDigest(record.BaselineRelinkSHA256) || record.BaselineRelinkByteSize == 0 ||

@@ -325,7 +325,7 @@ func validateManifest(manifest Manifest, expected target.Target) error {
 		!validRecordedConfiguration(manifest.Build.Configuration) ||
 		!validWhisperConfiguration(manifest.Build.WhisperConfiguration, manifest.Target) ||
 		!validRecordedConfiguration(manifest.Build.WhisperConfiguration) ||
-		validateRendererBuildRecord(manifest.Build.Renderer) != nil {
+		validateRendererBuildRecord(manifest.Build.Renderer, manifest.Target) != nil {
 		return fmt.Errorf("media toolchain build record is invalid")
 	}
 

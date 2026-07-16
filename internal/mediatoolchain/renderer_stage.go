@@ -61,10 +61,10 @@ func buildAndStageRenderer(
 		return ToolRecord{}, NoticeRecord{}, RendererBuildRecord{}, err
 	}
 	record := newRendererBuildRecord(build, kit)
-	if err := validateRendererBuildRecord(&record); err != nil {
+	if err := validateRendererBuildRecord(&record, buildTarget); err != nil {
 		return ToolRecord{}, NoticeRecord{}, RendererBuildRecord{}, err
 	}
-	notice, err := stageRendererRelinkArchive(stageRoot, kit, record)
+	notice, err := stageRendererRelinkArchive(stageRoot, kit, record, buildTarget)
 	if err != nil {
 		return ToolRecord{}, NoticeRecord{}, RendererBuildRecord{}, err
 	}
