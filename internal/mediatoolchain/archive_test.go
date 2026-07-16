@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ulikunitz/xz"
 )
@@ -43,6 +44,28 @@ func TestPinnedArchiveTypesAndSafeXZExtraction(t *testing.T) {
 	}
 	if info, err := os.Stat(filepath.Join(root, "empty")); err != nil || info.Size() != 0 {
 		t.Fatalf("empty info=%v err=%v", info, err)
+	}
+}
+
+func TestPinnedTarPreservesRegularFileModificationTimes(t *testing.T) {
+	modified := time.Date(2024, time.September, 26, 12, 30, 0, 0, time.UTC)
+	archive := filepath.Join(t.TempDir(), "fixture.tar.xz")
+	writeXZTarFixture(t, archive, []tarFixtureEntry{
+		{name: "fixture/configure", content: []byte("#!/bin/sh\n"), mode: 0o755, modified: modified},
+		{name: "fixture/configure.ac", content: []byte("configure input\n"), mode: 0o644, modified: modified},
+	})
+	root, err := extractSource(archive, t.TempDir(), "fixture", "configure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"configure", "configure.ac"} {
+		info, err := os.Stat(filepath.Join(root, name))
+		if err != nil {
+			t.Fatalf("name=%s err=%v", name, err)
+		}
+		if !info.ModTime().Equal(modified) {
+			t.Fatalf("name=%s modified=%v", name, info.ModTime())
+		}
 	}
 }
 
@@ -134,6 +157,7 @@ type tarFixtureEntry struct {
 	directory bool
 	typeflag  byte
 	linkname  string
+	modified  time.Time
 }
 
 func writeXZTarFixture(t *testing.T, filename string, entries []tarFixtureEntry) {
@@ -154,7 +178,7 @@ func writeXZTarFixture(t *testing.T, filename string, entries []tarFixtureEntry)
 		}
 		header := &tar.Header{
 			Name: entry.name, Mode: entry.mode, Size: int64(len(entry.content)), Typeflag: typeflag,
-			Linkname: entry.linkname,
+			Linkname: entry.linkname, ModTime: entry.modified,
 		}
 		if err := tarWriter.WriteHeader(header); err != nil {
 			t.Fatal(err)
