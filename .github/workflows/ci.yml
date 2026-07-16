@@ -34,6 +34,10 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
+      - name: Install Linux media build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nasm
       - name: Build control CLI from checkout
         run: |
           mkdir -p .tmp/ci
@@ -93,6 +97,16 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
+      - name: Install Linux media build prerequisites
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nasm
+      - name: Install Windows media build prerequisites
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: choco install nasm --yes --no-progress
       - name: Build control CLI from checkout
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control

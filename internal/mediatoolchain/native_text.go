@@ -101,7 +101,7 @@ func extractNativeTextSources(archives map[string]string, destination string) (m
 func buildStaticNativeTextDependencies(
 	ctx context.Context,
 	roots map[string]string,
-	prefix, compiler, cxx, archiver, makeTool string,
+	prefix, compiler, cxx, archiver, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) (NativeTextBuildRecipe, error) {
@@ -110,13 +110,13 @@ func buildStaticNativeTextDependencies(
 		return NativeTextBuildRecipe{}, fmt.Errorf("native text build contract is invalid")
 	}
 	freeType, err := buildFreeType(
-		ctx, roots["freetype"], prefix, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, roots["freetype"], prefix, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return NativeTextBuildRecipe{}, err
 	}
 	friBidi, err := buildFriBidi(
-		ctx, roots["fribidi"], prefix, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, roots["fribidi"], prefix, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return NativeTextBuildRecipe{}, err
@@ -136,7 +136,7 @@ func buildStaticNativeTextDependencies(
 
 func buildFreeType(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
@@ -150,7 +150,7 @@ func buildFreeType(
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
 		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
 	})
-	if err := runNativeTextProcess(ctx, filepath.Join(sourceRoot, "configure"), configuration,
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return nil, fmt.Errorf("configure pinned FreeType: %w", err)
 	}
@@ -165,7 +165,7 @@ func buildFreeType(
 
 func buildFriBidi(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
@@ -176,7 +176,7 @@ func buildFriBidi(
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
 		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
 	})
-	if err := runNativeTextProcess(ctx, filepath.Join(sourceRoot, "configure"), configuration,
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return nil, fmt.Errorf("configure pinned FriBidi: %w", err)
 	}

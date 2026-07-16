@@ -3,10 +3,13 @@ package mediatoolchain
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/PerishCode/open-cut/lifecycle"
 )
 
 func inspectCompiler(ctx context.Context, compiler string) (string, error) {
@@ -58,6 +61,21 @@ func inspectBuildTools(
 	}
 	parts = append(parts, fmt.Sprintf("AR:\n%s bytes:%d", archiverDigest, archiverSize))
 	return strings.Join(parts, "\n"), nil
+}
+
+func runConfigure(
+	ctx context.Context,
+	shell, script string,
+	arguments []string,
+	directory string,
+	env []string,
+	stdout, stderr io.Writer,
+) error {
+	return lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: shell, Args: append([]string{script}, arguments...), Directory: directory, Env: env,
+		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
+		Presentation: lifecycle.PresentationHeadless,
+	})
 }
 
 func repositoryMarker(root string) bool {

@@ -174,20 +174,20 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		parallelism = 16
 	}
 	nativeTextRecipe, err := buildStaticNativeTextDependencies(
-		ctx, nativeTextRoots, dependencyRoot, compiler, cxx, archiver, makeTool,
+		ctx, nativeTextRoots, dependencyRoot, compiler, cxx, archiver, shell, makeTool,
 		parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
 	}
 	libvpxConfiguration, err := buildLibVPX(
-		ctx, libvpxRoot, dependencyRoot, compiler, makeTool, parallelism, options.Target, stdout, stderr,
+		ctx, libvpxRoot, dependencyRoot, compiler, shell, makeTool, parallelism, options.Target, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
 	}
 	opusConfiguration, err := buildOpus(
-		ctx, opusRoot, dependencyRoot, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, opusRoot, dependencyRoot, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
@@ -443,7 +443,7 @@ func normalizeBuildConfiguration(
 
 func buildLibVPX(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	buildTarget target.Target,
 	stdout, stderr io.Writer,
@@ -453,11 +453,10 @@ func buildLibVPX(
 		return nil, err
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": compiler})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: filepath.Join(sourceRoot, "configure"), Args: configuration,
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	if err := runConfigure(
+		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr,
+	); err != nil {
 		return nil, fmt.Errorf("configure pinned libvpx: %w", err)
 	}
 	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {
@@ -493,7 +492,7 @@ func libVPXTarget(buildTarget target.Target) (string, error) {
 
 func buildOpus(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
@@ -501,11 +500,10 @@ func buildOpus(
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
 		"CC": compiler, "CFLAGS": "-O2 -ffile-prefix-map=" + sourceRoot + "=.",
 	})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: filepath.Join(sourceRoot, "configure"), Args: configuration,
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	if err := runConfigure(
+		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr,
+	); err != nil {
 		return nil, fmt.Errorf("configure pinned libopus: %w", err)
 	}
 	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {

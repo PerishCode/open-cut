@@ -45,6 +45,7 @@ func TestPinnedNativeTextArchivesBuildStaticClosure(t *testing.T) {
 	compiler := mustResolveNativeTool(t, "cc")
 	cxx := mustResolveNativeTool(t, "c++")
 	archiver := mustResolveNativeTool(t, "ar")
+	shell := mustResolveNativeTool(t, "sh")
 	makeTool := mustResolveNativeTool(t, "make")
 	if identity, err := inspectBuildTools(context.Background(), compiler, cxx, archiver, makeTool); err != nil || identity == "" {
 		t.Fatalf("build tool identity=%q err=%v", identity, err)
@@ -52,7 +53,7 @@ func TestPinnedNativeTextArchivesBuildStaticClosure(t *testing.T) {
 	parallelism := min(runtime.NumCPU(), 8)
 	recipe, err := buildStaticNativeTextDependencies(
 		context.Background(), roots, filepath.Join(buildRoot, "deps"),
-		compiler, cxx, archiver, makeTool, parallelism, io.Discard, io.Discard,
+		compiler, cxx, archiver, shell, makeTool, parallelism, io.Discard, io.Discard,
 	)
 	if err != nil {
 		t.Fatal(err)
