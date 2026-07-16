@@ -58,6 +58,10 @@ func qualifyModifiedRendererRelink(
 	if err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
 	}
+	shell, err := tool.Resolve("sh")
+	if err != nil {
+		return "", 0, "", RendererSmokeObservation{}, err
+	}
 	makeTool, err := tool.Resolve("make")
 	if err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
@@ -70,7 +74,7 @@ func qualifyModifiedRendererRelink(
 		parallelism = 16
 	}
 	if _, err := buildFriBidi(
-		ctx, modifiedSource, modifiedNative, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, modifiedSource, modifiedNative, compiler, shell, makeTool, parallelism, stdout, stderr,
 	); err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
 	}
@@ -88,7 +92,7 @@ func qualifyModifiedRendererRelink(
 	}
 	output := filepath.Join(qualificationRoot, buildTarget.ExecutableName("open-cut-render-modified-relink"))
 	if err := buildRendererFromRelinkKit(
-		ctx, goTool, sourceRoot, modifiedNative, output, stdout, stderr,
+		ctx, goTool, sourceRoot, modifiedNative, output, buildTarget, stdout, stderr,
 	); err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
 	}

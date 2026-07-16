@@ -101,7 +101,7 @@ func extractNativeTextSources(archives map[string]string, destination string) (m
 func buildStaticNativeTextDependencies(
 	ctx context.Context,
 	roots map[string]string,
-	prefix, compiler, cxx, archiver, makeTool string,
+	prefix, compiler, cxx, archiver, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) (NativeTextBuildRecipe, error) {
@@ -110,13 +110,13 @@ func buildStaticNativeTextDependencies(
 		return NativeTextBuildRecipe{}, fmt.Errorf("native text build contract is invalid")
 	}
 	freeType, err := buildFreeType(
-		ctx, roots["freetype"], prefix, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, roots["freetype"], prefix, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return NativeTextBuildRecipe{}, err
 	}
 	friBidi, err := buildFriBidi(
-		ctx, roots["fribidi"], prefix, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, roots["fribidi"], prefix, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return NativeTextBuildRecipe{}, err
@@ -136,21 +136,23 @@ func buildStaticNativeTextDependencies(
 
 func buildFreeType(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
+	shellCompiler := shellBuildPath(compiler)
+	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
-		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--enable-pic",
+		"--prefix=" + shellBuildPath(prefix), "--disable-shared", "--enable-static", "--enable-pic",
 		"--disable-freetype-config", "--with-zlib=no", "--with-bzip2=no", "--with-png=no",
 		"--with-harfbuzz=no", "--with-brotli=no", "--with-librsvg=no",
 		"--without-old-mac-fonts", "--without-fsspec", "--without-fsref", "--without-quickdraw-toolbox",
 		"--without-quickdraw-carbon", "--without-ats",
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC": shellCompiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + shellSourceRoot + "=.",
 	})
-	if err := runNativeTextProcess(ctx, filepath.Join(sourceRoot, "configure"), configuration,
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return nil, fmt.Errorf("configure pinned FreeType: %w", err)
 	}
@@ -165,18 +167,20 @@ func buildFreeType(
 
 func buildFriBidi(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
+	shellCompiler := shellBuildPath(compiler)
+	shellSourceRoot := shellBuildPath(sourceRoot)
 	configuration := []string{
-		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--with-pic",
+		"--prefix=" + shellBuildPath(prefix), "--disable-shared", "--enable-static", "--with-pic",
 		"--disable-dependency-tracking", "--disable-debug", "--disable-deprecated",
 	}
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC": shellCompiler, "CFLAGS": "-O2 -fPIC -ffile-prefix-map=" + shellSourceRoot + "=.",
 	})
-	if err := runNativeTextProcess(ctx, filepath.Join(sourceRoot, "configure"), configuration,
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
 		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return nil, fmt.Errorf("configure pinned FriBidi: %w", err)
 	}
@@ -276,6 +280,12 @@ func normalizeNativeTextConfiguration(
 		{roots["freetype"], "$freetype"}, {roots["fribidi"], "$fribidi"},
 		{roots["harfbuzz"], "$harfbuzz"}, {prefix, "$deps"},
 		{compiler, "$cc"}, {cxx, "$cxx"}, {archiver, "$ar"}, {makeTool, "$make"},
+		{shellBuildPath(roots["freetype"]), "$freetype"},
+		{shellBuildPath(roots["fribidi"]), "$fribidi"},
+		{shellBuildPath(roots["harfbuzz"]), "$harfbuzz"},
+		{shellBuildPath(prefix), "$deps"},
+		{shellBuildPath(compiler), "$cc"}, {shellBuildPath(cxx), "$cxx"},
+		{shellBuildPath(archiver), "$ar"}, {shellBuildPath(makeTool), "$make"},
 	}
 	result := make([]string, len(configuration))
 	for index, value := range configuration {

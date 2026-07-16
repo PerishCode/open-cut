@@ -34,6 +34,10 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
+      - name: Install Linux media build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nasm
       - name: Build control CLI from checkout
         run: |
           mkdir -p .tmp/ci
@@ -93,6 +97,24 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
+      - name: Install Linux media build prerequisites
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nasm
+      - name: Configure Windows media build toolchain
+        if: matrix.platform == 'win'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: >-
+            make
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-pkgconf
       - name: Build control CLI from checkout
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
@@ -100,7 +122,27 @@ jobs:
         shell: bash
         run: ${{ matrix.control }} bootstrap --repo .
       - name: Pack, publish, and verify native full pack
+        if: matrix.platform != 'win'
         shell: bash
+        env:
+          CONTROL: ${{ matrix.control }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          TARGET: ${{ matrix.target }}
+          VERSION: 0.1.0-ci.1
+        run: |
+          set -euo pipefail
+          bundle="dist/open-cut-${VERSION}-${TARGET}.release-bundle.tar.zst"
+          "$CONTROL" doctor
+          "$CONTROL" release keygen --output .tmp/ci/key.json --id ci
+          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$bundle"
+          "$CONTROL" release create --bundle "$bundle" --origin .tmp/ci/origin --key .tmp/ci/key.json
+          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$bundle"
+          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --origin .tmp/ci/origin --channel ci --key .tmp/ci/key.json
+          "$CONTROL" harness full-pack --bundle "$bundle" --workspace .tmp/ci/full-pack
+      - name: Pack, publish, and verify native full pack on Windows
+        if: matrix.platform == 'win'
+        shell: msys2 {0}
         env:
           CONTROL: ${{ matrix.control }}
           PLATFORM: ${{ matrix.platform }}

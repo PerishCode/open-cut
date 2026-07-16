@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "go build -trimpath -o dist/sidecar/api-sidecar.exe ./sidecar && dist/sidecar/api-sidecar.exe media-tools build",
+    "build": "node sidecar/build.ts",
     "format": "biome check --write package.json sidecar",
     "lint": "biome check package.json sidecar",
     "test": "go test ./tests"

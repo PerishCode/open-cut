@@ -120,6 +120,11 @@ func extractSourceIgnoringLinks(
 			if err := writeArchiveFile(targetPath, mode, tarReader, header.Size); err != nil {
 				return "", err
 			}
+			if !header.ModTime.IsZero() {
+				if err := os.Chtimes(targetPath, header.ModTime, header.ModTime); err != nil {
+					return "", fmt.Errorf("restore pinned source entry time: %w", err)
+				}
+			}
 		case tar.TypeSymlink, tar.TypeLink:
 			target, allowed := ignored[clean]
 			if !allowed || header.Linkname != target {

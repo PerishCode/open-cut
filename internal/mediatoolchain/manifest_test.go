@@ -339,6 +339,7 @@ func fixtureConfiguration() []string {
 		"--disable-gpl", "--disable-nonfree", "--disable-version3", "--disable-network",
 		"--disable-protocols", "--enable-protocol=file,pipe,fd", "--disable-demuxer=hls,concat,image2",
 		"--enable-libvpx", "--enable-libopus", "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus",
+		"--pkg-config-flags=--static",
 		"--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska",
 		"--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat",
 		"--enable-swresample", "--cc=$cc", "--extra-cflags=-I$deps/include",
@@ -370,6 +371,22 @@ func TestBuildConfigurationNormalizationRemovesEphemeralPaths(t *testing.T) {
 	}
 	if strings.Join(normalized, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("normalized=%q", normalized)
+	}
+}
+
+func TestWindowsFFmpegConfigurationLinksToolchainRuntimeStatically(t *testing.T) {
+	windows := buildConfiguration(
+		"$cc", "$build", "$deps", target.Target{Platform: target.Win, Arch: target.X64},
+	)
+	if !validLGPLConfiguration(windows) ||
+		!slices.Contains(windows, "--extra-ldflags=-L$deps/lib -static") {
+		t.Fatalf("windows configuration=%q", windows)
+	}
+	mac := buildConfiguration(
+		"$cc", "$build", "$deps", target.Target{Platform: target.Mac, Arch: target.ARM64},
+	)
+	if slices.Contains(mac, "--extra-ldflags=-L$deps/lib -static") {
+		t.Fatalf("mac configuration=%q", mac)
 	}
 }
 

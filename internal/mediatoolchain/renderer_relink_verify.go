@@ -21,7 +21,8 @@ import (
 
 func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 	record := verified.Manifest.Build.Renderer
-	if record == nil || validateRendererBuildRecord(record) != nil || verified.Manifest.Target != target.Host() {
+	if record == nil || validateRendererBuildRecord(record, verified.Manifest.Target) != nil ||
+		verified.Manifest.Target != target.Host() {
 		return fmt.Errorf("renderer relink verification input is invalid")
 	}
 	notice := noticeRecord(verified.Manifest.Notices, record.RelinkNoticeID)
@@ -90,7 +91,7 @@ func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 	}
 	baseline := filepath.Join(root, verified.Manifest.Target.ExecutableName("open-cut-render-baseline-check"))
 	if err := buildRendererFromRelinkKit(
-		ctx, goTool, sourceRoot, nativeRoot, baseline, io.Discard, io.Discard,
+		ctx, goTool, sourceRoot, nativeRoot, baseline, verified.Manifest.Target, io.Discard, io.Discard,
 	); err != nil {
 		return err
 	}

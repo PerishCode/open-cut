@@ -90,8 +90,9 @@ func RunFullPack(ctx context.Context, workspace, repositoryRoot, bundlePath stri
 	if !check("installation-identity", err) {
 		return finish(report, started)
 	}
-	// Keep the Unix-domain socket near the harness root: Darwin's sockaddr path
-	// limit is shorter than a fully expanded cell runtime path.
+	// Keep the endpoint seed near the harness root: Darwin's sockaddr path limit
+	// is shorter than a fully expanded cell runtime path. Windows derives a named
+	// pipe from the same seed so Node and Go share one IPC transport.
 	signer, err := lifecycle.StartDevelopmentSigner(filepath.Join(workspace, "signer.sock"), installationIdentity)
 	if !check("start-lifecycle-signer", err) {
 		return finish(report, started)

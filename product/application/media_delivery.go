@@ -198,25 +198,32 @@ func (media *ViewerMedia) PrepareSourcePreview(
 		return SourcePreviewPreparation{}, ErrAssetInvalid
 	}
 	at := media.clock.Now().UTC()
-	jobValue, err := media.identities.NewID(ctx, at)
-	if err != nil {
-		return SourcePreviewPreparation{}, err
-	}
-	jobID, err := domain.ParseWorkJobID(jobValue)
-	if err != nil {
-		return SourcePreviewPreparation{}, err
-	}
-	jobID, err = media.repository.EnsureExplicitSourceProxyJob(ctx, EnsureExplicitSourceProxyJobRecord{
-		JobID: jobID, ProjectID: projectID, AssetID: assetID, Fingerprint: snapshot.Fingerprint,
-		SourceStreams: streams, Parameters: parameters, Canonical: canonical, Digest: digest,
-		LogicalKey: "media/v1/" + assetID.String() + "/proxy/" + digest.String(), CreatedAt: at,
-	})
-	if err != nil {
-		return SourcePreviewPreparation{}, err
-	}
-	resolution, err := media.repository.ResolveSourcePreview(ctx, projectID, assetID, jobID, digest)
-	if err != nil {
-		return SourcePreviewPreparation{}, err
+	var resolution SourcePreviewResolution
+	for attempt := 0; attempt < 2; attempt++ {
+		jobValue, identityErr := media.identities.NewID(ctx, at)
+		if identityErr != nil {
+			return SourcePreviewPreparation{}, identityErr
+		}
+		jobID, parseErr := domain.ParseWorkJobID(jobValue)
+		if parseErr != nil {
+			return SourcePreviewPreparation{}, parseErr
+		}
+		jobID, err = media.repository.EnsureExplicitSourceProxyJob(ctx, EnsureExplicitSourceProxyJobRecord{
+			JobID: jobID, ProjectID: projectID, AssetID: assetID, Fingerprint: snapshot.Fingerprint,
+			SourceStreams: streams, Parameters: parameters, Canonical: canonical, Digest: digest,
+			LogicalKey: "media/v1/" + assetID.String() + "/proxy/" + digest.String(), CreatedAt: at,
+		})
+		if err != nil {
+			return SourcePreviewPreparation{}, err
+		}
+		resolution, err = media.repository.ResolveSourcePreview(ctx, projectID, assetID, jobID, digest)
+		if err != nil {
+			return SourcePreviewPreparation{}, err
+		}
+		if attempt == 0 && succeededSourceProxyWasEvicted(resolution) {
+			continue
+		}
+		break
 	}
 	if resolution.ProjectID != projectID || resolution.AssetID != assetID ||
 		resolution.AssetRevision != snapshot.AssetRevision || resolution.Fingerprint != snapshot.Fingerprint ||
@@ -281,6 +288,11 @@ func (media *ViewerMedia) PrepareSourcePreview(
 		return SourcePreviewPreparation{}, ErrAssetInvalid
 	}
 	return result, nil
+}
+
+func succeededSourceProxyWasEvicted(resolution SourcePreviewResolution) bool {
+	return resolution.Job.State == domain.MediaJobSucceeded && resolution.Artifact != nil &&
+		resolution.Artifact.State == domain.ArtifactEvicted
 }
 
 func validSourcePreviewSelection(input SourcePreviewSelectionInput) bool {

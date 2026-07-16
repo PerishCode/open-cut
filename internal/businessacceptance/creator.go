@@ -31,7 +31,8 @@ func (creator Creator) Bootstrap(ctx context.Context, projectName, fixturePath s
 	if err := creator.evaluateBoolean(ctx, buttonExpression("Create project", true)); err != nil {
 		return fmt.Errorf("create Project through installed Creator: %w", err)
 	}
-	if err := creator.wait(ctx, textAndSelectorExpression(projectName, `input[type="file"]`)); err != nil {
+	const sourceFieldSelector = `input[type="file"]:not(:disabled)`
+	if err := creator.wait(ctx, textAndSelectorExpression(projectName, sourceFieldSelector)); err != nil {
 		return fmt.Errorf("wait for Creator workspace: %w", err)
 	}
 	var document struct {
@@ -46,7 +47,7 @@ func (creator Creator) Bootstrap(ctx context.Context, projectName, fixturePath s
 		NodeID int64 `json:"nodeId"`
 	}
 	if err := creator.CDP.Call(ctx, "DOM.querySelector", map[string]any{
-		"nodeId": document.Root.NodeID, "selector": `input[type="file"]`,
+		"nodeId": document.Root.NodeID, "selector": sourceFieldSelector,
 	}, &query); err != nil {
 		return err
 	}

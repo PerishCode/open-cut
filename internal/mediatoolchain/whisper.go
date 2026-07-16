@@ -75,6 +75,9 @@ func whisperConfiguration(buildTarget target.Target, sourceRoot, compiler, cxx s
 		"-DGGML_CCACHE=OFF",
 		"-DGGML_LTO=OFF",
 	}
+	if buildTarget.Platform == target.Win {
+		configuration = append(configuration, "-DCMAKE_EXE_LINKER_FLAGS=-static")
+	}
 	switch buildTarget.Arch {
 	case target.ARM64:
 		configuration = append(configuration, "-DGGML_CPU_ARM_ARCH=armv8-a")

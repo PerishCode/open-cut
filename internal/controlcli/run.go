@@ -3,6 +3,7 @@ package controlcli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -466,7 +467,7 @@ func runInspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	controlClient, code := loadClient(args, stderr, true)
+	controlClient, _, code := loadClient(args, stderr, true)
 	if code != 0 {
 		return code
 	}
@@ -479,7 +480,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 }
 
 func runControl(ctx context.Context, command protocol.ControlCommand, args []string, stdout, stderr io.Writer) int {
-	controlClient, code := loadClient(args, stderr, false)
+	controlClient, paths, code := loadClient(args, stderr, false)
 	if code != 0 {
 		return code
 	}
@@ -488,30 +489,36 @@ func runControl(ctx context.Context, command protocol.ControlCommand, args []str
 		fmt.Fprintf(stderr, "%s: %v\n", command, err)
 		return 1
 	}
+	if command == protocol.ControlCommandShutdown {
+		if err := waitForControlExit(ctx, paths.ControlFile, 15*time.Second); err != nil {
+			fmt.Fprintf(stderr, "shutdown: %v\n", err)
+			return 1
+		}
+	}
 	return writeOutput(stdout, stderr, response)
 }
 
-func loadClient(args []string, stderr io.Writer, observer bool) (*client.Client, int) {
+func loadClient(args []string, stderr io.Writer, observer bool) (*client.Client, layout.CellPaths, int) {
 	set := flag.NewFlagSet("cell", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	bootstrapPath := set.String("bootstrap", "", "bootstrap.json path")
 	if err := set.Parse(args); err != nil {
-		return nil, 2
+		return nil, layout.CellPaths{}, 2
 	}
 	if *bootstrapPath == "" {
 		fmt.Fprintln(stderr, "--bootstrap is required")
-		return nil, 2
+		return nil, layout.CellPaths{}, 2
 	}
 	bootstrap, err := config.LoadBootstrap(*bootstrapPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		return nil, 1
+		return nil, layout.CellPaths{}, 1
 	}
 	identity, _ := cell.New(bootstrap.Channel, bootstrap.Namespace)
 	paths, err := layout.Resolve(bootstrap.Roots, identity)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		return nil, 1
+		return nil, layout.CellPaths{}, 1
 	}
 	tokenFile := paths.OwnerTokenFile
 	if observer {
@@ -520,9 +527,30 @@ func loadClient(args []string, stderr io.Writer, observer bool) (*client.Client,
 	controlClient, err := client.Load(paths.ControlFile, tokenFile)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		return nil, 1
+		return nil, layout.CellPaths{}, 1
 	}
-	return controlClient, 0
+	return controlClient, paths, 0
+}
+
+func waitForControlExit(ctx context.Context, controlFile string, timeout time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(controlFile); errors.Is(err, os.ErrNotExist) {
+			return nil
+		} else if err != nil {
+			return fmt.Errorf("inspect control descriptor: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("timed out waiting for control descriptor removal")
+		case <-ticker.C:
+		}
+	}
 }
 
 func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) int {

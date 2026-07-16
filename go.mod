@@ -3,6 +3,7 @@ module github.com/PerishCode/open-cut
 go 1.25.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/gofrs/flock v0.13.0
 	github.com/gorilla/websocket v1.5.3

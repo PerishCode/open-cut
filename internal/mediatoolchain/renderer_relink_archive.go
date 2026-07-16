@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/utils/atomicfile"
+	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -22,8 +23,10 @@ func stageRendererRelinkArchive(
 	stageRoot string,
 	kit RendererRelinkKit,
 	record RendererBuildRecord,
+	buildTarget target.Target,
 ) (NoticeRecord, error) {
-	if !cleanAbsolute(stageRoot) || !cleanAbsolute(kit.Root) || validateRendererBuildRecord(&record) != nil {
+	if !cleanAbsolute(stageRoot) || !cleanAbsolute(kit.Root) ||
+		validateRendererBuildRecord(&record, buildTarget) != nil {
 		return NoticeRecord{}, fmt.Errorf("renderer relink archive input is invalid")
 	}
 	for _, generated := range []string{"qualification", ".gocache"} {

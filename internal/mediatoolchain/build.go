@@ -174,25 +174,27 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		parallelism = 16
 	}
 	nativeTextRecipe, err := buildStaticNativeTextDependencies(
-		ctx, nativeTextRoots, dependencyRoot, compiler, cxx, archiver, makeTool,
+		ctx, nativeTextRoots, dependencyRoot, compiler, cxx, archiver, shell, makeTool,
 		parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
 	}
 	libvpxConfiguration, err := buildLibVPX(
-		ctx, libvpxRoot, dependencyRoot, compiler, makeTool, parallelism, options.Target, stdout, stderr,
+		ctx, libvpxRoot, dependencyRoot, compiler, shell, makeTool, parallelism, options.Target, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
 	}
 	opusConfiguration, err := buildOpus(
-		ctx, opusRoot, dependencyRoot, compiler, makeTool, parallelism, stdout, stderr,
+		ctx, opusRoot, dependencyRoot, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
 	}
-	configuration := buildConfiguration(compiler, buildRoot, dependencyRoot)
+	configuration := buildConfiguration(
+		shellBuildPath(compiler), shellBuildPath(buildRoot), shellBuildPath(dependencyRoot), options.Target,
+	)
 	if !validLGPLConfiguration(configuration) {
 		return BuildResult{}, fmt.Errorf("generated media configuration violates the LGPL-only profile")
 	}
@@ -207,15 +209,14 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		"PKG_CONFIG_PATH":   filepath.Join(dependencyRoot, "lib", "pkgconfig"),
 		"PKG_CONFIG_LIBDIR": filepath.Join(dependencyRoot, "lib", "pkgconfig"),
 	})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: shell, Args: append([]string{filepath.Join(sourceRoot, "configure")}, configuration...),
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
 		return BuildResult{}, fmt.Errorf("configure FFmpeg media toolchain: %w", err)
 	}
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: makeTool, Args: []string{"-j", fmt.Sprint(parallelism), "ffprobe", "ffmpeg"},
+		Executable: makeTool, Args: []string{
+			"-j", fmt.Sprint(parallelism), options.Target.ExecutableName("ffprobe"), options.Target.ExecutableName("ffmpeg"),
+		},
 		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
 		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
 	}); err != nil {
@@ -229,11 +230,21 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if info, statErr := os.Stat(builtFrameDecoder); statErr != nil || !info.Mode().IsRegular() {
 		return BuildResult{}, fmt.Errorf("FFmpeg build did not produce ffmpeg")
 	}
+	for _, current := range []struct{ name, path string }{
+		{"ffprobe", builtProbe}, {"ffmpeg", builtFrameDecoder},
+	} {
+		if err := verifyPackagedExecutableDynamicClosure(current.path); err != nil {
+			return BuildResult{}, fmt.Errorf("verify %s runtime closure: %w", current.name, err)
+		}
+	}
 	builtWhisper, recordedWhisperConfiguration, err := buildWhisperCLI(
 		ctx, whisperRoot, buildRoot, cmake, compiler, cxx, parallelism, options.Target, stdout, stderr,
 	)
 	if err != nil {
 		return BuildResult{}, err
+	}
+	if err := verifyPackagedExecutableDynamicClosure(builtWhisper); err != nil {
+		return BuildResult{}, fmt.Errorf("verify whisper-cli runtime closure: %w", err)
 	}
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
@@ -404,22 +415,6 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	}, nil
 }
 
-func buildConfiguration(compiler, buildRoot, dependencyRoot string) []string {
-	return []string{
-		"--disable-gpl", "--disable-nonfree", "--disable-version3", "--disable-network",
-		"--disable-protocols", "--enable-protocol=file,pipe,fd", "--disable-demuxer=hls,concat,image2",
-		"--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-ffmpeg", "--disable-ffplay",
-		"--enable-ffprobe", "--disable-avdevice", "--enable-libvpx", "--enable-libopus",
-		"--disable-encoders", "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus",
-		"--disable-muxers", "--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska", "--disable-filters",
-		"--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat",
-		"--enable-swscale", "--enable-swresample",
-		"--disable-asm", "--disable-stripping", "--cc=" + compiler,
-		"--extra-cflags=-I" + filepath.Join(dependencyRoot, "include") + " -ffile-prefix-map=" + buildRoot + "=.",
-		"--extra-ldflags=-L" + filepath.Join(dependencyRoot, "lib"),
-	}
-}
-
 func normalizeBuildConfiguration(
 	configuration []string,
 	buildRoot string,
@@ -429,8 +424,11 @@ func normalizeBuildConfiguration(
 	result := make([]string, len(configuration))
 	replacements := []struct{ actual, token string }{
 		{dependencyRoot, "$deps"},
+		{shellBuildPath(dependencyRoot), "$deps"},
 		{buildRoot, "$build"},
+		{shellBuildPath(buildRoot), "$build"},
 		{compiler, "$cc"},
+		{shellBuildPath(compiler), "$cc"},
 	}
 	for index, value := range configuration {
 		for _, replacement := range replacements {
@@ -443,21 +441,20 @@ func normalizeBuildConfiguration(
 
 func buildLibVPX(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	buildTarget target.Target,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
-	configuration, err := libVPXConfiguration(sourceRoot, prefix, buildTarget)
+	configuration, err := libVPXConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix), buildTarget)
 	if err != nil {
 		return nil, err
 	}
-	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": compiler})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: filepath.Join(sourceRoot, "configure"), Args: configuration,
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": shellBuildPath(compiler)})
+	if err := runConfigure(
+		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr,
+	); err != nil {
 		return nil, fmt.Errorf("configure pinned libvpx: %w", err)
 	}
 	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {
@@ -493,19 +490,19 @@ func libVPXTarget(buildTarget target.Target) (string, error) {
 
 func buildOpus(
 	ctx context.Context,
-	sourceRoot, prefix, compiler, makeTool string,
+	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,
 	stdout, stderr io.Writer,
 ) ([]string, error) {
-	configuration := opusConfiguration(sourceRoot, prefix)
+	configuration := opusConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix))
 	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC": compiler, "CFLAGS": "-O2 -ffile-prefix-map=" + sourceRoot + "=.",
+		"CC":     shellBuildPath(compiler),
+		"CFLAGS": "-O2 -ffile-prefix-map=" + shellBuildPath(sourceRoot) + "=.",
 	})
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: filepath.Join(sourceRoot, "configure"), Args: configuration,
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
+	if err := runConfigure(
+		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
+		sourceRoot, buildEnvironment, stdout, stderr,
+	); err != nil {
 		return nil, fmt.Errorf("configure pinned libopus: %w", err)
 	}
 	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {

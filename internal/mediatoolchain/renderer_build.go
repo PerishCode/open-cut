@@ -73,7 +73,7 @@ func buildRendererHelper(
 		"-I" + filepath.Join(harfBuzzRoot, "src"),
 		"-ffile-prefix-map=" + repositoryRoot + "=.",
 	}
-	linkFlags := []string{"-L" + filepath.Join(dependencyRoot, "lib")}
+	linkFlags := rendererNativeLinkFlags(dependencyRoot, buildTarget)
 	arguments := []string{
 		"build", "-buildvcs=false", "-trimpath", "-mod=readonly", "-tags", RendererBuildTag,
 		"-ldflags=-buildid=", "-o", "$output", RendererBuildPackage,
@@ -95,7 +95,7 @@ func buildRendererHelper(
 		}); err != nil {
 			return RendererHelperBuild{}, fmt.Errorf("build pinned renderer helper: %w", err)
 		}
-		if err := verifyRendererDynamicClosure(output); err != nil {
+		if err := verifyPackagedExecutableDynamicClosure(output); err != nil {
 			return RendererHelperBuild{}, err
 		}
 		digest, size, err := digestFile(output)
@@ -141,6 +141,14 @@ func rendererBuildEnvironment(cflags, ldflags []string) []string {
 	)
 }
 
+func rendererNativeLinkFlags(dependencyRoot string, buildTarget target.Target) []string {
+	flags := []string{"-L" + filepath.Join(dependencyRoot, "lib")}
+	if buildTarget.Platform == target.Win {
+		flags = append(flags, "-static")
+	}
+	return flags
+}
+
 func rendererGoVersion(ctx context.Context, executable string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
@@ -181,24 +189,38 @@ func normalizeRendererBuildValues(values []string, replacements map[string]strin
 		for _, actual := range keys {
 			value = strings.ReplaceAll(value, actual, replacements[actual])
 		}
-		result[index] = value
+		result[index] = strings.ReplaceAll(value, `\`, "/")
 	}
 	return result
 }
 
-func verifyRendererDynamicClosure(filename string) error {
+func verifyPackagedExecutableDynamicClosure(filename string) error {
 	libraries, err := rendererImportedLibraries(filename)
 	if err != nil {
-		return fmt.Errorf("inspect renderer dynamic closure: %w", err)
+		return fmt.Errorf("inspect executable dynamic closure: %w", err)
 	}
 	for _, library := range libraries {
-		lower := strings.ToLower(library)
-		if strings.Contains(lower, "harfbuzz") || strings.Contains(lower, "fribidi") ||
-			strings.Contains(lower, "freetype") {
-			return fmt.Errorf("renderer dynamically links pinned native text library %s", library)
+		if reason := forbiddenPackagedDynamicLibrary(library); reason != "" {
+			return fmt.Errorf("packaged executable dynamically links %s %s", reason, library)
 		}
 	}
 	return nil
+}
+
+func forbiddenPackagedDynamicLibrary(library string) string {
+	lower := strings.ToLower(filepath.Base(filepath.ToSlash(library)))
+	if strings.Contains(lower, "harfbuzz") || strings.Contains(lower, "fribidi") ||
+		strings.Contains(lower, "freetype") {
+		return "pinned native text library"
+	}
+	for _, prefix := range []string{
+		"libgcc_", "libstdc++-", "libwinpthread-", "libssp-", "libgomp-", "libquadmath-",
+	} {
+		if strings.HasPrefix(lower, prefix) && strings.HasSuffix(lower, ".dll") {
+			return "unshipped MinGW runtime library"
+		}
+	}
+	return ""
 }
 
 func rendererImportedLibraries(filename string) ([]string, error) {

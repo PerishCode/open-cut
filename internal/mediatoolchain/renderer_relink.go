@@ -112,7 +112,7 @@ func buildRendererRelinkKit(
 	if err != nil {
 		return RendererRelinkKit{}, err
 	}
-	cflags, ldflags := rendererKitNativeFlags(sourceRoot, nativeRoot)
+	cflags, ldflags := rendererKitNativeFlags(sourceRoot, nativeRoot, buildTarget)
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 		Executable: goTool, Args: []string{"mod", "vendor"}, Directory: sourceRoot,
 		Env: rendererBuildEnvironment(cflags, ldflags), Stdout: stdout, Stderr: stderr,
@@ -131,7 +131,7 @@ func buildRendererRelinkKit(
 			kitRoot, buildTarget.ExecutableName(fmt.Sprintf("open-cut-render-baseline-relink-%d", index+1)),
 		)
 		if err := buildRendererFromRelinkKit(
-			ctx, goTool, sourceRoot, nativeRoot, relinked, stdout, stderr,
+			ctx, goTool, sourceRoot, nativeRoot, relinked, buildTarget, stdout, stderr,
 		); err != nil {
 			return RendererRelinkKit{}, err
 		}
@@ -184,8 +184,9 @@ func rendererSourceGraph(
 		Args: []string{
 			"list", "-deps", "-json", "-mod=readonly", "-tags", RendererBuildTag, RendererBuildPackage,
 		},
-		Directory: repositoryRoot, Env: rendererBuildEnvironment(cflags, []string{"-L" + filepath.Join(dependencyRoot, "lib")}),
-		Stdout: &output, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
+		Directory: repositoryRoot,
+		Env:       rendererBuildEnvironment(cflags, rendererNativeLinkFlags(dependencyRoot, target.Host())),
+		Stdout:    &output, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		Presentation: lifecycle.PresentationHeadless,
 	}); err != nil || output.exceeded {
 		return nil, nil, fmt.Errorf("inspect renderer source graph: %w", err)
@@ -383,21 +384,25 @@ func copyRendererTree(sourceRoot, destinationRoot string, include func(string) b
 	})
 }
 
-func rendererKitNativeFlags(sourceRoot, nativeRoot string) ([]string, []string) {
+func rendererKitNativeFlags(
+	sourceRoot, nativeRoot string,
+	buildTarget target.Target,
+) ([]string, []string) {
 	return []string{
 		"-I" + filepath.Join(nativeRoot, "include", "freetype2"),
 		"-I" + filepath.Join(nativeRoot, "include", "fribidi"),
 		"-I" + filepath.Join(nativeRoot, "include", "harfbuzz"),
 		"-ffile-prefix-map=" + sourceRoot + "=.",
-	}, []string{"-L" + filepath.Join(nativeRoot, "lib")}
+	}, rendererNativeLinkFlags(nativeRoot, buildTarget)
 }
 
 func buildRendererFromRelinkKit(
 	ctx context.Context,
 	goTool, sourceRoot, nativeRoot, output string,
+	buildTarget target.Target,
 	stdout, stderr io.Writer,
 ) error {
-	cflags, ldflags := rendererKitNativeFlags(sourceRoot, nativeRoot)
+	cflags, ldflags := rendererKitNativeFlags(sourceRoot, nativeRoot, buildTarget)
 	cacheRoot := filepath.Join(filepath.Dir(nativeRoot), ".gocache")
 	if err := os.MkdirAll(cacheRoot, 0o700); err != nil {
 		return fmt.Errorf("create isolated renderer relink cache: %w", err)
@@ -417,7 +422,7 @@ func buildRendererFromRelinkKit(
 	}); err != nil {
 		return fmt.Errorf("build renderer from relink kit: %w", err)
 	}
-	return verifyRendererDynamicClosure(output)
+	return verifyPackagedExecutableDynamicClosure(output)
 }
 
 func rendererKitSourceClosure(root string) ([]RendererSourceFile, string, error) {
