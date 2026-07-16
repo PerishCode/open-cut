@@ -1,8 +1,12 @@
 export const OC_WEB_SCHEME = "oc";
 export const OC_WEB_HOST = "app";
 export const OC_WEB_ENTRY_URL = `${OC_WEB_SCHEME}://${OC_WEB_HOST}/`;
+export const OC_PLATFORM_SOURCE_GRANT_PATH = "/_open-cut/platform/source-grants";
+export const OC_PLATFORM_EXPORT_SAVE_PATH = "/_open-cut/platform/export-save-as";
+export const OC_PLATFORM_EXPORT_REVEAL_PATH = "/_open-cut/platform/export-reveal";
 
 type ProtocolFetch = (request: Request) => Promise<Response>;
+export type PlatformRequestHandler = (request: Request) => Promise<Response>;
 
 type RetryOptions = {
   attempts?: number;
@@ -13,6 +17,12 @@ type RetryOptions = {
 const retryableMethods = new Set(["GET", "HEAD"]);
 const retryAttempts = 3;
 const retryBackoffMs = 150;
+const reservedAuthorityHeaders = [
+  "x-open-cut-ui-session",
+  "x-open-cut-cli-grant",
+  "x-open-cut-cli-challenge",
+  "x-open-cut-cli-signature",
+] as const;
 
 export function normalizeWebRuntimeUrl(raw: string): string {
   const url = new URL(raw);
@@ -42,6 +52,8 @@ export async function handleOcWebRequest(
   webRuntimeUrl: string | undefined,
   fetchImpl: ProtocolFetch,
   options: RetryOptions = {},
+  uiSession?: string,
+  platformRequest?: PlatformRequestHandler,
 ): Promise<Response> {
   if (!webRuntimeUrl) {
     return errorResponse(503, "OC_WEB_RUNTIME_UNAVAILABLE", "The Web sidecar has no active endpoint");
@@ -54,6 +66,41 @@ export async function handleOcWebRequest(
     return errorResponse(404, "OC_WEB_PROTOCOL_NOT_FOUND", errorMessage(error));
   }
 
+  for (const header of reservedAuthorityHeaders) {
+    if (request.headers.has(header)) {
+      return errorResponse(400, "OC_WEB_AUTHORITY_HEADER_FORBIDDEN", "Renderer requests may not set authority headers");
+    }
+  }
+
+  const incoming = new URL(request.url);
+  if (
+    incoming.pathname === OC_PLATFORM_SOURCE_GRANT_PATH ||
+    incoming.pathname === OC_PLATFORM_EXPORT_SAVE_PATH ||
+    incoming.pathname === OC_PLATFORM_EXPORT_REVEAL_PATH
+  ) {
+    if (incoming.search || request.method !== "POST") {
+      return errorResponse(405, "OC_PLATFORM_REQUEST_INVALID", "Platform actions require POST without a query");
+    }
+    if (!platformRequest) {
+      return errorResponse(503, "OC_PLATFORM_UNAVAILABLE", "This surface cannot perform platform actions");
+    }
+    return platformRequest(request);
+  }
+  if (incoming.pathname.startsWith("/api/v1/internal/platform/")) {
+    return errorResponse(404, "OC_API_ROUTE_NOT_FOUND", "Internal platform routes are not renderer routes");
+  }
+  if ((incoming.pathname === "/api" || incoming.pathname.startsWith("/api/")) && !uiSession) {
+    return errorResponse(503, "OC_UI_SESSION_UNAVAILABLE", "Electron main has no active UI session");
+  }
+  const forwarded = new Request(target, request);
+  if (uiSession && (incoming.pathname === "/api" || incoming.pathname.startsWith("/api/"))) {
+    const headers = new Headers(forwarded.headers);
+    headers.set("x-open-cut-ui-session", uiSession);
+    request = new Request(forwarded, { headers });
+  } else {
+    request = forwarded;
+  }
+
   const attempts = retryableMethods.has(request.method) ? (options.attempts ?? retryAttempts) : 1;
   const backoffMs = options.backoffMs ?? retryBackoffMs;
   const delay = options.delay ?? defaultDelay;
@@ -61,7 +108,7 @@ export async function handleOcWebRequest(
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await fetchImpl(new Request(target, request));
+      return await fetchImpl(request);
     } catch (error) {
       lastError = error;
       if (attempt === attempts) break;

@@ -1,6 +1,8 @@
 package packager
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +11,42 @@ import (
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/target"
 )
+
+func TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand(t *testing.T) {
+	if os.Getenv("OPEN_CUT_ARTIFACT_CHECK_HELPER") == "1" {
+		return
+	}
+	appRoot := t.TempDir()
+	testExecutable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandName := target.Host().ExecutableName("artifact-check-helper")
+	command := filepath.Join(appRoot, commandName)
+	if err := copyFile(testExecutable, command, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPEN_CUT_ARTIFACT_CHECK_HELPER", "1")
+	var stdout, stderr bytes.Buffer
+	if err := runArtifactChecks(context.Background(), appRoot, []workspace.ArtifactCheck{{
+		Command: filepath.ToSlash(commandName), Args: []string{"-test.run=TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand"},
+	}}, &stdout, &stderr); err != nil {
+		t.Fatalf("artifact check failed: %v stderr=%q", err, stderr.String())
+	}
+
+	external := filepath.Join(filepath.Dir(appRoot), target.Host().ExecutableName("external-check"))
+	if err := copyFile(testExecutable, external, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(appRoot, target.Host().ExecutableName("linked-check"))
+	if err := os.Symlink(external, link); err == nil {
+		if err := runArtifactChecks(context.Background(), appRoot, []workspace.ArtifactCheck{{
+			Command: filepath.ToSlash(filepath.Base(link)),
+		}}, &stdout, &stderr); err == nil {
+			t.Fatal("escaping artifact check link was accepted")
+		}
+	}
+}
 
 func TestRemoveExternalDeploySelfLink(t *testing.T) {
 	destination := filepath.Join(t.TempDir(), "deploy")

@@ -32,7 +32,7 @@ func TestUninstallIsIdempotentWhenInstallIsAlreadyGone(t *testing.T) {
 		HostPath: filepath.Join(installRoot, "host"), LauncherPath: filepath.Join(installRoot, "launcher"),
 		CLIPath:       filepath.Join(installRoot, "open-cut"),
 		BootstrapPath: filepath.Join(roots[0], "bootstrap.json"), ManagedRoots: roots,
-		Channel: "beta", Namespace: "delivery",
+		Channel: "beta", Namespace: "delivery", IdentityBackend: install.IdentityBackendDevelopmentFile,
 	}
 	if err := install.SaveReceipt(receiptPath, receipt); err != nil {
 		t.Fatal(err)

@@ -1,0 +1,491 @@
+import { Button, Stack, Status, Text } from "@open-cut/components";
+import {
+  type Asset,
+  type CreatorEditCommit,
+  CreatorEditError,
+  type CreatorRoughCutLaneInput,
+  type CreatorRoughCutReview,
+  type DurableID,
+  type RationalTime,
+  type RevisionString,
+  type SourceExcerpt,
+  type Track,
+  useContracts,
+} from "@open-cut/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
+
+type AsyncResult = unknown;
+type RoughCutPhase = "idle" | "previewing" | "review" | "applying" | "error" | "conflict" | "success";
+
+export type CreatorRoughCutLaneCandidate = Readonly<{
+  id: string;
+  kind: "video" | "audio";
+  trackId: DurableID;
+  trackRevision: Track["revision"];
+  trackLabel: string;
+  sourceStreamId: DurableID;
+  streamLabel: string;
+}>;
+
+export type CreatorRoughCutLaneSelection =
+  | Readonly<{ state: "unresolved" }>
+  | Readonly<{ state: "omitted" }>
+  | Readonly<{ state: "selected"; candidate: CreatorRoughCutLaneCandidate }>;
+
+export type CreatorRoughCutOccurrence = Readonly<{
+  key: string;
+  sourceExcerpt: SourceExcerpt;
+  evidenceStatus: "exact" | "stale";
+  assetLabel: string;
+  videoCandidates: readonly CreatorRoughCutLaneCandidate[];
+  audioCandidates: readonly CreatorRoughCutLaneCandidate[];
+  video: CreatorRoughCutLaneSelection;
+  audio: CreatorRoughCutLaneSelection;
+}>;
+
+type ApplyAttempt = Readonly<{
+  review: CreatorRoughCutReview;
+  input: Readonly<{ requestId: string; intent: string }>;
+}>;
+
+export function createCreatorRoughCutOccurrence(
+  sourceExcerpt: SourceExcerpt,
+  evidenceStatus: "exact" | "stale",
+  assets: readonly Asset[],
+  tracks: readonly Track[],
+): CreatorRoughCutOccurrence {
+  const asset = assets.find((candidate) => candidate.id === sourceExcerpt.assetId);
+  const videoCandidates = laneCandidates("video", asset, tracks);
+  const audioCandidates = laneCandidates("audio", asset, tracks);
+  return {
+    key: crypto.randomUUID(),
+    sourceExcerpt,
+    evidenceStatus,
+    assetLabel: asset?.displayName ?? `Asset ${sourceExcerpt.assetId}`,
+    videoCandidates,
+    audioCandidates,
+    video: initialLaneSelection(videoCandidates),
+    audio: initialLaneSelection(audioCandidates),
+  };
+}
+
+export function CreatorRoughCutPanel({
+  assets,
+  occurrences,
+  onChange,
+  onCommitted,
+  onReload,
+  onTimelineStartChange,
+  projectId,
+  projectRevision,
+  sequenceId,
+  sequenceRevision,
+  timelineStart,
+  tracks,
+  currentPlayhead,
+}: Readonly<{
+  assets: readonly Asset[];
+  occurrences: readonly CreatorRoughCutOccurrence[];
+  onChange(value: readonly CreatorRoughCutOccurrence[]): void;
+  onCommitted(receipt: CreatorEditCommit): Promise<AsyncResult>;
+  onReload(): Promise<AsyncResult>;
+  onTimelineStartChange(value: RationalTime): void;
+  projectId: DurableID;
+  projectRevision: RevisionString;
+  sequenceId: DurableID;
+  sequenceRevision: RevisionString;
+  timelineStart: RationalTime;
+  tracks: readonly Track[];
+  currentPlayhead: RationalTime;
+}>) {
+  const contracts = useContracts();
+  const [phase, setPhase] = useState<RoughCutPhase>("idle");
+  const [review, setReview] = useState<CreatorRoughCutReview>();
+  const [error, setError] = useState<Error>();
+  const applyAttemptRef = useRef<ApplyAttempt | undefined>(undefined);
+  const inFlightRef = useRef(false);
+  const successfulDraftRef = useRef(false);
+  const draftKey = useMemo(
+    () => occurrenceDraftKey(occurrences, timelineStart, projectRevision, sequenceRevision, assets, tracks),
+    [assets, occurrences, projectRevision, sequenceRevision, timelineStart, tracks],
+  );
+  const previousDraftKeyRef = useRef(draftKey);
+
+  useEffect(() => {
+    if (previousDraftKeyRef.current === draftKey) return;
+    previousDraftKeyRef.current = draftKey;
+    setReview(undefined);
+    applyAttemptRef.current = undefined;
+    if (successfulDraftRef.current) {
+      successfulDraftRef.current = false;
+      return;
+    }
+    setPhase("idle");
+    setError(undefined);
+  }, [draftKey]);
+
+  const blocker = firstOccurrenceBlocker(occurrences, assets, tracks);
+
+  const previewDraft = useCallback(async () => {
+    if (inFlightRef.current || blocker || occurrences.length === 0) return;
+    inFlightRef.current = true;
+    setPhase("previewing");
+    setError(undefined);
+    setReview(undefined);
+    applyAttemptRef.current = undefined;
+    try {
+      const value = await contracts.editing.roughCut.preview({
+        projectId,
+        sequenceId,
+        timelineStart,
+        items: occurrences.map((occurrence) => ({
+          sourceExcerptId: occurrence.sourceExcerpt.id,
+          sourceExcerptRevision: occurrence.sourceExcerpt.revision,
+          ...selectedLanes(occurrence),
+        })),
+      });
+      setReview(value);
+      setPhase("review");
+    } catch (value) {
+      const nextError = asError(value);
+      setError(nextError);
+      setPhase(isConflict(nextError) ? "conflict" : "error");
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [blocker, contracts.editing.roughCut, occurrences, projectId, sequenceId, timelineStart]);
+
+  const applyReview = useCallback(
+    async (retry?: ApplyAttempt) => {
+      if (inFlightRef.current) return;
+      const attempt =
+        retry ??
+        (review
+          ? {
+              review,
+              input: {
+                requestId: `ui:creator-rough-cut-apply:${crypto.randomUUID()}`,
+                intent: "Apply reviewed Creator rough cut",
+              },
+            }
+          : undefined);
+      if (!attempt) return;
+      applyAttemptRef.current = attempt;
+      inFlightRef.current = true;
+      setPhase("applying");
+      setError(undefined);
+      try {
+        const receipt = await contracts.editing.roughCut.apply(attempt.review, attempt.input);
+        applyAttemptRef.current = undefined;
+        setReview(undefined);
+        successfulDraftRef.current = true;
+        setPhase("success");
+        await onCommitted(receipt);
+      } catch (value) {
+        const nextError = asError(value);
+        setError(nextError);
+        if (isConflict(nextError)) {
+          applyAttemptRef.current = undefined;
+          setReview(undefined);
+          setPhase("conflict");
+        } else {
+          setPhase("error");
+        }
+      } finally {
+        inFlightRef.current = false;
+      }
+    },
+    [contracts.editing.roughCut, onCommitted, review],
+  );
+
+  const updateOccurrence = useCallback(
+    (key: string, update: (value: CreatorRoughCutOccurrence) => CreatorRoughCutOccurrence) => {
+      onChange(occurrences.map((occurrence) => (occurrence.key === key ? update(occurrence) : occurrence)));
+    },
+    [occurrences, onChange],
+  );
+
+  return (
+    <Stack spacing="compact">
+      <Text tone="eyebrow">ROUGH CUT DRAFT · EPHEMERAL OCCURRENCE QUEUE</Text>
+      <Text>
+        Exact playhead {formatTime(timelineStart)} · {occurrences.length} / 128 occurrences
+      </Text>
+      <Button
+        disabled={phase === "applying" || phase === "previewing"}
+        onPress={() => onTimelineStartChange(currentPlayhead)}
+      >
+        Use current Sequence playhead · {formatTime(currentPlayhead)}
+      </Button>
+      {occurrences.map((occurrence, index) => (
+        <Stack key={occurrence.key} spacing="compact">
+          <Text tone="eyebrow">
+            {String(index + 1).padStart(2, "0")} · {occurrence.assetLabel} · {occurrence.evidenceStatus.toUpperCase()} ·
+            r{occurrence.sourceExcerpt.revision}
+          </Text>
+          <Text>{occurrence.sourceExcerpt.effectiveText}</Text>
+          <LaneChoices
+            candidates={currentLaneCandidates("video", occurrence, assets, tracks)}
+            kind="video"
+            onChange={(selection) => updateOccurrence(occurrence.key, (value) => ({ ...value, video: selection }))}
+            selection={occurrence.video}
+          />
+          <LaneChoices
+            candidates={currentLaneCandidates("audio", occurrence, assets, tracks)}
+            kind="audio"
+            onChange={(selection) => updateOccurrence(occurrence.key, (value) => ({ ...value, audio: selection }))}
+            selection={occurrence.audio}
+          />
+          <Button disabled={index === 0} onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}>
+            Move occurrence up
+          </Button>
+          <Button
+            disabled={index === occurrences.length - 1}
+            onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
+          >
+            Move occurrence down
+          </Button>
+          <Button onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}>
+            Remove occurrence
+          </Button>
+        </Stack>
+      ))}
+      {occurrences.length === 0 ? <Text>Add an exact SourceExcerpt from Narrative to begin.</Text> : null}
+      {blocker ? <Status state="unavailable">{blocker}</Status> : null}
+      <Button
+        disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
+        onPress={() => void previewDraft()}
+      >
+        {phase === "previewing" ? "Previewing rough cut…" : "Preview rough cut"}
+      </Button>
+      {review ? <RoughCutReview occurrences={occurrences} review={review} /> : null}
+      {review ? (
+        <Button disabled={phase === "applying"} onPress={() => void applyReview()}>
+          {phase === "applying" ? "Applying reviewed rough cut…" : "Apply reviewed rough cut"}
+        </Button>
+      ) : null}
+      {phase === "error" && error ? (
+        <>
+          <Status state="unavailable">Rough-cut operation failed · {error.message}</Status>
+          {applyAttemptRef.current ? (
+            <Button onPress={() => void applyReview(applyAttemptRef.current)}>Retry identical rough-cut apply</Button>
+          ) : (
+            <Button onPress={() => void previewDraft()}>Retry rough-cut preview</Button>
+          )}
+        </>
+      ) : null}
+      {phase === "conflict" ? (
+        <>
+          <Status state="unavailable">Rough-cut conflict · occurrence queue preserved · preview required</Status>
+          <Button onPress={() => void onReload()}>Refresh committed state</Button>
+        </>
+      ) : null}
+      {phase === "success" ? <Status state="ready">Creator rough-cut transaction committed</Status> : null}
+    </Stack>
+  );
+}
+
+function LaneChoices({
+  candidates,
+  kind,
+  onChange,
+  selection,
+}: Readonly<{
+  candidates: readonly CreatorRoughCutLaneCandidate[];
+  kind: "video" | "audio";
+  onChange(value: CreatorRoughCutLaneSelection): void;
+  selection: CreatorRoughCutLaneSelection;
+}>) {
+  return (
+    <Stack spacing="compact">
+      <Text tone="eyebrow">
+        {kind.toUpperCase()} LANE · {laneSelectionLabel(selection)}
+      </Text>
+      {candidates.map((candidate) => (
+        <Button key={candidate.id} onPress={() => onChange({ state: "selected", candidate })}>
+          Use {candidate.trackLabel} · {candidate.streamLabel}
+        </Button>
+      ))}
+      <Button onPress={() => onChange({ state: "omitted" })}>No {kind} lane</Button>
+    </Stack>
+  );
+}
+
+function RoughCutReview({
+  occurrences,
+  review,
+}: Readonly<{ occurrences: readonly CreatorRoughCutOccurrence[]; review: CreatorRoughCutReview }>) {
+  return (
+    <Stack spacing="compact">
+      <Status state="ready">
+        REVIEW · {review.items.length} alignments · {review.preconditionCount} preconditions · {review.policy.id}
+      </Status>
+      {review.items.map((item, index) => (
+        <Stack key={item.alignmentLocal} spacing="compact">
+          <Text tone="eyebrow">
+            GHOST {String(item.ordinal).padStart(2, "0")} · {formatTime(item.timelineRange.start)} →{" "}
+            {formatTimeEnd(item.timelineRange)} · {item.video ? "V" : ""}
+            {item.video && item.audio ? "+" : ""}
+            {item.audio ? "A" : ""}
+          </Text>
+          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `SourceExcerpt ${item.sourceExcerptId}`}</Text>
+        </Stack>
+      ))}
+      <Text tone="eyebrow">OUTPUT DIGEST · {review.outputDigest}</Text>
+      <Text>No audiovisual work is scheduled before Apply.</Text>
+    </Stack>
+  );
+}
+
+function laneCandidates(
+  kind: "video" | "audio",
+  asset: Asset | undefined,
+  tracks: readonly Track[],
+): readonly CreatorRoughCutLaneCandidate[] {
+  if (!asset?.facts) return [];
+  const compatibleTracks = tracks.filter((track) => track.type === kind);
+  const compatibleStreams = asset.facts.streams.filter((stream) => stream.descriptor.mediaType === kind);
+  return compatibleTracks.flatMap((track) =>
+    compatibleStreams.map((stream) => ({
+      id: `${track.id}:${stream.id}`,
+      kind,
+      trackId: track.id,
+      trackRevision: track.revision,
+      trackLabel: track.label,
+      sourceStreamId: stream.id,
+      streamLabel: `stream ${stream.descriptor.index} · ${stream.descriptor.codec}`,
+    })),
+  );
+}
+
+function initialLaneSelection(candidates: readonly CreatorRoughCutLaneCandidate[]): CreatorRoughCutLaneSelection {
+  if (candidates.length === 0) return { state: "omitted" };
+  const candidate = candidates[0];
+  return candidates.length === 1 && candidate ? { state: "selected", candidate } : { state: "unresolved" };
+}
+
+function firstOccurrenceBlocker(
+  occurrences: readonly CreatorRoughCutOccurrence[],
+  assets: readonly Asset[],
+  tracks: readonly Track[],
+): string | undefined {
+  for (let index = 0; index !== occurrences.length; index += 1) {
+    const occurrence = occurrences[index];
+    if (!occurrence) continue;
+    const label = `Occurrence ${index + 1}`;
+    if (occurrence.evidenceStatus !== "exact") return `${label} SourceExcerpt evidence is stale`;
+    const videoCandidates = currentLaneCandidates("video", occurrence, assets, tracks);
+    const audioCandidates = currentLaneCandidates("audio", occurrence, assets, tracks);
+    if (occurrence.video.state === "unresolved") return `${label} requires an explicit video lane choice`;
+    if (occurrence.audio.state === "unresolved") return `${label} requires an explicit audio lane choice`;
+    if (occurrence.video.state === "selected" && !hasCurrentCandidate(occurrence.video.candidate, videoCandidates)) {
+      return `${label} video lane changed and requires a new choice`;
+    }
+    if (occurrence.audio.state === "selected" && !hasCurrentCandidate(occurrence.audio.candidate, audioCandidates)) {
+      return `${label} audio lane changed and requires a new choice`;
+    }
+    if (occurrence.video.state !== "selected" && occurrence.audio.state !== "selected") {
+      return `${label} has no compatible selected lane`;
+    }
+  }
+  return undefined;
+}
+
+function currentLaneCandidates(
+  kind: "video" | "audio",
+  occurrence: CreatorRoughCutOccurrence,
+  assets: readonly Asset[],
+  tracks: readonly Track[],
+): readonly CreatorRoughCutLaneCandidate[] {
+  return laneCandidates(
+    kind,
+    assets.find((candidate) => candidate.id === occurrence.sourceExcerpt.assetId),
+    tracks,
+  );
+}
+
+function hasCurrentCandidate(
+  selected: CreatorRoughCutLaneCandidate,
+  candidates: readonly CreatorRoughCutLaneCandidate[],
+): boolean {
+  return candidates.some(
+    (candidate) => candidate.id === selected.id && candidate.trackRevision === selected.trackRevision,
+  );
+}
+
+function selectedLanes(occurrence: CreatorRoughCutOccurrence): {
+  video?: CreatorRoughCutLaneInput;
+  audio?: CreatorRoughCutLaneInput;
+} {
+  return {
+    ...(occurrence.video.state === "selected" ? { video: laneInput(occurrence.video.candidate) } : {}),
+    ...(occurrence.audio.state === "selected" ? { audio: laneInput(occurrence.audio.candidate) } : {}),
+  };
+}
+
+function laneInput(candidate: CreatorRoughCutLaneCandidate): CreatorRoughCutLaneInput {
+  return {
+    trackId: candidate.trackId,
+    trackRevision: candidate.trackRevision,
+    sourceStreamId: candidate.sourceStreamId,
+  };
+}
+
+function laneSelectionLabel(selection: CreatorRoughCutLaneSelection): string {
+  if (selection.state === "unresolved") return "CHOOSE ONE OR OMIT";
+  if (selection.state === "omitted") return "OMITTED";
+  return `${selection.candidate.trackLabel} · ${selection.candidate.streamLabel}`;
+}
+
+function moveOccurrence(
+  occurrences: readonly CreatorRoughCutOccurrence[],
+  from: number,
+  to: number,
+): readonly CreatorRoughCutOccurrence[] {
+  const next = [...occurrences];
+  const [moved] = next.splice(from, 1);
+  if (moved) next.splice(to, 0, moved);
+  return next;
+}
+
+function occurrenceDraftKey(
+  occurrences: readonly CreatorRoughCutOccurrence[],
+  timelineStart: RationalTime,
+  projectRevision: RevisionString,
+  sequenceRevision: RevisionString,
+  assets: readonly Asset[],
+  tracks: readonly Track[],
+): string {
+  return JSON.stringify({
+    projectRevision,
+    sequenceRevision,
+    timelineStart,
+    assets: assets.map((asset) => ({
+      id: asset.id,
+      revision: asset.revision,
+      streams: asset.facts?.streams.map((stream) => stream.id) ?? [],
+    })),
+    tracks: tracks.map((track) => ({ id: track.id, revision: track.revision, type: track.type })),
+    occurrences: occurrences.map((occurrence) => ({
+      key: occurrence.key,
+      id: occurrence.sourceExcerpt.id,
+      revision: occurrence.sourceExcerpt.revision,
+      video: laneSelectionKey(occurrence.video),
+      audio: laneSelectionKey(occurrence.audio),
+    })),
+  });
+}
+
+function laneSelectionKey(selection: CreatorRoughCutLaneSelection): string {
+  return selection.state === "selected" ? selection.candidate.id : selection.state;
+}
+
+function isConflict(value: Error): boolean {
+  return value instanceof CreatorEditError && value.code === "conflict";
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}

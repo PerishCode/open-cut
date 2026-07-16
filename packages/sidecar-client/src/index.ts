@@ -21,7 +21,7 @@ import {
 import WebSocket from "ws";
 
 export type { ControlCommand, LifecycleMode, Presentation, SessionStatus } from "@open-cut/sidecar-protocol";
-export { controlCommand, lifecycleMode, presentation } from "@open-cut/sidecar-protocol";
+export { controlCommand, lifecycleMode, presentation, sidecarEnvironment } from "@open-cut/sidecar-protocol";
 
 export type ConnectOptions = {
   heartbeatIntervalMs?: number;

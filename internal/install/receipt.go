@@ -12,18 +12,26 @@ import (
 
 const ReceiptSchema = 1
 
+type IdentityBackend string
+
+const (
+	IdentityBackendDevelopmentFile IdentityBackend = "development-file"
+	IdentityBackendPlatformSecure  IdentityBackend = "platform-secure"
+)
+
 type Receipt struct {
-	Schema        int           `json:"schema"`
-	Target        target.Target `json:"target"`
-	InstallRoot   string        `json:"installRoot"`
-	HostPath      string        `json:"hostPath"`
-	LauncherPath  string        `json:"launcherPath"`
-	CLIPath       string        `json:"cliPath"`
-	BootstrapPath string        `json:"bootstrapPath"`
-	ManagedRoots  []string      `json:"managedRoots"`
-	Channel       string        `json:"channel"`
-	Namespace     string        `json:"namespace"`
-	HostPID       int           `json:"hostPid,omitempty"`
+	Schema          int             `json:"schema"`
+	Target          target.Target   `json:"target"`
+	InstallRoot     string          `json:"installRoot"`
+	HostPath        string          `json:"hostPath"`
+	LauncherPath    string          `json:"launcherPath"`
+	CLIPath         string          `json:"cliPath"`
+	BootstrapPath   string          `json:"bootstrapPath"`
+	ManagedRoots    []string        `json:"managedRoots"`
+	Channel         string          `json:"channel"`
+	Namespace       string          `json:"namespace"`
+	HostPID         int             `json:"hostPid,omitempty"`
+	IdentityBackend IdentityBackend `json:"identityBackend"`
 }
 
 func LoadReceipt(path string) (Receipt, error) {
@@ -65,6 +73,9 @@ func (receipt Receipt) Validate() error {
 	}
 	if len(receipt.ManagedRoots) == 0 {
 		return fmt.Errorf("install receipt requires managed roots")
+	}
+	if receipt.IdentityBackend != IdentityBackendDevelopmentFile && receipt.IdentityBackend != IdentityBackendPlatformSecure {
+		return fmt.Errorf("install receipt requires a supported identity backend")
 	}
 	if receipt.Channel == "" || receipt.Namespace == "" || receipt.HostPID < 0 {
 		return fmt.Errorf("install receipt requires channel, namespace, and a valid host PID")

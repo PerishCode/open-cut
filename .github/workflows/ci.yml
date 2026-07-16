@@ -4,6 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      production_model:
+        description: Run the installed production-model transcription scenario
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -133,6 +144,65 @@ jobs:
           "$CONTROL" inspect --receipt "$receipt"
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
           "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge
+      - name: Exercise installed Creator-to-CLI business slice
+        if: matrix.platform == 'mac'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          CONTROL: ${{ matrix.control }}
+        run: |
+          set -euo pipefail
+          workspace=.tmp/ci/business-fast
+          receipt="$workspace/receipts/install-receipt.json"
+          "$CONTROL" serve --root .tmp/ci/origin --listen 127.0.0.1:41000 >.tmp/ci/business-fast-serve.json 2>.tmp/ci/business-fast-serve.log &
+          server_pid=$!
+          cleanup() {
+            "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge || true
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for _ in {1..50}; do
+            curl --fail --silent http://127.0.0.1:41000/metadata/ci/mac-arm64/latest.json >/dev/null && break
+            sleep 0.1
+          done
+          curl --fail --silent http://127.0.0.1:41000/metadata/ci/mac-arm64/latest.json >/dev/null
+          OPEN_CUT_HARNESS_CDP_PORT=41001 "$CONTROL" harness install mac --arch arm64 --workspace "$workspace" --origin .tmp/ci/origin --origin-url http://127.0.0.1:41000 --key .tmp/ci/key.json --channel ci --namespace business-fast
+          cli_path="$(node -e 'const fs = require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).cliPath)' "$receipt")"
+          PATH="$(dirname "$cli_path"):$PATH" \
+            OPEN_CUT_ACCEPTANCE=1 \
+            OPEN_CUT_ACCEPTANCE_CDP_ENDPOINT=http://127.0.0.1:41001 \
+            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v
+      - name: Exercise installed production-model transcription
+        if: matrix.platform == 'mac' && (github.event_name == 'schedule' || github.event_name == 'release' || inputs.production_model)
+        shell: bash
+        timeout-minutes: 45
+        env:
+          CONTROL: ${{ matrix.control }}
+        run: |
+          set -euo pipefail
+          workspace=.tmp/ci/business-production-model
+          receipt="$workspace/receipts/install-receipt.json"
+          "$CONTROL" serve --root .tmp/ci/origin --listen 127.0.0.1:41010 >.tmp/ci/business-production-model-serve.json 2>.tmp/ci/business-production-model-serve.log &
+          server_pid=$!
+          cleanup() {
+            "$CONTROL" harness uninstall --workspace "$workspace" --receipt "$receipt" --purge || true
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for _ in {1..50}; do
+            curl --fail --silent http://127.0.0.1:41010/metadata/ci/mac-arm64/latest.json >/dev/null && break
+            sleep 0.1
+          done
+          curl --fail --silent http://127.0.0.1:41010/metadata/ci/mac-arm64/latest.json >/dev/null
+          OPEN_CUT_HARNESS_CDP_PORT=41011 "$CONTROL" harness install mac --arch arm64 --workspace "$workspace" --origin .tmp/ci/origin --origin-url http://127.0.0.1:41010 --key .tmp/ci/key.json --channel ci --namespace business-production-model
+          cli_path="$(node -e 'const fs = require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).cliPath)' "$receipt")"
+          PATH="$(dirname "$cli_path"):$PATH" \
+            OPEN_CUT_ACCEPTANCE=1 \
+            OPEN_CUT_ACCEPTANCE_PRODUCTION_MODEL=1 \
+            OPEN_CUT_ACCEPTANCE_CDP_ENDPOINT=http://127.0.0.1:41011 \
+            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v
       - uses: actions/upload-artifact@v7
         if: always()
         with:

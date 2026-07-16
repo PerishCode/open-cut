@@ -4,6 +4,9 @@ import { describe, it } from "vitest";
 import {
   handleOcWebRequest,
   normalizeWebRuntimeUrl,
+  OC_PLATFORM_EXPORT_REVEAL_PATH,
+  OC_PLATFORM_EXPORT_SAVE_PATH,
+  OC_PLATFORM_SOURCE_GRANT_PATH,
   OC_WEB_ENTRY_URL,
   toWebRuntimeUrl,
 } from "../src/main/oc-protocol.js";
@@ -43,6 +46,8 @@ describe("oc:// Web protocol", () => {
         captured = request;
         return new Response("ok");
       },
+      {},
+      "oc_ui_hidden",
     );
 
     assert.equal(response.status, 200);
@@ -96,9 +101,133 @@ describe("oc:// Web protocol", () => {
       async () => {
         throw new Error("connection refused");
       },
+      {},
+      "oc_ui_hidden",
     );
 
     assert.equal(response.status, 502);
     assert.equal((await response.json()).error, "OC_WEB_PROTOCOL_PROXY_FAILED");
+  });
+
+  it("injects UI authority only for API requests and rejects renderer authority headers", async () => {
+    let captured: Request | undefined;
+    const authorized = await handleOcWebRequest(
+      new Request("oc://app/api/v1/projects"),
+      "http://127.0.0.1:41731/",
+      async (request) => {
+        captured = request;
+        return new Response("ok");
+      },
+      {},
+      "oc_ui_hidden",
+    );
+    assert.equal(authorized.status, 200);
+    assert.equal(captured?.headers.get("x-open-cut-ui-session"), "oc_ui_hidden");
+
+    const forged = await handleOcWebRequest(
+      new Request("oc://app/api/v1/projects", { headers: { "x-open-cut-ui-session": "renderer" } }),
+      "http://127.0.0.1:41731/",
+      async () => new Response(),
+      {},
+      "oc_ui_hidden",
+    );
+    assert.equal(forged.status, 400);
+    assert.equal((await forged.json()).error, "OC_WEB_AUTHORITY_HEADER_FORBIDDEN");
+  });
+
+  it("preserves opaque media range semantics while injecting hidden UI authority", async () => {
+    let captured: Request | undefined;
+    const response = await handleOcWebRequest(
+      new Request("oc://app/api/v1/media/content/oc_media_opaque", {
+        headers: { range: "bytes=8-15", "if-range": '"sha256-media"' },
+      }),
+      "http://127.0.0.1:41731/",
+      async (request) => {
+        captured = request;
+        return new Response("timeline", {
+          status: 206,
+          headers: { "content-range": "bytes 8-15/20", etag: '"sha256-media"' },
+        });
+      },
+      {},
+      "oc_ui_media",
+    );
+    assert.equal(captured?.headers.get("range"), "bytes=8-15");
+    assert.equal(captured?.headers.get("if-range"), '"sha256-media"');
+    assert.equal(captured?.headers.get("x-open-cut-ui-session"), "oc_ui_media");
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("content-range"), "bytes 8-15/20");
+    assert.equal(await response.text(), "timeline");
+  });
+
+  it("dispatches source selection and Export delivery actions only to Electron main", async () => {
+    let platformCalls = 0;
+    let webCalls = 0;
+    const selected = await handleOcWebRequest(
+      new Request(`oc://app${OC_PLATFORM_SOURCE_GRANT_PATH}`, { method: "POST", body: '{"requestId":"pick-1"}' }),
+      "http://127.0.0.1:41731/",
+      async () => {
+        webCalls += 1;
+        return new Response();
+      },
+      {},
+      "oc_ui_hidden",
+      async () => {
+        platformCalls += 1;
+        return new Response('{"grant":{"id":"safe"}}', { status: 200 });
+      },
+    );
+    assert.equal(selected.status, 200);
+    assert.equal(platformCalls, 1);
+    assert.equal(webCalls, 0);
+
+    const saved = await handleOcWebRequest(
+      new Request(`oc://app${OC_PLATFORM_EXPORT_SAVE_PATH}`, { method: "POST", body: "{}" }),
+      "http://127.0.0.1:41731/",
+      async () => {
+        webCalls += 1;
+        return new Response();
+      },
+      {},
+      "oc_ui_hidden",
+      async () => {
+        platformCalls += 1;
+        return new Response('{"status":"saved"}', { status: 200 });
+      },
+    );
+    assert.equal(saved.status, 200);
+    assert.equal(platformCalls, 2);
+    assert.equal(webCalls, 0);
+
+    const revealed = await handleOcWebRequest(
+      new Request(`oc://app${OC_PLATFORM_EXPORT_REVEAL_PATH}`, { method: "POST", body: "{}" }),
+      "http://127.0.0.1:41731/",
+      async () => {
+        webCalls += 1;
+        return new Response();
+      },
+      {},
+      "oc_ui_hidden",
+      async () => {
+        platformCalls += 1;
+        return new Response('{"status":"revealed"}', { status: 200 });
+      },
+    );
+    assert.equal(revealed.status, 200);
+    assert.equal(platformCalls, 3);
+    assert.equal(webCalls, 0);
+
+    const internal = await handleOcWebRequest(
+      new Request("oc://app/api/v1/internal/platform/export-content/opaque"),
+      "http://127.0.0.1:41731/",
+      async () => {
+        webCalls += 1;
+        return new Response();
+      },
+      {},
+      "oc_ui_hidden",
+    );
+    assert.equal(internal.status, 404);
+    assert.equal(webCalls, 0);
   });
 });

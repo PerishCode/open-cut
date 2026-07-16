@@ -3,11 +3,15 @@ package productcli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
@@ -16,6 +20,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/product/command"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
@@ -35,6 +40,7 @@ type Status struct {
 
 type Options struct {
 	Executable string
+	Stdin      io.Reader
 	Stdout     io.Writer
 	Stderr     io.Writer
 }
@@ -46,17 +52,20 @@ func Run(ctx context.Context, args []string, options Options) int {
 	if options.Stderr == nil {
 		options.Stderr = io.Discard
 	}
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		printHelp(options.Stdout)
-		return 0
+	if options.Stdin == nil {
+		options.Stdin = strings.NewReader("")
 	}
-	if args[0] == "__active" {
-		return runActive(ctx, args[1:], options.Stdout, options.Stderr)
+	if len(args) > 0 && args[0] == "__active" {
+		return runActive(ctx, args[1:], options.Stdin, options.Stdout, options.Stderr)
+	}
+	if len(args) == 0 || isHelpInvocation(args) || (len(args) == 1 && args[0] == "help") {
+		if len(args) == 0 || args[0] == "help" {
+			args = []string{"--help"}
+		}
+		return dispatchActive(ctx, args, "", options)
 	}
 	if args[0] != "status" {
-		fmt.Fprintf(options.Stderr, "unknown command %q\n", args[0])
-		printHelp(options.Stderr)
-		return 2
+		return dispatchActive(ctx, args, "", options)
 	}
 	set := flag.NewFlagSet("status", flag.ContinueOnError)
 	set.SetOutput(options.Stderr)
@@ -75,29 +84,7 @@ func Run(ctx context.Context, args []string, options Options) int {
 		}
 		*receiptPath = lifecycle.DefaultReceiptPath(options.Executable)
 	}
-	receipt, err := install.LoadReceipt(*receiptPath)
-	if err != nil {
-		fmt.Fprintf(options.Stderr, "load install receipt: %v\n", err)
-		return 1
-	}
-	resolution, err := ResolveActiveCLI(receipt.BootstrapPath)
-	if err != nil {
-		fmt.Fprintf(options.Stderr, "resolve active CLI: %v\n", err)
-		return 1
-	}
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: resolution.CLIExecutable,
-		Args:       []string{"__active", "--bootstrap", receipt.BootstrapPath, "status"},
-		Directory:  resolution.VersionRoot,
-		Env:        os.Environ(),
-		Stdout:     options.Stdout,
-		Stderr:     options.Stderr,
-		Profile:    lifecycle.ProfileProduction,
-	}); err != nil {
-		fmt.Fprintf(options.Stderr, "run active CLI: %v\n", err)
-		return 1
-	}
-	return 0
+	return dispatchActive(ctx, []string{"status"}, *receiptPath, options)
 }
 
 func ResolveActiveCLI(bootstrapPath string) (Resolution, error) {
@@ -137,18 +124,189 @@ func ResolveActiveCLI(bootstrapPath string) (Resolution, error) {
 	}, nil
 }
 
-func runActive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("active", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	bootstrapPath := set.String("bootstrap", "", "bootstrap path")
-	if err := set.Parse(args); err != nil {
+func runActive(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) < 3 || args[0] != "--bootstrap" || args[1] == "" {
+		fmt.Fprintln(stderr, "active CLI requires --bootstrap <path> <command>")
 		return 2
 	}
-	if *bootstrapPath == "" || set.NArg() != 1 || set.Arg(0) != "status" {
-		fmt.Fprintln(stderr, "active CLI requires --bootstrap <path> status")
+	bootstrapPath := args[1]
+	commandArgs := args[2:]
+	if len(commandArgs) == 1 && commandArgs[0] == "status" {
+		return writeStatus(ctx, bootstrapPath, stdout, stderr)
+	}
+	if isHelpInvocation(commandArgs) {
+		path := append([]string(nil), commandArgs[:len(commandArgs)-1]...)
+		return writeDiscovery(bootstrapPath, path, stdout, stderr)
+	}
+	version, err := activeVersion(bootstrapPath)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return runBusiness(ctx, bootstrapPath, version, commandArgs, stdin, stdout, stderr)
+}
+
+func dispatchActive(ctx context.Context, args []string, receiptPath string, options Options) int {
+	if receiptPath == "" {
+		if options.Executable == "" {
+			fmt.Fprintln(options.Stderr, "cannot locate the install receipt without an executable path")
+			return 1
+		}
+		receiptPath = lifecycle.DefaultReceiptPath(options.Executable)
+	}
+	receipt, err := install.LoadReceipt(receiptPath)
+	if err != nil {
+		fmt.Fprintf(options.Stderr, "load install receipt: %v\n", err)
+		return 1
+	}
+	if shouldEnsureBusinessReady(args) {
+		if err := ensureBusinessReady(ctx, receipt, 2*time.Minute); err != nil {
+			fmt.Fprintf(options.Stderr, "ensure product ready: %v\n", err)
+		}
+	}
+	resolution, err := ResolveActiveCLI(receipt.BootstrapPath)
+	if err != nil {
+		fmt.Fprintf(options.Stderr, "resolve active CLI: %v\n", err)
+		return 1
+	}
+	activeArgs := []string{"__active", "--bootstrap", receipt.BootstrapPath}
+	activeArgs = append(activeArgs, args...)
+	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+		Executable: resolution.CLIExecutable,
+		Args:       activeArgs,
+		Directory:  resolution.VersionRoot,
+		Env:        activeCLIEnvironment(os.Environ(), receipt.HostPath),
+		Stdin:      options.Stdin,
+		Stdout:     options.Stdout,
+		Stderr:     options.Stderr,
+		Profile:    lifecycle.ProfileProduction,
+	}); err != nil {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			return exitError.ExitCode()
+		}
+		fmt.Fprintf(options.Stderr, "run active CLI: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func shouldEnsureBusinessReady(args []string) bool {
+	return !isHelpInvocation(args) && !(len(args) == 1 && args[0] == "status")
+}
+
+func ensureBusinessReady(ctx context.Context, receipt install.Receipt, timeout time.Duration) error {
+	bootstrap, err := config.LoadBootstrap(receipt.BootstrapPath)
+	if err != nil {
+		return err
+	}
+	identity, err := cell.New(bootstrap.Channel, bootstrap.Namespace)
+	if err != nil {
+		return err
+	}
+	paths, err := layout.Resolve(bootstrap.Roots, identity)
+	if err != nil {
+		return err
+	}
+	if ready, reachable := observerAPIReady(ctx, paths); ready {
+		return nil
+	} else if !reachable {
+		process, startErr := lifecycle.Start(ctx, lifecycle.ProcessSpec{
+			Executable: receipt.HostPath, Directory: receipt.InstallRoot, Env: os.Environ(),
+			Profile: lifecycle.ProfileProduction, Presentation: lifecycle.PresentationHeadless, Detached: true,
+		})
+		if startErr != nil {
+			return fmt.Errorf("start installed lifecycle host: %w", startErr)
+		}
+		go func() { _ = process.Wait() }()
+	}
+	waitContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-waitContext.Done():
+			return fmt.Errorf("product API did not become ready within %s: %w", timeout, waitContext.Err())
+		case <-ticker.C:
+			if ready, _ := observerAPIReady(waitContext, paths); ready {
+				return nil
+			}
+		}
+	}
+}
+
+func observerAPIReady(ctx context.Context, paths layout.CellPaths) (ready, reachable bool) {
+	observer, err := client.Load(paths.ControlFile, paths.ObserverTokenFile)
+	if err != nil {
+		return false, false
+	}
+	status, err := observer.Status(ctx)
+	if err != nil {
+		return false, false
+	}
+	for _, session := range status.Sessions {
+		if session.App == "api" && session.Ready {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+func activeCLIEnvironment(base []string, platformHost string) []string {
+	blocked := map[string]bool{
+		lifecycle.PlatformHostEnvironment: true,
+		lifecycle.SignerSocketEnvironment: true,
+	}
+	result := make([]string, 0, len(base)+1)
+	for _, entry := range base {
+		name, _, _ := strings.Cut(entry, "=")
+		if !blocked[name] {
+			result = append(result, entry)
+		}
+	}
+	return append(result, lifecycle.PlatformHostEnvironment+"="+platformHost)
+}
+
+func writeDiscovery(bootstrapPath string, path []string, stdout, stderr io.Writer) int {
+	bootstrap, err := config.LoadBootstrap(bootstrapPath)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	identity, _ := cell.New(bootstrap.Channel, bootstrap.Namespace)
+	paths, err := layout.Resolve(bootstrap.Roots, identity)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	runtimeState, err := state.Load(paths.StateFile, identity.Channel)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	discovery, err := command.InitialRegistry().Discover(path, runtimeState.Active)
+	if err != nil {
+		fmt.Fprintf(stderr, "discover command: %v\n", err)
 		return 2
 	}
-	return writeStatus(ctx, *bootstrapPath, stdout, stderr)
+	if err := json.NewEncoder(stdout).Encode(discovery); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func isHelpInvocation(args []string) bool {
+	if len(args) < 1 || len(args) > 3 || args[len(args)-1] != "--help" {
+		return false
+	}
+	for _, segment := range args[:len(args)-1] {
+		if segment == "" || segment[0] == '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func writeStatus(ctx context.Context, bootstrapPath string, stdout, stderr io.Writer) int {
@@ -183,13 +341,4 @@ func writeStatus(ctx context.Context, bootstrapPath string, stdout, stderr io.Wr
 		return 1
 	}
 	return 0
-}
-
-func printHelp(writer io.Writer) {
-	fmt.Fprint(writer, `Open Cut CLI attaches to the active cell without depending on the product API.
-
-Usage:
-  open-cut status [--receipt <install-receipt.json>]
-  open-cut status --bootstrap <bootstrap.json>
-`)
 }

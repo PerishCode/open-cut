@@ -8,6 +8,9 @@ local policy to justify one.
 ## Architecture boundaries
 
 - `apps/web`, `apps/api`, and `apps/electron` are product application roots.
+- `product/*` is the reusable Go business kernel: domain, command/schema
+  registry, and application ports/use cases. It imports no app-private source or
+  cold-start/control-plane package.
 - `packages/*` contains reusable TypeScript packages. Apps never import another
   app's private source.
 - `cmd/launcher` and Go packages under `internal/` own bootstrap, update,
@@ -17,7 +20,9 @@ local policy to justify one.
 - `cmd/cli` is the independently versioned product CLI. It is packaged at the
   fixed payload path `payload/bin/open-cut[.exe]`; an installed stable resolver
   dispatches to `runtime.json.active` and attaches to the cell with the
-  observe-only token. It never depends on `apps/api` or joins runtime topology.
+  observe-only token. Its control-plane attachment remains observe-only; product
+  business commands use a separate product port and grant behind the CLI. It
+  never imports `apps/api` private source or joins runtime topology.
 - The launcher and `oc-control dev` consume the same generic runtime-topology
   contract. They execute declared commands but do not model Electron, web, API,
   product identity, application dependencies, or business startup semantics.
@@ -40,6 +45,42 @@ local policy to justify one.
 - `apps/api` owns product OpenAPI endpoints and the SSE stream. Transport can be
   optimized inside a layer, but Web → Contracts → transport/proxy → API remains
   the fixed logical chain.
+- Go Agent command schemas originate only in `product/command`; Huma derives the
+  product HTTP OpenAPI from the same DTOs, and CLI JSON help comes from the same
+  registry. Do not add handwritten command JSON Schema or a parallel product
+  TypeSpec.
+
+## Agent-native business boundary
+
+- The installed stable `open-cut` CLI is the sole Agent-facing product entry.
+  The Agent discovers and executes behavior only through
+  `<cli> <command> <subcommand> [--help]` from the shipped prompt.
+- Do not add an Agent-facing MCP server, SDK, HTTP or socket endpoint, database
+  contract, project-file contract, sidecar capability, or second Open Cut Agent
+  entry executable.
+  Internal transports remain hidden CLI implementation details.
+- Narrative and Sequence are peer creative truths connected by durable explicit
+  Alignment entities. All creative mutation is a revisioned, idempotent,
+  atomic EditTransaction; no implicit cross-model synchronization is allowed.
+- Durable entity IDs are service-generated UUIDv7 values. Proposal/request and
+  RenderPlan digests use fully normalized domain-separated canonical JSON; no
+  client-selected durable ID, hidden default, or automatic transaction splitting
+  is allowed.
+- Agent black-box acceptance receives only the shipped prompt and stable CLI
+  path. Delivery setup may use `oc-control`, but `oc-control`, launcher, runner,
+  and broker never acquire product or creative semantics.
+- CLI business authorization uses an installation key in lifecycle-owned secure
+  storage plus API-owned pairing and request verification. Never expose key,
+  challenge, signature, broker token, or UI session material through AppState,
+  Agent environment, help, or command results.
+- First-party UI authorization uses a different lifecycle-owned role key.
+  Electron main alone bootstraps and holds the short-lived API session, then
+  injects it through the `oc://`/Web proxy chain; renderer JavaScript never owns
+  it. Direct loopback access remains unauthorized.
+- The API Agent bridge may launch a configured existing local Agent with a
+  bounded prompt, per-turn scratch directory, stable CLI on `PATH`, and safe
+  AppState context environment. It never gives the Agent an internal endpoint,
+  token, data path, sidecar capability, or private operation schema.
 
 ## Sidecar entry contract
 
@@ -51,8 +92,11 @@ local policy to justify one.
   `packages/sidecar-protocol`; transport and reconciliation mechanics live in
   `packages/sidecar-client`.
 - Each `apps/*/sidecar/manifest.json` is the sole language-neutral declaration
-  of that app's runtime command and artifact. `$node` and `$payload` are generic
-  runner tokens; any other command is an app-relative native artifact.
+  of that app's runtime command and artifact closure. `$node` and `$payload` are
+  generic runner tokens; any other command is an app-relative native artifact.
+  Optional app-relative native `artifactChecks` are packaging gates only:
+  `oc-control` executes them but never interprets their product semantics or
+  emits them into runtime topology.
 - Web and Electron compile their sole sidecar-mode source to
   `dist/sidecar/index.js`; API builds its Go sidecar to
   `dist/sidecar/api-sidecar.exe`. Development, packaged execution, and harnesses
@@ -87,6 +131,16 @@ local policy to justify one.
   process instance. Runtime topology, sidecars, and API code never infer an OS path.
 - SQLite migrations are an immutable, strictly ordered forward sequence. There
   is no down migration or old-binary availability guarantee after schema advance.
+- Product persistence uses an append-only proposal/transaction journal,
+  normalized current projections, and a transactional activity outbox. A
+  creative commit updates all three atomically; normal startup does not rebuild
+  state by replaying history.
+- Product JSON wires encode RationalTime numerators, revisions, and activity
+  cursors as canonical decimal strings. Web/Contracts must not coerce them to
+  unsafe JavaScript numbers.
+- Media, resource, and export work runs through an API-internal SQLite lease
+  scheduler. Do not add a product worker sidecar or make API READY wait for the
+  business queue to drain.
 
 ## Hot development and operations path
 

@@ -6,5 +6,5 @@
     "tsBuildInfoFile": "dist/tsconfig.sidecar.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "sidecar/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.cts", "sidecar/**/*.ts"]
 }

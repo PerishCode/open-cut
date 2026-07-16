@@ -18,6 +18,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/verifier"
+	"github.com/PerishCode/open-cut/internal/workspace"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
@@ -84,6 +85,10 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 			options.OriginRoot = absolute
 		}
 	}
+	controlConfig, err := workspace.Load(options.RepositoryRoot)
+	if err != nil {
+		return InstallResult{}, err
+	}
 	verified, err := verifier.VerifyOrigin(options.OriginRoot, options.Channel, options.Target, options.KeyPath, time.Now())
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("verify delivery origin: %w", err)
@@ -126,8 +131,14 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 	if err != nil {
 		return InstallResult{}, err
 	}
+	installationRoot := filepath.Join(userRoot, "identity")
+	installation, err := lifecycle.EnsureDevelopmentInstallationIdentity(installationRoot, controlConfig.InstallationKeyRoles)
+	if err != nil {
+		return InstallResult{}, fmt.Errorf("provision harness installation identity: %w", err)
+	}
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: options.Channel, Namespace: options.Namespace, DataDir: dataDir, Roots: roots,
+		Installation:  installation.Assertion(),
 		UpdateOrigins: []string{options.OriginURL}, ProtocolFloor: "bootstrap.v1",
 		InitialTrustRoot: config.TrustConfig{Threshold: 1, Keys: []config.TrustKey{{ID: key.KeyID, PublicKey: key.PublicKey}}},
 	}
@@ -144,8 +155,8 @@ func Install(ctx context.Context, options InstallOptions) (InstallResult, error)
 		Schema: install.ReceiptSchema, Target: options.Target, InstallRoot: installLayout.InstallRoot,
 		HostPath: installLayout.HostPath, LauncherPath: installLayout.LauncherPath,
 		CLIPath: installLayout.CLIPath, BootstrapPath: bootstrapPath,
-		ManagedRoots: []string{roots.BootstrapRoot, paths.Store, paths.Cache, paths.Runtime, paths.Log, dataDir},
-		Channel:      options.Channel, Namespace: options.Namespace,
+		ManagedRoots: []string{roots.BootstrapRoot, paths.Store, paths.Cache, paths.Runtime, paths.Log, dataDir, installationRoot},
+		Channel:      options.Channel, Namespace: options.Namespace, IdentityBackend: install.IdentityBackendDevelopmentFile,
 	}
 	for _, destination := range []string{installLayout.InternalReceiptPath, receiptPath} {
 		if err := install.SaveReceipt(destination, receipt); err != nil {

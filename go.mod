@@ -8,7 +8,10 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/klauspost/compress v1.18.5
 	github.com/ncruces/go-sqlite3 v0.35.2
+	github.com/rivo/uniseg v0.4.7
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/sys v0.46.0
+	golang.org/x/text v0.39.0
 )
 
 require (

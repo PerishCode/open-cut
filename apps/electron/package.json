@@ -2,6 +2,8 @@
   "name": "@open-cut/electron",
   "productName": "Open Cut",
   "version": "0.0.0",
+  "description": "Agent-native local video creation workspace",
+  "author": "Open Cut contributors",
   "private": true,
   "type": "module",
   "main": "dist/sidecar/index.js",

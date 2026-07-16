@@ -14,9 +14,17 @@ import (
 )
 
 func TestHealthContract(t *testing.T) {
+	store := repository.NewMemoryProjects()
+	projects, reads, activity, runs := testProjectApplications(t, store)
+	edits, editReads := testEditingApplications(t, store)
+	media, assetReads, sourceAccess := testMediaApplications(t, store)
 	mux, api := controller.NewRouter(
 		service.NewHealth(repository.StaticHealth{}),
-		service.NewProjects(repository.NewMemoryProjects()),
+		nil,
+		nil,
+		projects, reads, activity, runs, edits, editReads, media, assetReads, sourceAccess,
+		nil, nil, nil, nil, nil,
+		service.RejectAuthorizer{},
 	)
 	request := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
 	response := httptest.NewRecorder()

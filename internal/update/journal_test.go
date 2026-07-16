@@ -16,6 +16,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/state"
+	"github.com/PerishCode/open-cut/internal/testfixture"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/PerishCode/open-cut/utils/target"
 )
@@ -25,7 +26,8 @@ func TestRecoverPromotedReleasePreparesCandidate(t *testing.T) {
 	publicKey, _, _ := ed25519.GenerateKey(rand.Reader)
 	bootstrap := config.Bootstrap{
 		Schema: 1, Channel: "beta", Namespace: "recovery", ProtocolFloor: "bootstrap.v1",
-		DataDir: filepath.Join(root, "data", "beta", "recovery"),
+		DataDir:      filepath.Join(root, "data", "beta", "recovery"),
+		Installation: testfixture.InstallationAssertion(),
 		Roots: config.RootSet{
 			BootstrapRoot: filepath.Join(root, "bootstrap"), StoreRoot: filepath.Join(root, "store"),
 			CacheRoot: filepath.Join(root, "cache"), RuntimeRoot: filepath.Join(root, "runtime"), LogRoot: filepath.Join(root, "logs"),

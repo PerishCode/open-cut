@@ -29,6 +29,8 @@ type Options struct {
 	Channel      string
 	Namespace    string
 	DataDir      string
+	Installation protocol.InstallationAssertion
+	Environment  map[string]string
 	App          string
 	Mode         protocol.LifecycleMode
 	Presentation protocol.Presentation
@@ -73,6 +75,9 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 		options.Namespace == "" || options.App == "" || !filepath.IsAbs(options.DataDir) || filepath.Clean(options.DataDir) != options.DataDir ||
 		!options.Mode.Valid() || !options.Presentation.Valid() || options.Source == "" {
 		return fmt.Errorf("runtime host requires a complete sidecar launch envelope")
+	}
+	if err := options.Installation.Validate(); err != nil {
+		return fmt.Errorf("runtime host installation assertion: %w", err)
 	}
 	if options.ReadyTimeout <= 0 {
 		options.ReadyTimeout = 45 * time.Second
@@ -238,7 +243,7 @@ func startProcess(
 	}
 	launchEnvironment, err := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
 		App: definition.App, Control: options.Descriptor, Token: delegated.Token, Channel: options.Channel,
-		Namespace: options.Namespace, DataDir: options.DataDir, Mode: options.Mode,
+		Namespace: options.Namespace, DataDir: options.DataDir, Installation: options.Installation, Mode: options.Mode,
 		Presentation: options.Presentation, Source: options.Source,
 	})
 	if err != nil {
@@ -252,7 +257,7 @@ func startProcess(
 		Stderr:     options.Stderr,
 		Profile:    profile,
 		Sandbox:    definition.Sandbox,
-		Env:        environment.Merge(os.Environ(), definition.UnsetEnv, definition.Env, launchEnvironment),
+		Env:        environment.Merge(os.Environ(), definition.UnsetEnv, options.Environment, definition.Env, launchEnvironment),
 	})
 	if err != nil {
 		return err

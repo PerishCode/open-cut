@@ -14,6 +14,7 @@ func main() {
 	executable, _ := os.Executable()
 	os.Exit(productcli.Run(ctx, os.Args[1:], productcli.Options{
 		Executable: executable,
+		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
 	}))

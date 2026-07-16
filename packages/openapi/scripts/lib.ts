@@ -41,7 +41,7 @@ export async function renderArtifacts(destination: string, baseUrl: string): Pro
     output: {
       target: join(generatedRoot, "index.ts"),
       schemas: join(generatedRoot, "model"),
-      mode: "single",
+      mode: "tags",
       client: "fetch",
       baseUrl,
       clean: true,

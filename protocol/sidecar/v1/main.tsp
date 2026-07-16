@@ -54,6 +54,23 @@ enum Presentation {
   headless: "headless",
 }
 
+enum InstallationKeyAlgorithm {
+  ed25519: "ed25519",
+}
+
+model InstallationPublicKey {
+  @minLength(1) @maxLength(64) role: string;
+  algorithm: InstallationKeyAlgorithm;
+  @minLength(1) publicKey: string;
+}
+
+model InstallationAssertion {
+  schema: 1;
+  @minLength(1) @maxLength(128) installationId: string;
+  @minValue(1) generation: safeint;
+  @minItems(1) keys: InstallationPublicKey[];
+}
+
 model ControlDescriptor {
   schema: 1;
   protocol: "sidecar.v1";
@@ -82,6 +99,9 @@ model SidecarLaunch {
 
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_DATA_DIR")
   @minLength(1) dataDir: string;
+
+  @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_INSTALLATION")
+  installation: InstallationAssertion;
 
   @TypeSpec.OpenAPI.extension("x-environment", "OC_SIDECAR_MODE")
   mode: LifecycleMode;

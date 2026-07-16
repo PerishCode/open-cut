@@ -10,7 +10,10 @@ broker, signed release discovery, atomic activation, handoff, readiness, and
 rollback. It does not own product data, app HTTP ports, Electron behavior, or
 application dependency semantics. The embedding lifecycle resolves one opaque,
 cell-scoped product data directory and the cold-start chain only authenticates
-and forwards it. Its runtime runner understands only a generic command topology.
+and forwards it. The embedding lifecycle also provides a required versioned public
+installation assertion whose private keys remain in platform secure storage;
+the cold-start chain authenticates and forwards that assertion opaquely. Its
+runtime runner understands only a generic command topology.
 
 ## Identity and roots
 
@@ -35,7 +38,8 @@ suffix:
 <channel>/<namespace>
 ```
 
-`bootstrap.json` separately contains the final clean absolute `dataDir`. The
+`bootstrap.json` separately contains the final clean absolute `dataDir` and the
+non-secret installation assertion. The
 packaged lifecycle resolves it as:
 
 ```text
@@ -99,6 +103,15 @@ silently bypasses the state machine.
   workspace-resolved topology respectively.
 - B0 forwards the bootstrap `dataDir` to L1, and L1 forwards it to every sidecar
   launch envelope. Runtime topology cannot provide or override it.
+- A bootstrap installation assertion may contain only generic public identity
+  material and lifecycle generation. B0, L1, and the runner forward it outside
+  runtime topology without interpreting product roles. No private key or product
+  permission enters bootstrap, topology, environment, or sidecar data.
+- The installed platform host prepends its stable executable directory to the
+  child process `PATH` before B0 starts. B0, L1, and the generic runner inherit
+  and forward that environment without knowing the `open-cut` command. This lets
+  product business code resolve the installed stable CLI while keeping the path
+  and product name out of runtime topology.
 - The runner starts peer sidecar processes, aggregates their READY state into the
   broker-visible `payload` session, and independently restarts peers after
   unexpected exits with bounded exponential backoff.
@@ -109,6 +122,11 @@ silently bypasses the state machine.
   generation ends the whole runtime tree. Process exit codes do not encode that intent.
 - Any binary that accepts a sidecar launch envelope is valid; the runner has no
   Electron, web, API, or product branches.
+
+`oc-control dev` builds the same stable resolver into its guarded temporary
+surface, supplies normal launch parameters for the development bootstrap, and
+prepends that directory to the dev process `PATH`. It does not create a wrapper
+or document a different Agent command.
 
 ## Activation state
 
@@ -132,6 +150,11 @@ entries; API points at its native Go artifact. Business code has zero knowledge
 of the control plane. Dev, packaged, and harness execution all consume those
 same declared artifacts through the generic runtime plan.
 
+The same manifest may declare bounded app-relative native `artifactChecks`.
+These are build-plane closure gates: packaging executes them after isolated app
+deployment, but neither their arguments nor their product meaning enter runtime
+topology, launcher state, sidecar launch, or readiness.
+
 Each sidecar derives its app directory as `<dataDir>/<app>`. The API sidecar is
 the sole SQLite owner and derives `database/open-cut.db` beneath its app
 directory. It applies the single forward-only migration sequence before
@@ -139,6 +162,13 @@ publishing an endpoint or READY. Applied migration names and checksums are
 immutable; branching and down migrations are unsupported. Migration failure or
 database corruption aborts API startup before endpoint publication. Cold start
 does not silently replace, restore, or downgrade the database.
+
+API-owned product-file reconciliation remains an application startup concern,
+not a sidecar or launcher concern. For installation-scoped ProductResources it
+performs only bounded tree, regular-file, and expected-size checks before READY;
+it does not hash large model bytes, contact an origin, or run a model/media
+executable on the cold-start path. Full integrity belongs to atomic publication
+and the consuming business executor.
 
 Electron is not a sidecar supervisor. It observes the web sidecar's READY state
 and published endpoint continuously through the shared cell TCP broker, then

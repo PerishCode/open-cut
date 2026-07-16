@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/PerishCode/open-cut/utils/environment"
 )
@@ -36,20 +38,28 @@ const (
 )
 
 type ProcessSpec struct {
-	Executable   string
-	Args         []string
-	Directory    string
-	Env          []string
-	Stdout       io.Writer
-	Stderr       io.Writer
-	Profile      Profile
-	Presentation Presentation
-	Sandbox      SandboxPolicy
-	Detached     bool
+	Executable         string
+	Args               []string
+	Directory          string
+	Env                []string
+	Stdin              io.Reader
+	Stdout             io.Writer
+	Stderr             io.Writer
+	Profile            Profile
+	Presentation       Presentation
+	Sandbox            SandboxPolicy
+	Detached           bool
+	ContainProcessTree bool
+	TerminationGrace   time.Duration
 }
 
 type Process struct {
-	command *exec.Cmd
+	command   *exec.Cmd
+	tree      processTree
+	grace     time.Duration
+	done      chan struct{}
+	waitOnce  sync.Once
+	waitError error
 }
 
 func BootstrapProcess(executable, bootstrap string, spec ProcessSpec) ProcessSpec {
@@ -74,16 +84,34 @@ func Start(ctx context.Context, spec ProcessSpec) (*Process, error) {
 		command = exec.Command(resolved.Executable, resolved.Args...)
 		applyDetachment(command)
 	} else {
-		command = exec.CommandContext(ctx, resolved.Executable, resolved.Args...)
+		command = exec.Command(resolved.Executable, resolved.Args...)
+	}
+	tree, err := newProcessTree(command, resolved.ContainProcessTree)
+	if err != nil {
+		return nil, err
 	}
 	command.Dir = resolved.Directory
 	command.Env = resolved.Env
+	command.Stdin = resolved.Stdin
 	command.Stdout = resolved.Stdout
 	command.Stderr = resolved.Stderr
 	if err := command.Start(); err != nil {
+		tree.close()
 		return nil, err
 	}
-	return &Process{command: command}, nil
+	if err := tree.attach(command); err != nil {
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+		tree.close()
+		return nil, fmt.Errorf("contain lifecycle process tree: %w", err)
+	}
+	process := &Process{
+		command: command, tree: tree, grace: resolved.TerminationGrace, done: make(chan struct{}),
+	}
+	if !resolved.Detached {
+		go process.watchContext(ctx)
+	}
+	return process, nil
 }
 
 func Run(ctx context.Context, spec ProcessSpec) error {
@@ -98,14 +126,20 @@ func (process *Process) Wait() error {
 	if process == nil || process.command == nil {
 		return fmt.Errorf("lifecycle process is not running")
 	}
-	return process.command.Wait()
+	process.waitOnce.Do(func() {
+		process.waitError = process.command.Wait()
+		process.tree.close()
+		close(process.done)
+	})
+	<-process.done
+	return process.waitError
 }
 
 func (process *Process) Kill() error {
 	if process == nil || process.command == nil || process.command.Process == nil {
 		return nil
 	}
-	return process.command.Process.Kill()
+	return process.tree.kill(process.command)
 }
 
 func (process *Process) PID() int {
@@ -121,6 +155,19 @@ func resolveProcessSpec(spec ProcessSpec) (ProcessSpec, error) {
 	}
 	if spec.Sandbox != SandboxDefault && spec.Sandbox != SandboxChromium {
 		return ProcessSpec{}, fmt.Errorf("unsupported sandbox policy %q", spec.Sandbox)
+	}
+	if spec.Detached && spec.ContainProcessTree {
+		return ProcessSpec{}, fmt.Errorf("detached lifecycle process cannot request tree containment")
+	}
+	if spec.ContainProcessTree {
+		if spec.TerminationGrace == 0 {
+			spec.TerminationGrace = 2 * time.Second
+		}
+		if spec.TerminationGrace < 0 || spec.TerminationGrace > 30*time.Second {
+			return ProcessSpec{}, fmt.Errorf("lifecycle process termination grace is invalid")
+		}
+	} else if spec.TerminationGrace != 0 {
+		return ProcessSpec{}, fmt.Errorf("termination grace requires process-tree containment")
 	}
 	if spec.Env == nil {
 		spec.Env = os.Environ()
@@ -142,6 +189,22 @@ func resolveProcessSpec(spec ProcessSpec) (ProcessSpec, error) {
 		spec.Stderr = io.Discard
 	}
 	return applyPlatformProcessPolicy(spec), nil
+}
+
+func (process *Process) watchContext(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		_ = process.tree.signal(process.command)
+		timer := time.NewTimer(process.grace)
+		defer timer.Stop()
+		select {
+		case <-process.done:
+			return
+		case <-timer.C:
+			_ = process.Kill()
+		}
+	case <-process.done:
+	}
 }
 
 func ResolvePresentation(values []string) (Presentation, error) {

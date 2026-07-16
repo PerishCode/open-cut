@@ -23,18 +23,26 @@ const (
 var appPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`)
 
 type Config struct {
-	Schema           int    `json:"schema"`
-	PayloadWorkspace string `json:"payloadWorkspace"`
+	Schema               int      `json:"schema"`
+	PayloadWorkspace     string   `json:"payloadWorkspace"`
+	InstallationKeyRoles []string `json:"installationKeyRoles"`
 }
 
 type Sidecar struct {
-	App     string   `json:"app"`
-	Command string   `json:"command"`
-	Args    []string `json:"args,omitempty"`
+	App            string          `json:"app"`
+	Command        string          `json:"command"`
+	Args           []string        `json:"args,omitempty"`
+	ArtifactChecks []ArtifactCheck `json:"artifactChecks,omitempty"`
 }
 
 type SidecarManifest struct {
-	Schema  int      `json:"schema"`
+	Schema         int             `json:"schema"`
+	Command        string          `json:"command"`
+	Args           []string        `json:"args,omitempty"`
+	ArtifactChecks []ArtifactCheck `json:"artifactChecks,omitempty"`
+}
+
+type ArtifactCheck struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args,omitempty"`
 }
@@ -60,8 +68,18 @@ func Load(repositoryRoot string) (Config, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return Config{}, fmt.Errorf("decode oc-control.json: %w", err)
 	}
-	if config.Schema != ConfigSchema || !appPattern.MatchString(config.PayloadWorkspace) {
-		return Config{}, fmt.Errorf("oc-control.json requires schema 1 and a safe payloadWorkspace")
+	if config.Schema != ConfigSchema || !appPattern.MatchString(config.PayloadWorkspace) || len(config.InstallationKeyRoles) == 0 {
+		return Config{}, fmt.Errorf("oc-control.json requires schema 1, a safe payloadWorkspace, and installation key roles")
+	}
+	roles := make(map[string]struct{}, len(config.InstallationKeyRoles))
+	for _, role := range config.InstallationKeyRoles {
+		if !appPattern.MatchString(role) {
+			return Config{}, fmt.Errorf("installation key role %q is not a safe opaque label", role)
+		}
+		if _, exists := roles[role]; exists {
+			return Config{}, fmt.Errorf("installation key role %q is duplicated", role)
+		}
+		roles[role] = struct{}{}
 	}
 	if info, err := os.Stat(filepath.Join(repositoryRoot, "apps", config.PayloadWorkspace)); err != nil || !info.IsDir() {
 		return Config{}, fmt.Errorf("payload workspace apps/%s does not exist", config.PayloadWorkspace)
@@ -164,8 +182,15 @@ func DiscoverTopology(repositoryRoot string, config Config) (Topology, error) {
 				return Topology{}, fmt.Errorf("sidecar %s command artifact is unavailable at %s", entry.Name(), manifest.Command)
 			}
 		}
+		for _, check := range manifest.ArtifactChecks {
+			artifact := filepath.Join(appsRoot, entry.Name(), filepath.FromSlash(check.Command))
+			if info, err := os.Stat(artifact); err != nil || !info.Mode().IsRegular() {
+				return Topology{}, fmt.Errorf("sidecar %s artifact check command is unavailable at %s", entry.Name(), check.Command)
+			}
+		}
 		sidecars = append(sidecars, Sidecar{
 			App: entry.Name(), Command: manifest.Command, Args: append([]string(nil), manifest.Args...),
+			ArtifactChecks: cloneArtifactChecks(manifest.ArtifactChecks),
 		})
 	}
 	sort.Slice(sidecars, func(i, j int) bool { return sidecars[i].App < sidecars[j].App })
@@ -200,7 +225,31 @@ func loadSidecarManifest(filename string) (SidecarManifest, error) {
 	if manifest.Command == SidecarCommandPayload && len(manifest.Args) > 0 {
 		return SidecarManifest{}, fmt.Errorf("payload sidecar command does not accept manifest arguments")
 	}
+	if len(manifest.ArtifactChecks) > 16 {
+		return SidecarManifest{}, fmt.Errorf("sidecar manifest declares too many artifact checks")
+	}
+	for _, check := range manifest.ArtifactChecks {
+		if check.Command == SidecarCommandNode || check.Command == SidecarCommandPayload {
+			return SidecarManifest{}, fmt.Errorf("sidecar artifact check must use an app-relative native command")
+		}
+		if err := validateSidecarPath(check.Command, "artifact check command"); err != nil {
+			return SidecarManifest{}, err
+		}
+		for _, argument := range check.Args {
+			if strings.ContainsRune(argument, '\x00') {
+				return SidecarManifest{}, fmt.Errorf("sidecar artifact check argument contains a null byte")
+			}
+		}
+	}
 	return manifest, nil
+}
+
+func cloneArtifactChecks(checks []ArtifactCheck) []ArtifactCheck {
+	result := make([]ArtifactCheck, len(checks))
+	for index, check := range checks {
+		result[index] = ArtifactCheck{Command: check.Command, Args: append([]string(nil), check.Args...)}
+	}
+	return result
 }
 
 func validateSidecarPath(value, field string) error {

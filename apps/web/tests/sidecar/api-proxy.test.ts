@@ -1,7 +1,7 @@
 import { createServer, type RequestListener, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ApiProxy, normalizeApiRuntimeUrl } from "../../sidecar/api-proxy.js";
+import { ApiProxy, developmentSessionCookie, normalizeApiRuntimeUrl } from "../../sidecar/api-proxy.js";
 
 const servers: Server[] = [];
 
@@ -67,6 +67,83 @@ describe("Web sidecar API proxy", () => {
     proxy.setRuntime(second);
     await withTimeout(firstClosed);
     await expect(fetch(`${web}/api/v1/events`).then((response) => response.text())).resolves.toBe("replacement");
+  });
+
+  it("binds a development browser cookie to a hidden upstream UI session", async () => {
+    const api = await listen((request, response) => {
+      expect(request.headers["x-open-cut-ui-session"]).toBe("oc_ui_hidden");
+      expect(request.headers.cookie).toBeUndefined();
+      expect(request.headers["x-open-cut-cli-signature"]).toBeUndefined();
+      response.end("authorized");
+    });
+    const proxy = new ApiProxy();
+    proxy.setRuntime(api);
+    proxy.setUISession({
+      apiSession: "oc_ui_hidden",
+      browserBinding: "browser-binding",
+      expiresAt: Date.now() + 60_000,
+    });
+    const web = await listen((request, response) => {
+      if (!proxy.handle(request, response)) response.writeHead(404).end();
+    });
+
+    const rejected = await fetch(`${web}/api/v1/projects`);
+    expect(rejected.status).toBe(401);
+    const accepted = await fetch(`${web}/api/v1/projects`, {
+      headers: {
+        cookie: `${developmentSessionCookie}=browser-binding`,
+        "x-open-cut-cli-signature": "must-not-forward",
+      },
+    });
+    expect(accepted.status).toBe(200);
+    await expect(accepted.text()).resolves.toBe("authorized");
+  });
+
+  it("preserves session-bound media range requests and responses", async () => {
+    const api = await listen((request, response) => {
+      expect(request.url).toMatch(/^\/v1\/media\/content\/oc_media_/);
+      expect(request.headers.range).toBe("bytes=4-7");
+      expect(request.headers["x-open-cut-ui-session"]).toBe("oc_ui_media");
+      response.writeHead(206, {
+        "accept-ranges": "bytes",
+        "content-length": "4",
+        "content-range": "bytes 4-7/20",
+        "content-type": "video/webm",
+        etag: '"sha256-media"',
+      });
+      response.end("cut-");
+    });
+    const proxy = new ApiProxy();
+    proxy.setRuntime(api);
+    proxy.setUISession({
+      apiSession: "oc_ui_media",
+      browserBinding: "media-browser",
+      expiresAt: Date.now() + 60_000,
+    });
+    const web = await listen((request, response) => {
+      if (!proxy.handle(request, response)) response.writeHead(404).end();
+    });
+    const response = await fetch(`${web}/api/v1/media/content/oc_media_opaque`, {
+      headers: { cookie: `${developmentSessionCookie}=media-browser`, range: "bytes=4-7" },
+    });
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 4-7/20");
+    expect(response.headers.get("etag")).toBe('"sha256-media"');
+    await expect(response.text()).resolves.toBe("cut-");
+  });
+
+  it("does not expose internal UI bootstrap routes through the browser proxy", async () => {
+    const proxy = new ApiProxy();
+    const web = await listen((request, response) => {
+      if (!proxy.handle(request, response)) response.writeHead(404).end();
+    });
+    const response = await fetch(`${web}/api/v1/auth/ui/challenges`, { method: "POST" });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: "OC_API_ROUTE_NOT_FOUND" });
+
+    const platform = await fetch(`${web}/api/v1/internal/platform/source-grants`, { method: "POST" });
+    expect(platform.status).toBe(404);
+    await expect(platform.json()).resolves.toMatchObject({ error: "OC_API_ROUTE_NOT_FOUND" });
   });
 });
 

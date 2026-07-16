@@ -6,10 +6,12 @@ import { extname, join, relative, resolve, sep } from "node:path";
 import { type LifecycleMode, lifecycleMode } from "@open-cut/sidecar-client";
 import type { ViteDevServer } from "vite";
 import { ApiProxy } from "./api-proxy.js";
+import type { ProxyUISession } from "./ui-session.js";
 
 export type WebServer = {
   url: string;
   setApiRuntime(endpoint: string | undefined): void;
+  setUISession(session: ProxyUISession | undefined): void;
   close(): Promise<void>;
 };
 
@@ -25,6 +27,7 @@ async function startViteServer(webRoot: string, host: string, port: number): Pro
   let vite: ViteDevServer | undefined;
   const server = createServer((request, response) => {
     if (api.handle(request, response)) return;
+    if (api.browserCookie()) response.setHeader("set-cookie", api.browserCookie() ?? "");
     if (!vite) {
       response.writeHead(503);
       response.end();
@@ -58,6 +61,7 @@ async function startViteServer(webRoot: string, host: string, port: number): Pro
   return {
     url: `http://${host}:${address.port}`,
     setApiRuntime: (endpoint) => api.setRuntime(endpoint),
+    setUISession: (session) => api.setUISession(session),
     close: async () => {
       await vite?.close();
       await closeServer(server);
@@ -72,6 +76,7 @@ async function startStaticServer(distRoot: string, host: string, port: number): 
   const server = createServer(async (request, response) => {
     try {
       if (api.handle(request, response)) return;
+      if (api.browserCookie()) response.setHeader("set-cookie", api.browserCookie() ?? "");
       if (request.method !== "GET" && request.method !== "HEAD") {
         response.writeHead(405, { allow: "GET, HEAD" });
         response.end();
@@ -99,6 +104,7 @@ async function startStaticServer(distRoot: string, host: string, port: number): 
   return {
     url: `http://${host}:${address.port}`,
     setApiRuntime: (endpoint) => api.setRuntime(endpoint),
+    setUISession: (session) => api.setUISession(session),
     close: () => closeServer(server),
   };
 }

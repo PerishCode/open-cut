@@ -5,8 +5,52 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/generated/index.d.ts",
-      "default": "./dist/generated/index.js"
+      "types": "./dist/generated/model/index.d.ts",
+      "default": "./dist/generated/model/index.js"
+    },
+    "./activity": {
+      "types": "./dist/generated/activity.d.ts",
+      "default": "./dist/generated/activity.js"
+    },
+    "./agent": {
+      "types": "./dist/generated/agent.d.ts",
+      "default": "./dist/generated/agent.js"
+    },
+    "./authorization": {
+      "types": "./dist/generated/authorization.d.ts",
+      "default": "./dist/generated/authorization.js"
+    },
+    "./creator": {
+      "types": "./dist/generated/creator.d.ts",
+      "default": "./dist/generated/creator.js"
+    },
+    "./editing": {
+      "types": "./dist/generated/editing.d.ts",
+      "default": "./dist/generated/editing.js"
+    },
+    "./exports": {
+      "types": "./dist/generated/exports.d.ts",
+      "default": "./dist/generated/exports.js"
+    },
+    "./health": {
+      "types": "./dist/generated/health.d.ts",
+      "default": "./dist/generated/health.js"
+    },
+    "./media": {
+      "types": "./dist/generated/media.d.ts",
+      "default": "./dist/generated/media.js"
+    },
+    "./product": {
+      "types": "./dist/generated/product.d.ts",
+      "default": "./dist/generated/product.js"
+    },
+    "./projects": {
+      "types": "./dist/generated/projects.d.ts",
+      "default": "./dist/generated/projects.js"
+    },
+    "./runs": {
+      "types": "./dist/generated/runs.d.ts",
+      "default": "./dist/generated/runs.js"
     }
   },
   "scripts": {

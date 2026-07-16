@@ -126,6 +126,14 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
 		return Result{}, err
 	}
+	for _, sidecar := range topology.Sidecars {
+		if sidecar.App == controlConfig.PayloadWorkspace {
+			if err := runArtifactChecks(ctx, deployedApp, sidecar.ArtifactChecks, stdout, stderr); err != nil {
+				return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
+			}
+			break
+		}
+	}
 	resourcesRoot := filepath.Join(workRoot, "payload-resources")
 	for _, sidecar := range topology.Sidecars {
 		if sidecar.App == controlConfig.PayloadWorkspace {
@@ -138,6 +146,9 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		destination := filepath.Join(resourcesRoot, "sidecars", sidecar.App)
 		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
 			return Result{}, err
+		}
+		if err := runArtifactChecks(ctx, destination, sidecar.ArtifactChecks, stdout, stderr); err != nil {
+			return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
 		}
 	}
 	electronOutput := filepath.Join(workRoot, "electron-out")
@@ -349,6 +360,38 @@ func run(ctx context.Context, directory string, stdout, stderr io.Writer, enviro
 		Executable: command, Args: arguments, Directory: directory, Env: environment,
 		Stdout: stdout, Stderr: stderr, Profile: lifecycle.ProfileProduction,
 	})
+}
+
+func runArtifactChecks(
+	ctx context.Context,
+	appRoot string,
+	checks []workspace.ArtifactCheck,
+	stdout, stderr io.Writer,
+) error {
+	physicalRoot, err := filepath.EvalSymlinks(appRoot)
+	if err != nil {
+		return err
+	}
+	for _, check := range checks {
+		candidate := filepath.Join(appRoot, filepath.FromSlash(check.Command))
+		physical, err := filepath.EvalSymlinks(candidate)
+		if err != nil || !pathWithin(physicalRoot, physical) {
+			return fmt.Errorf("artifact check command escapes deployed app")
+		}
+		info, err := os.Stat(physical)
+		if err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact check command is unavailable")
+		}
+		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+			Executable: physical, Args: append([]string(nil), check.Args...), Directory: appRoot,
+			Env: os.Environ(), Stdout: stdout, Stderr: stderr,
+			Profile: lifecycle.ProfileProduction, Presentation: lifecycle.PresentationHeadless,
+			ContainProcessTree: true, TerminationGrace: 2 * time.Second,
+		}); err != nil {
+			return fmt.Errorf("run %s: %w", check.Command, err)
+		}
+	}
+	return nil
 }
 
 func copyTree(source, destination string, dereferenceLinks bool, repositoryDependencyRoot string) error {

@@ -16,15 +16,17 @@ import (
 	"github.com/PerishCode/open-cut/internal/layout"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
+	"github.com/PerishCode/open-cut/internal/workspace"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
+	"github.com/PerishCode/open-cut/utils/environment"
 )
 
 const fullPackReadyTimeout = 45 * time.Second
 
-func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
+func RunFullPack(ctx context.Context, workspace, repositoryRoot, bundlePath string) Report {
 	started := time.Now()
 	report := Report{Schema: 1, Scenario: "runtime-topology-peer-sidecars"}
 	check := func(name string, err error) bool {
@@ -80,13 +82,30 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	}
 	defer cellBroker.Close()
 	dataDir := filepath.Join(workspace, identity.Suffix())
+	controlConfig, err := workspaceConfig(repositoryRoot)
+	if !check("load-workspace", err) {
+		return finish(report, started)
+	}
+	installationIdentity, err := harnessInstallationIdentity(workspace, controlConfig.InstallationKeyRoles)
+	if !check("installation-identity", err) {
+		return finish(report, started)
+	}
+	// Keep the Unix-domain socket near the harness root: Darwin's sockaddr path
+	// limit is shorter than a fully expanded cell runtime path.
+	signer, err := lifecycle.StartDevelopmentSigner(filepath.Join(workspace, "signer.sock"), installationIdentity)
+	if !check("start-lifecycle-signer", err) {
+		return finish(report, started)
+	}
+	defer signer.Close()
 	runtimeToken, err := cellBroker.MintRuntimeToken("payload", time.Minute)
 	if !check("mint-runtime-capability", err) {
 		return finish(report, started)
 	}
-	launchEnvironment, err := protocol.AppendLaunchEnvironment(os.Environ(), protocol.SidecarLaunch{
+	launchEnvironment, err := protocol.AppendLaunchEnvironment(environment.Merge(
+		os.Environ(), nil, map[string]string{lifecycle.SignerSocketEnvironment: signer.Socket()},
+	), protocol.SidecarLaunch{
 		App: "runtime", Control: cellBroker.Descriptor(), Token: runtimeToken, Channel: identity.Channel,
-		Namespace: identity.Namespace, DataDir: dataDir, Mode: protocol.LifecycleModeHarness,
+		Namespace: identity.Namespace, DataDir: dataDir, Installation: installationIdentity.Assertion(), Mode: protocol.LifecycleModeHarness,
 		Presentation: protocol.PresentationHeadless, Source: "oc-control",
 	})
 	if !check("encode-sidecar-launch-envelope", err) {
@@ -159,7 +178,7 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 	if !check("packaged-tree-status", err) || !check("four-peer-ready-sessions", validateFullPackStatus(status)) {
 		return finish(report, started)
 	}
-	if !check("packaged-api-sqlite-repository-at-ready", validateAPIRepository(ctx, status)) {
+	if !check("packaged-api-http-health-at-ready", validateAPIHealth(ctx, status)) {
 		return finish(report, started)
 	}
 	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)
@@ -173,6 +192,10 @@ func RunFullPack(ctx context.Context, workspace, bundlePath string) Report {
 		check("runtime-runner-clean-exit", errors.New("runtime runner did not exit after shutdown"))
 	}
 	return finish(report, started)
+}
+
+func workspaceConfig(repositoryRoot string) (workspace.Config, error) {
+	return workspace.Load(repositoryRoot)
 }
 
 func readLogTail(path string, maximum int) (string, error) {

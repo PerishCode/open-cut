@@ -69,6 +69,10 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 	if !check("load-workspace", err) {
 		return finish(report, started)
 	}
+	installation, err := harnessInstallation(workspaceRoot, controlConfig.InstallationKeyRoles)
+	if !check("installation-identity", err) {
+		return finish(report, started)
+	}
 	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
 	if !check("discover-sidecars", err) {
 		return finish(report, started)
@@ -97,7 +101,7 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 		}
 		launchEnvironment, launchErr := protocol.LaunchEnvironmentMap(protocol.SidecarLaunch{
 			App: app, Control: cellBroker.Descriptor(), Token: token, Channel: identity.Channel,
-			Namespace: identity.Namespace, DataDir: dataDir, Mode: protocol.LifecycleModeHarness,
+			Namespace: identity.Namespace, DataDir: dataDir, Installation: installation, Mode: protocol.LifecycleModeHarness,
 			Presentation: protocol.PresentationHeadless, Source: "oc-control",
 		})
 		if !check("encode-"+app+"-launch-envelope", launchErr) {
@@ -155,7 +159,7 @@ func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Repo
 		return finish(report, started)
 	}
 	check("two-independent-sidecars", validateSidecarStatus(status))
-	if !check("api-sqlite-repository-at-ready", validateAPIRepository(ctx, status)) {
+	if !check("api-http-health-at-ready", validateAPIHealth(ctx, status)) {
 		return finish(report, started)
 	}
 	response, err := owner.Control(ctx, protocol.ControlCommandShutdown)
@@ -219,7 +223,7 @@ func validateSidecarStatus(status protocol.Status) error {
 	return nil
 }
 
-func validateAPIRepository(ctx context.Context, status protocol.Status) error {
+func validateAPIHealth(ctx context.Context, status protocol.Status) error {
 	var endpoint string
 	for _, session := range status.Sessions {
 		if session.App == "api" && len(session.Endpoints) == 1 && session.Endpoints[0].Name == "http" {
@@ -232,7 +236,7 @@ func validateAPIRepository(ctx context.Context, status protocol.Status) error {
 	}
 	requestContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint+"/v1/projects", nil)
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint+"/v1/health", nil)
 	if err != nil {
 		return err
 	}
@@ -242,17 +246,17 @@ func validateAPIRepository(ctx context.Context, status protocol.Status) error {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("API project snapshot returned %s", response.Status)
+		return fmt.Errorf("API health returned %s", response.Status)
 	}
-	var snapshot struct {
-		Revision uint64            `json:"revision"`
-		Projects []json.RawMessage `json:"projects"`
+	var health struct {
+		OK      bool   `json:"ok"`
+		Service string `json:"service"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&snapshot); err != nil {
+	if err := json.NewDecoder(response.Body).Decode(&health); err != nil {
 		return err
 	}
-	if snapshot.Projects == nil {
-		return fmt.Errorf("API project snapshot omitted the projects collection at revision %d", snapshot.Revision)
+	if !health.OK || health.Service != "api" {
+		return fmt.Errorf("API health response is not ready")
 	}
 	return nil
 }

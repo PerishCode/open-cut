@@ -581,7 +581,12 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		report = harness.RunFullPack(ctx, selected, absoluteBundle)
+		repositoryRoot, err := filepath.Abs(*repository)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		report = harness.RunFullPack(ctx, selected, repositoryRoot, absoluteBundle)
 	} else if scenario == "sidecars" {
 		repositoryRoot, err := filepath.Abs(*repository)
 		if err != nil {

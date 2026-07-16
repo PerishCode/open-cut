@@ -74,6 +74,14 @@ Base delegated capabilities are READY/lifecycle/observe. A topology process may
 explicitly request `update-transition`; it is never granted implicitly, and no
 other capability escalation is accepted.
 
+The launch envelope also carries one required versioned, non-secret installation
+assertion received from the embedding lifecycle. It is opaque to B0, L1, runner,
+broker, and topology, cannot be supplied by a topology manifest, and never
+contains private key material or product authorization. Any wire addition is
+made only in `protocol/sidecar/v1/main.tsp`; sidecar entries validate the generic
+envelope and pass plain startup values inward so business code never imports the
+control protocol.
+
 Within a live broker generation, unexpected peer exits are restarted with bounded
 exponential backoff. An explicit broker `shutdown` command is the only app-visible
 request to end the entire cell tree. Loss of B0/broker ends the generation; a new
