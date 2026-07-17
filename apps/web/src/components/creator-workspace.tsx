@@ -51,7 +51,13 @@ import {
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
-import { mergeTranscriptCorrections, narrativeNodeID } from "./creator-workspace-presentation.js";
+import {
+  mergeTranscriptCorrections,
+  narrativeNodeID,
+  type SourceStreamSelection,
+  uniqueSourceStream,
+  updateSourceStreamSelection,
+} from "./creator-workspace-presentation.js";
 import { SequencePreviewSurface, SourcePreviewSurface } from "./creator-workspace-viewer.js";
 import { ManualCaptionEditor } from "./manual-caption-editor.js";
 import { ProductAvailability, type ProductAvailabilityState } from "./product-availability.js";
@@ -70,12 +76,6 @@ type WorkspaceState =
     }>;
 
 type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
-
-type SourceStreamSelection = Readonly<{
-  assetId: DurableID;
-  videoStreamId?: DurableID;
-  audioStreamId?: DurableID;
-}>;
 
 export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
@@ -430,15 +430,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           <Button disabled={importing} onPress={() => void load()}>
             Refresh reads
           </Button>
-          {ready ? (
-            <CreatorExport
-              available={sequenceExportAvailable}
-              projectId={project.id}
-              projectName={project.name}
-              sequenceId={ready.overview.project.mainSequenceId}
-              sequenceRevision={ready.sequence.sequenceRevision}
-            />
-          ) : null}
         </>
       }
       brand="OPEN CUT"
@@ -451,14 +442,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Write",
               content: (
                 <Stack spacing="compact">
-                  {ready ? (
-                    <CreatorHistory
-                      onCommitted={recordAndRefreshCreativeCommit}
-                      projectId={project.id}
-                      refreshEpoch={historyRefreshEpoch}
-                      sequenceId={ready.overview.project.mainSequenceId}
-                    />
-                  ) : null}
                   {ready ? (
                     <CreatorNarrativeWriter
                       narrative={ready.narrative}
@@ -495,6 +478,14 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                   ) : null}
                   {state.status === "loading" ? <Text>Loading bounded Narrative…</Text> : null}
                   {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
+                  {ready ? (
+                    <CreatorHistory
+                      onCommitted={recordAndRefreshCreativeCommit}
+                      projectId={project.id}
+                      refreshEpoch={historyRefreshEpoch}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                    />
+                  ) : null}
                 </Stack>
               ),
             },
@@ -571,6 +562,28 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               ),
             },
             {
+              id: "export",
+              label: "Export",
+              content: (
+                <Stack spacing="compact">
+                  {ready ? (
+                    <CreatorExport
+                      available={sequenceExportAvailable}
+                      projectId={project.id}
+                      projectName={project.name}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                      sequenceRevision={ready.sequence.sequenceRevision}
+                    />
+                  ) : (
+                    <EmptyState
+                      hint="Exports pin an exact Sequence revision; open a synchronized workspace first."
+                      title="Workspace is still loading"
+                    />
+                  )}
+                </Stack>
+              ),
+            },
+            {
               id: "system",
               label: "System",
               content: (
@@ -583,7 +596,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           ]}
         />
       }
-      inspectorLabel="Write · Transcript · Agent · System"
+      inspectorLabel="Workspace"
       sidebar={
         <Stack spacing="compact">
           <SourceImportSurface
@@ -771,29 +784,4 @@ function workspaceStatus(state: WorkspaceState): string {
   if (state.status === "loading") return "Synchronizing bounded reads";
   if (state.status === "unavailable") return "Workspace reads unavailable";
   return `Project r${state.overview.project.revision} · Narrative r${state.narrative.documentRevision} · Sequence r${state.sequence.sequenceRevision}`;
-}
-
-function uniqueSourceStream(streams: readonly SourceStream[], mediaType: "video" | "audio"): SourceStream | undefined {
-  const candidates = streams.filter((stream) => stream.descriptor.mediaType === mediaType);
-  return candidates.length === 1 ? candidates[0] : undefined;
-}
-
-function updateSourceStreamSelection(
-  current: SourceStreamSelection | undefined,
-  mediaType: "video" | "audio",
-  streamId: DurableID | undefined,
-): SourceStreamSelection | undefined {
-  if (!current) return undefined;
-  if (mediaType === "video") {
-    return {
-      assetId: current.assetId,
-      ...(streamId === undefined ? {} : { videoStreamId: streamId }),
-      ...(current.audioStreamId === undefined ? {} : { audioStreamId: current.audioStreamId }),
-    };
-  }
-  return {
-    assetId: current.assetId,
-    ...(current.videoStreamId === undefined ? {} : { videoStreamId: current.videoStreamId }),
-    ...(streamId === undefined ? {} : { audioStreamId: streamId }),
-  };
 }

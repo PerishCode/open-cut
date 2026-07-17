@@ -13,7 +13,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const maximumCDPResponseBytes = 1 << 20
+// Screenshot payloads arrive base64-encoded inside one JSON message, so the
+// bound must hold a full-window retina capture, not just DOM projections.
+const maximumCDPResponseBytes = 16 << 20
 
 type CDPClient struct {
 	connection *websocket.Conn

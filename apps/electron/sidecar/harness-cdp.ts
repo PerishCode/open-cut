@@ -9,15 +9,15 @@ type ElectronCommandLine = Readonly<{
 export function configureHarnessCDP(
   commandLine: ElectronCommandLine,
   environment: Readonly<Record<string, string | undefined>>,
-): void {
+): number | undefined {
   const rawPort = environment[harnessCDPPortEnvironment];
-  if (rawPort === undefined) return;
+  if (rawPort === undefined) return undefined;
   const mode = environment[sidecarEnvironment.mode];
   if (
-    (mode !== lifecycleMode.packaged && mode !== lifecycleMode.harness) ||
+    (mode !== lifecycleMode.packaged && mode !== lifecycleMode.harness && mode !== lifecycleMode.dev) ||
     environment[sidecarEnvironment.presentation] !== presentation.interactive
   ) {
-    throw new Error("Electron CDP automation is restricted to interactive packaged delivery checks");
+    throw new Error("Electron CDP automation is restricted to interactive packaged and development surfaces");
   }
   const port = Number(rawPort);
   if (!/^[1-9][0-9]{3,4}$/.test(rawPort) || !Number.isSafeInteger(port) || port < 1024 || port > 65_535) {
@@ -25,4 +25,5 @@ export function configureHarnessCDP(
   }
   commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   commandLine.appendSwitch("remote-debugging-port", rawPort);
+  return port;
 }

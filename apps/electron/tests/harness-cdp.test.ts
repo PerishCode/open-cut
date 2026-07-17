@@ -6,10 +6,10 @@ import { describe, it, vi } from "vitest";
 import { configureHarnessCDP, harnessCDPPortEnvironment } from "../sidecar/harness-cdp.js";
 
 describe("delivery harness CDP", () => {
-  it("enables only a canonical loopback port for interactive packaged checks", () => {
-    for (const mode of [lifecycleMode.packaged, lifecycleMode.harness]) {
+  it("enables only a canonical loopback port for interactive packaged and dev checks", () => {
+    for (const mode of [lifecycleMode.packaged, lifecycleMode.harness, lifecycleMode.dev]) {
       const appendSwitch = vi.fn();
-      configureHarnessCDP(
+      const port = configureHarnessCDP(
         { appendSwitch },
         {
           [harnessCDPPortEnvironment]: "43123",
@@ -17,6 +17,7 @@ describe("delivery harness CDP", () => {
           [sidecarEnvironment.presentation]: presentation.interactive,
         },
       );
+      assert.equal(port, 43123);
       assert.deepEqual(appendSwitch.mock.calls, [
         ["remote-debugging-address", "127.0.0.1"],
         ["remote-debugging-port", "43123"],
@@ -26,12 +27,12 @@ describe("delivery harness CDP", () => {
 
   it("does nothing unless explicitly requested and rejects escaped surfaces", () => {
     const appendSwitch = vi.fn();
-    configureHarnessCDP({ appendSwitch }, {});
+    assert.equal(configureHarnessCDP({ appendSwitch }, {}), undefined);
     assert.equal(appendSwitch.mock.calls.length, 0);
     for (const environment of [
       {
         [harnessCDPPortEnvironment]: "43123",
-        [sidecarEnvironment.mode]: lifecycleMode.dev,
+        [sidecarEnvironment.mode]: lifecycleMode.production,
         [sidecarEnvironment.presentation]: presentation.interactive,
       },
       {

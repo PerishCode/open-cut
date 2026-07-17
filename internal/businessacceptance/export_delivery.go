@@ -26,6 +26,9 @@ func (creator Creator) SaveAndRevealExport(
 		filepath.Ext(destinationPath) != ".webm" {
 		return fmt.Errorf("Creator export destination must be a clean absolute WebM path")
 	}
+	if err := creator.openTab(ctx, "Export"); err != nil {
+		return fmt.Errorf("open Creator Export panel: %w", err)
+	}
 	if err := creator.wait(ctx, buttonExpression("Save As…", false)); err != nil {
 		return fmt.Errorf("wait for installed Creator Save As action: %w", err)
 	}

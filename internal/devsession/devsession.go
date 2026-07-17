@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/cell"
@@ -25,6 +27,36 @@ type Result struct {
 	ControlFile string          `json:"controlFile"`
 	Apps        []string        `json:"apps"`
 	Status      protocol.Status `json:"status"`
+}
+
+// CDPPortEnvironment mirrors the Electron payload's harness CDP opt-in; dev
+// sessions reserve a loopback port so tooling can inspect the live renderer.
+const CDPPortEnvironment = "OPEN_CUT_HARNESS_CDP_PORT"
+
+// PayloadCDPEndpointName is the sidecar session endpoint under which the
+// Electron payload publishes its loopback CDP origin.
+const PayloadCDPEndpointName = "payload-cdp"
+
+// ResolveCellPaths maps a resolved dev base directory to its cell layout so
+// tooling can reach the live cell's control descriptor and owner token.
+func ResolveCellPaths(baseDir string) (layout.CellPaths, error) {
+	baseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return layout.CellPaths{}, err
+	}
+	identity, err := cell.New("dev", "default")
+	if err != nil {
+		return layout.CellPaths{}, err
+	}
+	commandRoot := filepath.Dir(filepath.Dir(baseDir))
+	if filepath.Join(commandRoot, identity.Suffix()) != baseDir {
+		return layout.CellPaths{}, fmt.Errorf("development base directory must end in %s", identity.Suffix())
+	}
+	return layout.Resolve(config.RootSet{
+		BootstrapRoot: filepath.Join(commandRoot, "bootstrap"), StoreRoot: filepath.Join(commandRoot, "store"),
+		CacheRoot: filepath.Join(commandRoot, "cache"), RuntimeRoot: filepath.Join(commandRoot, "runtime"),
+		LogRoot: filepath.Join(commandRoot, "logs"),
+	}, identity)
 }
 
 func ResolveBaseDir(repositoryRoot, requested string) (string, error) {
@@ -78,11 +110,7 @@ func run(
 	if filepath.Join(commandRoot, identity.Suffix()) != baseDir {
 		return fmt.Errorf("development base directory must end in %s", identity.Suffix())
 	}
-	paths, err := layout.Resolve(config.RootSet{
-		BootstrapRoot: filepath.Join(commandRoot, "bootstrap"), StoreRoot: filepath.Join(commandRoot, "store"),
-		CacheRoot: filepath.Join(commandRoot, "cache"), RuntimeRoot: filepath.Join(commandRoot, "runtime"),
-		LogRoot: filepath.Join(commandRoot, "logs"),
-	}, identity)
+	paths, err := ResolveCellPaths(baseDir)
 	if err != nil {
 		return err
 	}
@@ -123,6 +151,10 @@ func run(
 	if err != nil {
 		return err
 	}
+	cdpPort, err := reserveLoopbackPort()
+	if err != nil {
+		return fmt.Errorf("reserve development CDP port: %w", err)
+	}
 	runtimeReady := make(chan runtimehost.Result, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -130,8 +162,11 @@ func run(
 			Descriptor: cellBroker.Descriptor(), Token: runtimeToken,
 			Channel: identity.Channel, Namespace: identity.Namespace, DataDir: baseDir,
 			Installation: installation.Assertion(), App: "runtime",
-			Environment: map[string]string{lifecycle.SignerSocketEnvironment: signer.Socket()},
-			Mode:        protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
+			Environment: map[string]string{
+				lifecycle.SignerSocketEnvironment: signer.Socket(),
+				CDPPortEnvironment:                strconv.Itoa(cdpPort),
+			},
+			Mode: protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
 			Plan: plan, Stdout: stdout, Stderr: stderr,
 		}, runtimeReady)
 	}()
@@ -145,6 +180,21 @@ func run(
 	case err := <-done:
 		return err
 	}
+}
+
+// reserveLoopbackPort picks a currently free ephemeral port for the payload's
+// CDP listener; the brief release window before Electron binds is acceptable
+// for a single-creator development cell.
+func reserveLoopbackPort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		return 0, err
+	}
+	return port, nil
 }
 
 func buildWorkspace(ctx context.Context, repositoryRoot string, output io.Writer) error {

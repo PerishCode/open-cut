@@ -458,6 +458,7 @@ describe("HomeView", () => {
     expect(screen.getByText("Main Sequence · pinned r2")).toBeTruthy();
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
+    fireEvent.click(screen.getByRole("tab", { name: "Export" }));
     fireEvent.click(screen.getByRole("button", { name: "Export" }));
     expect(await screen.findByText("EXPORT r2 · BLOCKED · 0% · CREATOR · 1 ATTEMPT")).toBeTruthy();
     expect(exportRequests).toBe(1);

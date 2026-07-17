@@ -122,10 +122,10 @@ func (creator Creator) AcquireTranscriptionModel(ctx context.Context) error {
 // behind inactive tabs are unmounted, so every panel interaction selects its
 // tab first.
 func (creator Creator) openTab(ctx context.Context, label string) error {
-	if err := creator.wait(ctx, buttonExpression(label, false)); err != nil {
+	if err := creator.wait(ctx, tabExpression(label, false)); err != nil {
 		return err
 	}
-	return creator.evaluateBoolean(ctx, buttonExpression(label, true))
+	return creator.evaluateBoolean(ctx, tabExpression(label, true))
 }
 
 func (creator Creator) wait(ctx context.Context, expression string) error {
@@ -194,8 +194,20 @@ func buttonExpression(text string, click bool) string {
 		action = "button.click(); return true;"
 	}
 	return fmt.Sprintf(`(() => {
-  const button = [...document.querySelectorAll("button")].find((node) => node.textContent?.trim() === %s && !node.disabled);
+  const button = [...document.querySelectorAll('button:not([role="tab"])')].find((node) => node.textContent?.trim() === %s && !node.disabled);
   if (!(button instanceof HTMLButtonElement)) return false;
+  %s
+})()`, jsString(text), action)
+}
+
+func tabExpression(text string, click bool) string {
+	action := "return true;"
+	if click {
+		action = "tab.click(); return true;"
+	}
+	return fmt.Sprintf(`(() => {
+  const tab = [...document.querySelectorAll('button[role="tab"]')].find((node) => node.textContent?.trim() === %s && !node.disabled);
+  if (!(tab instanceof HTMLButtonElement)) return false;
   %s
 })()`, jsString(text), action)
 }
