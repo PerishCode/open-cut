@@ -144,6 +144,131 @@ func TestCLIRequiresPossessionThenExactCreatorApprovedGrant(t *testing.T) {
 	}
 }
 
+// TestCLICommandBodyAuthorityCoversEveryPostBodyCommand proves that every
+// Agent command the CLI sends with a JSON body authorizes through the router:
+// a command whose route uses the no-body authority middleware recomputes the
+// body digest as the empty-body sentinel and rejects the CLI's real digest,
+// silently 401ing that command in installed products. The failure hides from
+// CI because the fast lane stops before frames and exports.
+func TestCLICommandBodyAuthorityCoversEveryPostBodyCommand(t *testing.T) {
+	store := repository.NewMemoryProjects()
+	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
+	ui, uiPrivateKey := newTestUISessions(t, store, clock, false)
+	cli, cliPrivateKey := newTestCLIAuthorization(t, store, clock)
+	authorizer := service.CombinedAuthorizer{UI: ui, CLI: cli}
+	projects, reads, activity, runs := testProjectApplications(t, store)
+	edits, editReads := testEditingApplications(t, store)
+	media, assetReads, sourceAccess := testMediaApplications(t, store)
+	mux, _ := controller.NewRouter(
+		service.NewHealth(repository.StaticHealth{}), nil, nil, projects, reads, activity, runs, edits, editReads,
+		media, assetReads, sourceAccess, nil, nil, nil, nil, nil, authorizer,
+	)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	project := "018f0000-0000-7000-8000-000000000001"
+	sequence := "018f0000-0000-7000-8000-000000000002"
+	asset := "018f0000-0000-7000-8000-000000000003"
+	run := "018f0000-0000-7000-8000-000000000004"
+	turn := "018f0000-0000-7000-8000-000000000005"
+	job := "018f0000-0000-7000-8000-000000000006"
+	prefix := "/v1/projects/" + project + "/runs/" + run + "/turns/" + turn
+	projectID, err := domain.ParseProjectID(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sequenceID, err := domain.ParseSequenceID(sequence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := domain.ParseRunID(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turnID, err := domain.ParseTurnID(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runContext := command.Context{ProjectID: &projectID, RunID: &runID, TurnID: &turnID}
+	sequenceContext := command.Context{ProjectID: &projectID, SequenceID: &sequenceID, RunID: &runID, TurnID: &turnID}
+	cases := []struct {
+		command []string
+		path    string
+		body    string
+		context command.Context
+	}{
+		{[]string{"asset", "frames"}, prefix + "/assets/" + asset + "/frames", `{"sourceStreamId":"` + sequence + `","times":[{"value":"0","scale":1}]}`, runContext},
+		{[]string{"sequence", "frames"}, prefix + "/sequences/" + sequence + "/frames", `{"sequenceRevision":"1","times":[{"value":"0","scale":1}]}`, sequenceContext},
+		{[]string{"export", "start"}, prefix + "/sequences/" + sequence + "/exports", `{"requestId":"journey-export","sequenceRevision":"1","preset":"webm-vp9-opus-v1"}`, sequenceContext},
+		{[]string{"export", "retry"}, prefix + "/exports/" + job + "/retry", `{"jobId":"` + job + `"}`, runContext},
+		{[]string{"export", "cancel"}, prefix + "/exports/" + job + "/cancel", `{"jobId":"` + job + `","requestId":"journey-cancel"}`, runContext},
+	}
+	registry := command.InitialRegistry()
+	pairingApproved := false
+	for index, testCase := range cases {
+		name := strings.Join(testCase.command, " ")
+		fingerprint, err := registry.Fingerprint(testCase.command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		descriptor, err := registry.Lookup(testCase.command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bodyDigest, err := authwire.CommandBodyDigest(name, []byte(testCase.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		challengeRequest := service.CLIChallengeRequest{
+			ClientInstance: "cli-body-" + strconv.Itoa(index), Command: name, CommandFingerprint: fingerprint,
+			Method: http.MethodPost, Path: testCase.path, BodyDigest: bodyDigest.String(), Context: testCase.context,
+		}
+		if descriptor.RequestIdentity {
+			challengeRequest.RequestID = "journey-body-" + strconv.Itoa(index)
+		}
+		clock.now = clock.now.Add(time.Second)
+		challenge := requestCLIChallenge(t, server, challengeRequest)
+		grantID := challenge.GrantID
+		request := httptest.NewRequest(http.MethodPost, server.URL+testCase.path, strings.NewReader(testCase.body))
+		request.Header.Set("Content-Type", "application/json")
+		if grantID != "" {
+			request.Header.Set("X-Open-Cut-CLI-Grant", grantID)
+		}
+		request.Header.Set("X-Open-Cut-CLI-Challenge", challenge.Nonce)
+		request.Header.Set("X-Open-Cut-CLI-Signature", signCLIChallenge(t, cliPrivateKey, challenge))
+		response := httptest.NewRecorder()
+		server.Config.Handler.ServeHTTP(response, request)
+
+		if !pairingApproved {
+			// The first command establishes and approves the durable grant so
+			// the remaining commands exercise authorized body digests.
+			if response.Code != http.StatusUnauthorized ||
+				response.Header().Get("X-Open-Cut-CLI-Auth-Status") != "pairing-required" {
+				t.Fatalf("%s expected pairing-required, got %d %s", name, response.Code, response.Body.String())
+			}
+			pairingID := response.Header().Get("X-Open-Cut-CLI-Pairing-ID")
+			uiSession := issueTestUISession(t, ui, uiPrivateKey, "electron-body-approval")
+			approve := httptest.NewRequest(
+				http.MethodPost, server.URL+"/v1/authorization/cli/pairings/"+pairingID+"/approve", nil,
+			)
+			approve.Header.Set("X-Open-Cut-UI-Session", uiSession)
+			approveResponse := httptest.NewRecorder()
+			server.Config.Handler.ServeHTTP(approveResponse, approve)
+			if approveResponse.Code != http.StatusOK {
+				t.Fatalf("approve=%d body=%s", approveResponse.Code, approveResponse.Body.String())
+			}
+			pairingApproved = true
+			continue
+		}
+		if response.Code == http.StatusUnauthorized && strings.Contains(response.Body.String(), "product authority required") {
+			t.Fatalf(
+				"%s POST body command failed CLI body authorization: %d %s",
+				name, response.Code, response.Body.String(),
+			)
+		}
+	}
+}
+
 func TestCLIChallengeRejectsBindingChangesAndConsumesNonce(t *testing.T) {
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
