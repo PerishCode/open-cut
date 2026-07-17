@@ -6,7 +6,7 @@ import { type OcWebProtocol, registerOcWebProtocol } from "../src/main/oc-protoc
 import { configureHarnessCDP } from "./harness-cdp.js";
 import { bootstrapUISession } from "./ui-session.js";
 
-configureHarnessCDP(app.commandLine, process.env);
+const cdpPort = configureHarnessCDP(app.commandLine, process.env);
 
 let electron: ElectronApp | undefined;
 let headlessWeb: OcWebProtocol | undefined;
@@ -102,6 +102,9 @@ async function main(): Promise<void> {
       if (command === controlCommand.shutdown) await stop();
     },
   });
+  if (cdpPort !== undefined) {
+    sidecar.publishEndpoint(runtimePeer.payload.cdpEndpoint, `http://127.0.0.1:${cdpPort}`);
+  }
 
   if (sidecar.presentation === presentation.headless) {
     await app.whenReady();

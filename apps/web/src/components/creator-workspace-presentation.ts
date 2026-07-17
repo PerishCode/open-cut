@@ -1,4 +1,38 @@
-import type { Asset, Caption, DurableID, NarrativeNode, TranscriptCorrection } from "@open-cut/contracts";
+import type { Asset, Caption, DurableID, NarrativeNode, SourceStream, TranscriptCorrection } from "@open-cut/contracts";
+
+export type SourceStreamSelection = Readonly<{
+  assetId: DurableID;
+  videoStreamId?: DurableID;
+  audioStreamId?: DurableID;
+}>;
+
+export function uniqueSourceStream(
+  streams: readonly SourceStream[],
+  mediaType: "video" | "audio",
+): SourceStream | undefined {
+  const candidates = streams.filter((stream) => stream.descriptor.mediaType === mediaType);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+export function updateSourceStreamSelection(
+  current: SourceStreamSelection | undefined,
+  mediaType: "video" | "audio",
+  streamId: DurableID | undefined,
+): SourceStreamSelection | undefined {
+  if (!current) return undefined;
+  if (mediaType === "video") {
+    return {
+      assetId: current.assetId,
+      ...(streamId === undefined ? {} : { videoStreamId: streamId }),
+      ...(current.audioStreamId === undefined ? {} : { audioStreamId: current.audioStreamId }),
+    };
+  }
+  return {
+    assetId: current.assetId,
+    ...(current.videoStreamId === undefined ? {} : { videoStreamId: current.videoStreamId }),
+    ...(streamId === undefined ? {} : { audioStreamId: streamId }),
+  };
+}
 
 export function captionProvenanceLabel(caption: Caption): string {
   if (caption.provenance.kind === "manual") return "MANUAL";

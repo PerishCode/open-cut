@@ -15,7 +15,6 @@ export function SourceImportSurface({ disabled, error, onSelect }: SourceImportS
         label="Drop footage here or choose a local file"
         onSelect={onSelect}
       />
-      <Text>Electron seals local identity into a SourceGrant; paths never enter Creator state.</Text>
       {error ? <Text>{error.message}</Text> : null}
     </Stack>
   );

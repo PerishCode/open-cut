@@ -1,32 +1,38 @@
-import { Button, Heading, Stack, Status, Text, TextField } from "@open-cut/components";
-import { useCreateProject, useProjects } from "@open-cut/contracts";
+import { Button, Heading, ProjectList, Stack, Text, TextField } from "@open-cut/components";
+import { type DurableID, useCreateProject, useProjects } from "@open-cut/contracts";
 import { useState } from "react";
 
-import { AgentAccess } from "./agent-access.js";
-
-export function RuntimeSummary() {
+export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => void }) {
   const projects = useProjects();
   const write = useCreateProject();
   const [name, setName] = useState("Untitled story");
-  const status = projects.status === "connecting" ? "pending" : projects.status;
-  const names = projects.projects.map((project) => project.name).join(", ");
+
+  const createAndOpen = async () => {
+    const created = await write.create({ requestId: `ui:create-project:${crypto.randomUUID()}`, name });
+    if (created && onOpen) onOpen(created.project.project.id);
+  };
 
   return (
     <Stack>
-      <Text tone="eyebrow">OPEN CUT · DAY 0</Text>
+      <Text tone="eyebrow">OPEN CUT</Text>
       <Heading>Start with a story.</Heading>
       <Text>
-        Every project begins with a narrative document, an exact main sequence, and video, audio, and caption tracks.
+        A local workspace where you and your agent turn footage and writing into an editable, reversible video timeline.
+        A project is one story: its script and its sequence, side by side.
       </Text>
-      <Status state={status}>
-        {projects.status === "ready"
-          ? `Workspace synchronized at activity ${projects.activityCursor}`
-          : `Workspace ${status}`}
-      </Status>
-      <Text>{names ? `Projects: ${names}` : "No projects yet."}</Text>
+      {onOpen && projects.projects.length > 0 ? (
+        <ProjectList
+          label="Projects"
+          projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
+          onOpen={(id) => {
+            const match = projects.projects.find((project) => project.id === id);
+            if (match) onOpen(match.id);
+          }}
+        />
+      ) : null}
       <TextField
         disabled={write.pending}
-        label="Project name"
+        label="Name your story"
         maxLength={200}
         placeholder="Product demo, short film, essay…"
         value={name}
@@ -34,12 +40,11 @@ export function RuntimeSummary() {
       />
       <Button
         disabled={write.pending || name.trim().length === 0}
-        onPress={() => void write.create({ requestId: `ui:create-project:${crypto.randomUUID()}`, name })}
+        onPress={() => void createAndOpen().catch(() => undefined)}
       >
-        {write.pending ? "Creating…" : "Create project"}
+        {write.pending ? "Creating…" : "Create and open"}
       </Button>
       {write.error ? <Text>Could not create project: {write.error.message}</Text> : null}
-      <AgentAccess />
     </Stack>
   );
 }

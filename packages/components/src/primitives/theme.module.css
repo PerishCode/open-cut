@@ -1,49 +1,159 @@
 :global(:root) {
-  color: #f4f1ea;
-  background: #11120f;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Canvas layers */
+  --oc-canvas: #0c0d0b;
+  --oc-canvas-wash:
+    radial-gradient(circle at 82% 18%, rgb(174 255 83 / 12%), transparent 32rem),
+    linear-gradient(145deg, #151711, #0c0d0b 72%);
+  --oc-surface: #11120f;
+  --oc-surface-header: #141611;
+  --oc-surface-timeline: #11130f;
+  --oc-surface-panel: rgb(14 15 12 / 72%);
+  --oc-viewer-well: #090a08;
+  --oc-viewer-glow: radial-gradient(circle at center, rgb(181 255 88 / 7%), transparent 18rem);
+  --oc-timeline-ruler: rgb(244 241 234 / 5%);
+
+  /* Ink tiers */
+  --oc-ink: #f4f1ea;
+  --oc-ink-strong: rgb(244 241 234 / 82%);
+  --oc-ink-mid: rgb(244 241 234 / 72%);
+  --oc-ink-soft: rgb(244 241 234 / 62%);
+  --oc-ink-dim: rgb(244 241 234 / 58%);
+  --oc-ink-faint: rgb(244 241 234 / 48%);
+
+  /* Hairlines */
+  --oc-hairline: rgb(244 241 234 / 9%);
+  --oc-hairline-mid: rgb(244 241 234 / 10%);
+  --oc-hairline-strong: rgb(244 241 234 / 12%);
+  --oc-hairline-input: rgb(244 241 234 / 18%);
+
+  /* Accent */
+  --oc-accent: #b5ff58;
+  --oc-accent-ink: #d8ffab;
+  --oc-accent-border: rgb(181 255 88 / 45%);
+  --oc-accent-border-soft: rgb(181 255 88 / 36%);
+  --oc-accent-border-dashed: rgb(181 255 88 / 42%);
+  --oc-accent-border-focus: rgb(181 255 88 / 68%);
+  --oc-accent-border-focus-strong: rgb(181 255 88 / 72%);
+  --oc-accent-wash: rgb(181 255 88 / 10%);
+  --oc-accent-wash-soft: rgb(181 255 88 / 5%);
+  --oc-accent-wash-mild: rgb(181 255 88 / 8%);
+  --oc-accent-halo: rgb(181 255 88 / 8%);
+  --oc-accent-pulse: rgb(181 255 88 / 55%);
+
+  /* Status */
+  --oc-status-ready: #b5ff58;
+  --oc-status-pending: #f4d35e;
+  --oc-status-unavailable: #ff6b6b;
+
+  /* Media and depth */
+  --oc-media-bed: #000;
+  --oc-shadow-panel: 0 32px 100px rgb(0 0 0 / 42%);
+  --oc-shadow-media: 0 24px 72px rgb(0 0 0 / 42%);
+  --oc-input-wash: rgb(244 241 234 / 5%);
+
+  /* Type */
+  --oc-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --oc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  color: var(--oc-ink);
+  color-scheme: dark;
+  background: var(--oc-surface);
+  font-family: var(--oc-font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: light) {
+  :global(:root) {
+    --oc-canvas: #f3f1e9;
+    --oc-canvas-wash:
+      radial-gradient(circle at 82% 18%, rgb(106 158 26 / 9%), transparent 32rem),
+      linear-gradient(145deg, #faf8f2, #efede4 72%);
+    --oc-surface: #f6f4ee;
+    --oc-surface-header: #f0eee6;
+    --oc-surface-timeline: #f1efe8;
+    --oc-surface-panel: rgb(255 254 250 / 78%);
+    --oc-viewer-well: #14150f;
+    --oc-viewer-glow: radial-gradient(circle at center, rgb(181 255 88 / 5%), transparent 18rem);
+    --oc-timeline-ruler: rgb(28 30 22 / 6%);
+
+    --oc-ink: #1c1e16;
+    --oc-ink-strong: rgb(28 30 22 / 84%);
+    --oc-ink-mid: rgb(28 30 22 / 74%);
+    --oc-ink-soft: rgb(28 30 22 / 64%);
+    --oc-ink-dim: rgb(28 30 22 / 58%);
+    --oc-ink-faint: rgb(28 30 22 / 48%);
+
+    --oc-hairline: rgb(28 30 22 / 10%);
+    --oc-hairline-mid: rgb(28 30 22 / 11%);
+    --oc-hairline-strong: rgb(28 30 22 / 13%);
+    --oc-hairline-input: rgb(28 30 22 / 22%);
+
+    --oc-accent: #45700a;
+    --oc-accent-ink: #33540a;
+    --oc-accent-border: rgb(69 112 10 / 45%);
+    --oc-accent-border-soft: rgb(69 112 10 / 36%);
+    --oc-accent-border-dashed: rgb(69 112 10 / 42%);
+    --oc-accent-border-focus: rgb(69 112 10 / 66%);
+    --oc-accent-border-focus-strong: rgb(69 112 10 / 72%);
+    --oc-accent-wash: rgb(106 158 26 / 12%);
+    --oc-accent-wash-soft: rgb(106 158 26 / 6%);
+    --oc-accent-wash-mild: rgb(106 158 26 / 9%);
+    --oc-accent-halo: rgb(106 158 26 / 12%);
+    --oc-accent-pulse: rgb(106 158 26 / 45%);
+
+    --oc-status-ready: #45700a;
+    --oc-status-pending: #92600a;
+    --oc-status-unavailable: #c23636;
+
+    --oc-media-bed: #000;
+    --oc-shadow-panel: 0 24px 72px rgb(38 40 30 / 16%);
+    --oc-shadow-media: 0 18px 56px rgb(38 40 30 / 22%);
+    --oc-input-wash: rgb(28 30 22 / 4%);
+
+    color-scheme: light;
+  }
 }
 
 :global(*) {
   box-sizing: border-box;
 }
 
-:global(body) {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-  background:
-    radial-gradient(circle at 82% 18%, rgb(174 255 83 / 12%), transparent 32rem),
-    linear-gradient(145deg, #151711, #0c0d0b 72%);
+:global(html),
+:global(body),
+:global(#app) {
+  height: 100%;
+  overflow: hidden;
 }
 
-:global(#app) {
-  min-height: 100vh;
+:global(body) {
+  min-width: 320px;
+  margin: 0;
+  background: var(--oc-canvas-wash);
 }
 
 .editorShell {
   display: grid;
-  min-height: 100vh;
+  height: 100%;
   grid-template-rows: 54px minmax(340px, 1fr) minmax(220px, 34vh);
-  background: #0c0d0b;
+  background: var(--oc-canvas);
 }
 
 .editorHeader {
   display: grid;
+  overflow: hidden;
   align-items: center;
   padding: 0 18px;
-  border-bottom: 1px solid rgb(244 241 234 / 12%);
-  grid-template-columns: auto 1fr auto auto;
+  border-bottom: 1px solid var(--oc-hairline-strong);
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 18px;
-  background: #141611;
+  background: var(--oc-surface-header);
 }
 
 .editorBrand,
 .editorPaneHeader {
-  color: #b5ff58;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--oc-accent);
+  font-family: var(--oc-font-mono);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -62,17 +172,21 @@
 .editorStatus,
 .editorActions {
   display: flex;
+  overflow: hidden;
+  min-width: 0;
   align-items: center;
+  white-space: nowrap;
 }
 
 .editorActions {
+  flex-shrink: 0;
   gap: 8px;
 }
 
 .editorBody {
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(260px, 24vw) minmax(360px, 1fr) minmax(250px, 20vw);
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 360px);
 }
 
 .editorSidebar,
@@ -82,7 +196,7 @@
   min-width: 0;
   min-height: 0;
   grid-template-rows: 42px 1fr;
-  border-right: 1px solid rgb(244 241 234 / 10%);
+  border-right: 1px solid var(--oc-hairline-mid);
 }
 
 .editorInspector {
@@ -91,10 +205,13 @@
 
 .editorPaneHeader {
   display: flex;
+  overflow: hidden;
   align-items: center;
   padding: 0 16px;
-  border-bottom: 1px solid rgb(244 241 234 / 9%);
-  color: rgb(244 241 234 / 48%);
+  border-bottom: 1px solid var(--oc-hairline);
+  color: var(--oc-ink-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editorPaneContent {
@@ -103,17 +220,35 @@
 }
 
 .editorViewer .editorPaneContent {
+  /* The viewer well stays dark in both themes, so its subtree re-scopes the
+     ink and accent tokens to their dark values regardless of system theme. */
+  --oc-ink: #f4f1ea;
+  --oc-ink-strong: rgb(244 241 234 / 82%);
+  --oc-ink-mid: rgb(244 241 234 / 72%);
+  --oc-ink-soft: rgb(244 241 234 / 62%);
+  --oc-ink-dim: rgb(244 241 234 / 58%);
+  --oc-ink-faint: rgb(244 241 234 / 48%);
+  --oc-hairline-input: rgb(244 241 234 / 18%);
+  --oc-accent: #b5ff58;
+  --oc-accent-ink: #d8ffab;
+  --oc-accent-border: rgb(181 255 88 / 45%);
+  --oc-accent-wash: rgb(181 255 88 / 10%);
+  --oc-input-wash: rgb(244 241 234 / 5%);
+
   display: grid;
-  background: radial-gradient(circle at center, rgb(181 255 88 / 7%), transparent 18rem), #090a08;
+  color: var(--oc-ink);
+  background: var(--oc-viewer-glow), var(--oc-viewer-well);
   place-items: center;
 }
 
 .editorTimeline {
   display: grid;
   min-height: 0;
-  border-top: 1px solid rgb(244 241 234 / 12%);
+  border-top: 1px solid var(--oc-hairline-strong);
   grid-template-rows: 42px 1fr;
-  background: repeating-linear-gradient(90deg, transparent 0, transparent 119px, rgb(244 241 234 / 5%) 120px), #11130f;
+  background:
+    repeating-linear-gradient(90deg, transparent 0, transparent 119px, var(--oc-timeline-ruler) 120px),
+    var(--oc-surface-timeline);
 }
 
 .editorTimelineContent {
@@ -123,7 +258,8 @@
 
 .surface {
   display: grid;
-  min-height: 100vh;
+  height: 100%;
+  overflow: auto;
   padding: 48px;
   place-items: center;
 }
@@ -131,9 +267,9 @@
 .panel {
   width: min(760px, 100%);
   padding: 64px;
-  border: 1px solid rgb(244 241 234 / 12%);
-  background: rgb(14 15 12 / 72%);
-  box-shadow: 0 32px 100px rgb(0 0 0 / 42%);
+  border: 1px solid var(--oc-hairline-strong);
+  background: var(--oc-surface-panel);
+  box-shadow: var(--oc-shadow-panel);
   backdrop-filter: blur(18px);
 }
 
@@ -158,8 +294,8 @@
 }
 
 .eyebrow {
-  color: #b5ff58;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--oc-accent);
+  font-family: var(--oc-font-mono);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -174,7 +310,7 @@
 
 .body {
   max-width: 610px;
-  color: rgb(244 241 234 / 62%);
+  color: var(--oc-ink-soft);
   font-size: 17px;
   line-height: 1.7;
 }
@@ -183,38 +319,32 @@
   display: inline-flex;
   align-items: center;
   gap: 11px;
-  color: rgb(244 241 234 / 82%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--oc-ink-strong);
+  font-family: var(--oc-font-mono);
   font-size: 13px;
 }
 
 .button {
   align-self: flex-start;
   padding: 11px 16px;
-  border: 1px solid rgb(181 255 88 / 45%);
-  background: rgb(181 255 88 / 10%);
-  color: #d8ffab;
+  border: 1px solid var(--oc-accent-border);
+  background: var(--oc-accent-wash);
+  color: var(--oc-accent-ink);
   cursor: pointer;
-  font:
-    600 13px / 1 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace;
+  font: 600 13px / 1 var(--oc-font-mono);
 }
 
 .button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.5;
 }
 
 .mediaPlayer,
 .audioPlayer {
   width: min(100%, 960px);
-  border: 1px solid rgb(244 241 234 / 12%);
-  background: #000;
-  box-shadow: 0 24px 72px rgb(0 0 0 / 42%);
+  border: 1px solid var(--oc-hairline-strong);
+  background: var(--oc-media-bed);
+  box-shadow: var(--oc-shadow-media);
 }
 
 .mediaPlayer {
@@ -231,8 +361,8 @@
 }
 
 .fieldLabel {
-  color: rgb(244 241 234 / 72%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--oc-ink-mid);
+  font-family: var(--oc-font-mono);
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -241,9 +371,9 @@
 .fieldInput {
   width: 100%;
   padding: 13px 14px;
-  border: 1px solid rgb(244 241 234 / 18%);
-  background: rgb(244 241 234 / 5%);
-  color: #f4f1ea;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink);
   font: inherit;
   outline: none;
 }
@@ -253,9 +383,9 @@
   min-height: 96px;
   padding: 13px 14px;
   resize: vertical;
-  border: 1px solid rgb(244 241 234 / 18%);
-  background: rgb(244 241 234 / 5%);
-  color: #f4f1ea;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink);
   font: inherit;
   line-height: 1.5;
   outline: none;
@@ -263,8 +393,8 @@
 
 .fieldInput:focus,
 .fieldTextArea:focus {
-  border-color: rgb(181 255 88 / 68%);
-  box-shadow: 0 0 0 3px rgb(181 255 88 / 8%);
+  border-color: var(--oc-accent-border-focus);
+  box-shadow: 0 0 0 3px var(--oc-accent-halo);
 }
 
 .fieldInput:disabled,
@@ -276,41 +406,41 @@
   display: grid;
   gap: 10px;
   padding: 18px;
-  border: 1px dashed rgb(181 255 88 / 42%);
-  background: rgb(181 255 88 / 5%);
+  border: 1px dashed var(--oc-accent-border-dashed);
+  background: var(--oc-accent-wash-soft);
   cursor: pointer;
 }
 
 .fileField:has(.fileFieldInput:focus-visible) {
-  border-color: rgb(181 255 88 / 72%);
-  box-shadow: 0 0 0 3px rgb(181 255 88 / 8%);
+  border-color: var(--oc-accent-border-focus-strong);
+  box-shadow: 0 0 0 3px var(--oc-accent-halo);
 }
 
 .fileFieldLabel {
-  color: rgb(244 241 234 / 72%);
+  color: var(--oc-ink-mid);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .fileFieldInput {
   max-width: 100%;
-  color: rgb(244 241 234 / 58%);
+  color: var(--oc-ink-dim);
   font: inherit;
 }
 
 .fileFieldInput::file-selector-button {
   margin-right: 10px;
   padding: 8px 11px;
-  border: 1px solid rgb(181 255 88 / 36%);
-  background: rgb(181 255 88 / 8%);
-  color: #d8ffab;
+  border: 1px solid var(--oc-accent-border-soft);
+  background: var(--oc-accent-wash-mild);
+  color: var(--oc-accent-ink);
   cursor: pointer;
   font: inherit;
 }
 
 .fileFieldInput:disabled,
 .fileField:has(.fileFieldInput:disabled) {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.5;
 }
 
@@ -323,17 +453,17 @@
 }
 
 .ready {
-  background: #b5ff58;
-  box-shadow: 0 0 0 0 rgb(181 255 88 / 55%);
+  background: var(--oc-status-ready);
+  box-shadow: 0 0 0 0 var(--oc-accent-pulse);
   animation: pulse 2s infinite;
 }
 
 .pending {
-  background: #f4d35e;
+  background: var(--oc-status-pending);
 }
 
 .unavailable {
-  background: #ff6b6b;
+  background: var(--oc-status-unavailable);
 }
 
 @keyframes pulse {
@@ -346,40 +476,115 @@
   }
 }
 
-@media (max-width: 640px) {
-  .surface {
-    padding: 20px;
-  }
-
-  .panel {
-    padding: 36px 28px;
-  }
+.tabs {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
 }
 
-@media (max-width: 900px) {
-  .editorShell {
-    grid-template-rows: auto auto auto;
-  }
+.tabList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--oc-hairline-mid);
+  background: var(--oc-input-wash);
+}
 
-  .editorHeader {
-    min-height: 62px;
-    grid-template-columns: auto 1fr;
-  }
+.tab {
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--oc-ink-dim);
+  cursor: pointer;
+  font: 600 12px / 1 var(--oc-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
-  .editorStatus,
-  .editorActions {
-    display: none;
-  }
+.tabActive {
+  border-color: var(--oc-accent-border);
+  background: var(--oc-accent-wash);
+  color: var(--oc-accent-ink);
+}
 
-  .editorBody {
-    grid-template-columns: 1fr;
-  }
+.tabPanel {
+  min-height: 0;
+  overflow: auto;
+}
 
-  .editorSidebar,
-  .editorViewer,
-  .editorInspector {
-    min-height: 320px;
-    border-right: 0;
-    border-bottom: 1px solid rgb(244 241 234 / 10%);
-  }
+.emptyState {
+  display: grid;
+  justify-items: start;
+  padding: 22px;
+  border: 1px dashed var(--oc-hairline-input);
+  gap: 10px;
+}
+
+.emptyStateTitle {
+  margin: 0;
+  color: var(--oc-ink-strong);
+  font-size: 14px;
+  font-weight: 640;
+}
+
+.emptyStateHint {
+  margin: 0;
+  color: var(--oc-ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.projectList {
+  display: grid;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.projectListItem {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink);
+  cursor: pointer;
+  font: inherit;
+  gap: 14px;
+  text-align: left;
+}
+
+.projectListItem:hover,
+.projectListItem:focus-visible {
+  border-color: var(--oc-accent-border-focus);
+  outline: none;
+}
+
+.projectListName {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectListMeta {
+  flex-shrink: 0;
+  color: var(--oc-ink-faint);
+  font-family: var(--oc-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editorShell,
+.editorHeader,
+.editorBody {
+  min-width: 0;
 }

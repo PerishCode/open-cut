@@ -452,15 +452,18 @@ describe("HomeView", () => {
     expect(screen.getByText("A specific opening line.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
     expect(await screen.findByText("The pinned Sequence is empty.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "System" }));
     expect(await screen.findByText("Local transcription · not qualified for this build")).toBeTruthy();
     expect(await screen.findByText("No optional local resources are declared by this build.")).toBeTruthy();
     expect(screen.getByText("Main Sequence · pinned r2")).toBeTruthy();
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
+    fireEvent.click(screen.getByRole("tab", { name: "Export" }));
     fireEvent.click(screen.getByRole("button", { name: "Export" }));
     expect(await screen.findByText("EXPORT r2 · BLOCKED · 0% · CREATOR · 1 ATTEMPT")).toBeTruthy();
     expect(exportRequests).toBe(1);
     expect(exportHistoryRequests).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getByRole("tab", { name: "Transcript" }));
     fireEvent.click(screen.getByRole("button", { name: "Open transcript" }));
     expect(await screen.findByText("A precise opening line.")).toBeTruthy();
     expect(screen.getByText("A precise opening line. → A specific opening line.")).toBeTruthy();
@@ -472,6 +475,7 @@ describe("HomeView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open in Source Viewer" }));
     expect(await screen.findByText("SOURCE · VIEWER")).toBeTruthy();
     expect(sourceRequests).toBe(1);
+    fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
     expect(await screen.findByRole("button", { name: "Approve scope upgrade" })).toBeTruthy();
     expect(screen.getByText("Requested scopes: activity:read, project:read, run:write")).toBeTruthy();
     expect(screen.getByRole("main", { name: "Creator workspace" })).toBeTruthy();

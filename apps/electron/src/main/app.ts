@@ -30,8 +30,10 @@ export type ElectronApp = {
 export async function startElectronApp(): Promise<ElectronApp> {
   await app.whenReady();
   const window = new BrowserWindow({
-    width: 1100,
-    height: 760,
+    width: 1440,
+    height: 900,
+    minWidth: 1280,
+    minHeight: 800,
     show: false,
     webPreferences: {
       contextIsolation: true,
