@@ -1,19 +1,18 @@
-import { Button, Heading, Stack, Status, Text, TextField } from "@open-cut/components";
+import { Button, Heading, ProjectList, Stack, Status, Text, TextField } from "@open-cut/components";
 import { useCreateProject, useProjects } from "@open-cut/contracts";
 import { useState } from "react";
 
 import { AgentAccess } from "./agent-access.js";
 
-export function RuntimeSummary() {
+export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: string) => void }) {
   const projects = useProjects();
   const write = useCreateProject();
   const [name, setName] = useState("Untitled story");
   const status = projects.status === "connecting" ? "pending" : projects.status;
-  const names = projects.projects.map((project) => project.name).join(", ");
 
   return (
     <Stack>
-      <Text tone="eyebrow">OPEN CUT · DAY 0</Text>
+      <Text tone="eyebrow">OPEN CUT</Text>
       <Heading>Start with a story.</Heading>
       <Text>
         Every project begins with a narrative document, an exact main sequence, and video, audio, and caption tracks.
@@ -23,7 +22,16 @@ export function RuntimeSummary() {
           ? `Workspace synchronized at activity ${projects.activityCursor}`
           : `Workspace ${status}`}
       </Status>
-      <Text>{names ? `Projects: ${names}` : "No projects yet."}</Text>
+      {onOpen && projects.projects.length > 0 ? (
+        <ProjectList
+          label="Projects"
+          projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
+          onOpen={onOpen}
+        />
+      ) : null}
+      {projects.status === "ready" && projects.projects.length === 0 ? (
+        <Text>No projects yet — name your first story below.</Text>
+      ) : null}
       <TextField
         disabled={write.pending}
         label="Project name"

@@ -1,4 +1,4 @@
-import { Button, EditorShell, Stack, Status, Text } from "@open-cut/components";
+import { Button, EditorShell, EmptyState, Stack, Status, Tabs, Text } from "@open-cut/components";
 import {
   type AgentContextAttachment,
   type Asset,
@@ -77,7 +77,7 @@ type SourceStreamSelection = Readonly<{
   audioStreamId?: DurableID;
 }>;
 
-export function CreatorWorkspace({ project }: { project: Project }) {
+export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
   const sequenceViewer = useMemo(() => new SequenceViewerController(contracts.media.viewer), [contracts]);
   const sourceViewer = useMemo(() => new SourceViewerController(contracts.media.viewer), [contracts]);
@@ -423,6 +423,7 @@ export function CreatorWorkspace({ project }: { project: Project }) {
     <EditorShell
       actions={
         <>
+          {onExit ? <Button onPress={onExit}>Projects</Button> : null}
           <Button disabled={!ready || importing} onPress={() => void importFootage()}>
             {importing ? "Selecting…" : "Add footage"}
           </Button>
@@ -442,169 +443,280 @@ export function CreatorWorkspace({ project }: { project: Project }) {
       }
       brand="OPEN CUT"
       inspector={
-        <Stack spacing="compact">
-          <ProductAvailability state={productAvailability} onRetry={() => void loadProductAvailability()} />
-          <ProductResources />
-          <AgentAccess />
-          {ready ? (
-            <CreatorHistory
-              onCommitted={recordAndRefreshCreativeCommit}
-              projectId={project.id}
-              refreshEpoch={historyRefreshEpoch}
-              sequenceId={ready.overview.project.mainSequenceId}
-            />
-          ) : null}
-          <Text tone="eyebrow">NARRATIVE</Text>
-          {ready ? (
-            <CreatorNarrativeWriter
-              narrative={ready.narrative}
-              onAddToRoughCut={(sourceExcerpt, evidenceStatus) => {
-                setRoughCutTimelineStart((current) => current ?? sequencePreview.playhead);
-                setRoughCutOccurrences((current) =>
-                  current.length >= 128
-                    ? current
-                    : [
-                        ...current,
-                        createCreatorRoughCutOccurrence(
-                          sourceExcerpt,
-                          evidenceStatus,
-                          ready.assets.assets,
-                          ready.overview.tracks,
-                        ),
-                      ],
-                );
-              }}
-              onCreateCaptions={(sourceExcerpt, evidenceStatus) => setCaptionSource({ sourceExcerpt, evidenceStatus })}
-              onReload={refreshCommittedWorkspace}
-              onCommitReceipt={recordCreativeCommit}
-              onSelect={(node, anchor) => {
-                setNarrativeAnchor(anchor);
-                setNarrativeSelectionEpoch((current) => current + 1);
-                selectContext(narrativeContext(node));
-              }}
-              projectId={project.id}
-              projectRevision={ready.overview.project.revision}
-              sequenceId={ready.overview.project.mainSequenceId}
-            />
-          ) : null}
-          {state.status === "loading" ? <Text>Loading bounded Narrative…</Text> : null}
-          {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
-          <Text tone="eyebrow">ORIGINAL TRANSCRIPT</Text>
-          <TranscriptSurface
-            asset={selectedAsset}
-            excerptTarget={
-              ready && activeNarrativeAnchor
-                ? {
-                    projectId: project.id,
-                    sequenceId: ready.overview.project.mainSequenceId,
-                    projectRevision: ready.overview.project.revision,
-                    anchor: activeNarrativeAnchor,
-                    selectionEpoch: narrativeSelectionEpoch,
-                    onCommitReceipt: recordCreativeCommit,
-                    onReload: refreshCommittedWorkspace,
-                    onInserted: (anchor) => {
-                      setNarrativeAnchor(anchor);
-                      setNarrativeSelectionEpoch((current) => current + 1);
-                    },
-                  }
-                : undefined
-            }
-            onContext={(page, segment) => selectContext(transcriptSegmentContext(page, segment))}
-            onInspect={(artifactId) => selectedAsset && void readTranscript(selectedAsset.id, artifactId)}
-            onLoad={selectedAsset ? () => void readTranscript(selectedAsset.id) : undefined}
-            onLoadMore={() => void readMoreTranscript()}
-            onSelectDefault={() => void selectTranscriptDefault()}
-            state={transcript}
-          />
-        </Stack>
-      }
-      inspectorLabel="Narrative · Transcript · Capabilities"
-      sidebar={
-        <CreatorAgentPane
-          contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
-          onFocusReceiptRef={focusReceiptRef}
-          projectId={project.id}
-          sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
+        <Tabs
+          label="Workspace panels"
+          tabs={[
+            {
+              id: "write",
+              label: "Write",
+              content: (
+                <Stack spacing="compact">
+                  {ready ? (
+                    <CreatorHistory
+                      onCommitted={recordAndRefreshCreativeCommit}
+                      projectId={project.id}
+                      refreshEpoch={historyRefreshEpoch}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                    />
+                  ) : null}
+                  {ready ? (
+                    <CreatorNarrativeWriter
+                      narrative={ready.narrative}
+                      onAddToRoughCut={(sourceExcerpt, evidenceStatus) => {
+                        setRoughCutTimelineStart((current) => current ?? sequencePreview.playhead);
+                        setRoughCutOccurrences((current) =>
+                          current.length >= 128
+                            ? current
+                            : [
+                                ...current,
+                                createCreatorRoughCutOccurrence(
+                                  sourceExcerpt,
+                                  evidenceStatus,
+                                  ready.assets.assets,
+                                  ready.overview.tracks,
+                                ),
+                              ],
+                        );
+                      }}
+                      onCreateCaptions={(sourceExcerpt, evidenceStatus) =>
+                        setCaptionSource({ sourceExcerpt, evidenceStatus })
+                      }
+                      onReload={refreshCommittedWorkspace}
+                      onCommitReceipt={recordCreativeCommit}
+                      onSelect={(node, anchor) => {
+                        setNarrativeAnchor(anchor);
+                        setNarrativeSelectionEpoch((current) => current + 1);
+                        selectContext(narrativeContext(node));
+                      }}
+                      projectId={project.id}
+                      projectRevision={ready.overview.project.revision}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                    />
+                  ) : null}
+                  {state.status === "loading" ? <Text>Loading bounded Narrative…</Text> : null}
+                  {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
+                </Stack>
+              ),
+            },
+            {
+              id: "transcript",
+              label: "Transcript",
+              content: (
+                <Stack spacing="compact">
+                  {selectedAsset ? null : (
+                    <EmptyState
+                      hint="Pick footage in the Library and open its transcript to quote exact spoken lines into your story."
+                      title="No source selected"
+                    />
+                  )}
+                  <TranscriptSurface
+                    asset={selectedAsset}
+                    excerptTarget={
+                      ready && activeNarrativeAnchor
+                        ? {
+                            projectId: project.id,
+                            sequenceId: ready.overview.project.mainSequenceId,
+                            projectRevision: ready.overview.project.revision,
+                            anchor: activeNarrativeAnchor,
+                            selectionEpoch: narrativeSelectionEpoch,
+                            onCommitReceipt: recordCreativeCommit,
+                            onReload: refreshCommittedWorkspace,
+                            onInserted: (anchor) => {
+                              setNarrativeAnchor(anchor);
+                              setNarrativeSelectionEpoch((current) => current + 1);
+                            },
+                          }
+                        : undefined
+                    }
+                    onContext={(page, segment) => selectContext(transcriptSegmentContext(page, segment))}
+                    onInspect={(artifactId) => selectedAsset && void readTranscript(selectedAsset.id, artifactId)}
+                    onLoad={selectedAsset ? () => void readTranscript(selectedAsset.id) : undefined}
+                    onLoadMore={() => void readMoreTranscript()}
+                    onSelectDefault={() => void selectTranscriptDefault()}
+                    state={transcript}
+                  />
+                </Stack>
+              ),
+            },
+            {
+              id: "agent",
+              label: "Agent",
+              content: (
+                <Stack spacing="compact">
+                  <CreatorAgentPane
+                    contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
+                    onFocusReceiptRef={focusReceiptRef}
+                    projectId={project.id}
+                    sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
+                  />
+                  <AgentAccess />
+                  {ready ? (
+                    <>
+                      <Button onPress={() => selectContext(sequenceRangeContext(ready.sequence))}>
+                        Use visible timeline as @ context
+                      </Button>
+                      <Button
+                        onPress={() => selectContext(sequencePointContext(ready.sequence, ready.sequence.range.start))}
+                      >
+                        Use visible start as @ context
+                      </Button>
+                    </>
+                  ) : null}
+                  {ready?.overview.tracks.map((track) => (
+                    <Button key={track.id} onPress={() => selectContext(trackContext(track))}>
+                      Use {track.label} track as @ context
+                    </Button>
+                  ))}
+                </Stack>
+              ),
+            },
+            {
+              id: "system",
+              label: "System",
+              content: (
+                <Stack spacing="compact">
+                  <ProductAvailability state={productAvailability} onRetry={() => void loadProductAvailability()} />
+                  <ProductResources />
+                </Stack>
+              ),
+            },
+          ]}
         />
       }
-      sidebarLabel="Agent"
-      status={<Status state={status}>{workspaceStatus(state)}</Status>}
-      timeline={
+      inspectorLabel="Write · Transcript · Agent · System"
+      sidebar={
         <Stack spacing="compact">
-          {ready ? (
-            <CreatorTimeline
-              clips={ready.sequence.clips}
-              onCommitted={recordAndRefreshCreativeCommit}
-              onContextClip={(clip) => selectContext(clipContext(clip))}
-              onReload={refreshCommittedWorkspace}
-              projectId={project.id}
-              sequenceId={ready.overview.project.mainSequenceId}
-              tracks={ready.overview.tracks}
-              viewer={sequenceViewer}
+          <SourceImportSurface
+            disabled={!ready || importing}
+            error={importError}
+            onSelect={(file) => void importFootage(file)}
+          />
+          {ready && ready.assets.assets.length === 0 ? (
+            <EmptyState
+              hint="Add a local video to begin. Open Cut references it in place and prepares preview and transcript work in the background."
+              title="No footage yet"
             />
           ) : null}
-          {ready ? (
-            <CreatorCaptions
-              alignments={ready.sequence.alignments}
-              clips={ready.sequence.clips}
-              onCommitted={recordAndRefreshCreativeCommit}
-              onReload={refreshCommittedWorkspace}
-              projectId={project.id}
-              sequenceId={ready.overview.project.mainSequenceId}
-              source={captionSource}
-              tracks={ready.overview.tracks}
-            />
-          ) : null}
-          {ready ? (
-            <CreatorRoughCutPanel
-              assets={ready.assets.assets}
-              currentPlayhead={sequencePreview.playhead}
-              occurrences={roughCutOccurrences}
-              onChange={setRoughCutOccurrences}
-              onCommitted={async (receipt) => {
-                setRoughCutOccurrences([]);
-                await recordAndRefreshCreativeCommit(receipt);
+          {ready?.assets.assets.map((asset) => (
+            <AssetSummary
+              asset={asset}
+              key={asset.id}
+              onContext={() => selectContext(assetContext(asset))}
+              onTranscript={() => {
+                setSelectedAssetId(asset.id);
+                void readTranscript(asset.id);
               }}
-              onReload={refreshCommittedWorkspace}
-              onTimelineStartChange={setRoughCutTimelineStart}
-              projectId={project.id}
-              projectRevision={ready.overview.project.revision}
-              sequenceId={ready.overview.project.mainSequenceId}
-              sequenceRevision={ready.sequence.sequenceRevision}
-              timelineStart={roughCutTimelineStart ?? sequencePreview.playhead}
-              tracks={ready.overview.tracks}
+              onPreview={() => {
+                openSourceAsset(asset);
+              }}
+              previewAvailable={sourcePreviewAvailable}
+              selected={viewerMode === "source" && asset.id === sourceStreamSelection?.assetId}
             />
-          ) : null}
-          {ready ? (
-            <>
-              <Button onPress={() => selectContext(sequenceRangeContext(ready.sequence))}>
-                Use visible timeline as @ context
-              </Button>
-              <Button onPress={() => selectContext(sequencePointContext(ready.sequence, ready.sequence.range.start))}>
-                Use visible start as @ context
-              </Button>
-            </>
-          ) : null}
-          {ready?.overview.tracks.map((track) => (
-            <Button key={track.id} onPress={() => selectContext(trackContext(track))}>
-              Use {track.label} track as @ context
-            </Button>
           ))}
-          {ready ? (
-            <ManualCaptionEditor
-              captions={ready.sequence.captions}
-              onCommitted={recordAndRefreshCreativeCommit}
-              onContextCaption={(caption) => selectContext(captionContext(caption))}
-              onReload={refreshCommittedWorkspace}
-              projectId={project.id}
-              sequenceId={ready.overview.project.mainSequenceId}
-              tracks={ready.overview.tracks}
-              viewer={sequenceViewer}
-            />
-          ) : null}
         </Stack>
       }
-      timelineLabel="Main sequence · captions · 00:00—01:00"
+      sidebarLabel="Library"
+      status={<Status state={status}>{workspaceStatus(state)}</Status>}
+      timeline={
+        <Tabs
+          label="Timeline panels"
+          tabs={[
+            {
+              id: "timeline",
+              label: "Timeline",
+              content: (
+                <Stack spacing="compact">
+                  {ready && ready.sequence.clips.length === 0 ? (
+                    <EmptyState
+                      hint="Quote transcript lines into your story, then apply a rough cut — clips land here."
+                      title="The timeline is empty"
+                    />
+                  ) : null}
+                  {ready ? (
+                    <CreatorTimeline
+                      clips={ready.sequence.clips}
+                      onCommitted={recordAndRefreshCreativeCommit}
+                      onContextClip={(clip) => selectContext(clipContext(clip))}
+                      onReload={refreshCommittedWorkspace}
+                      projectId={project.id}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                      tracks={ready.overview.tracks}
+                      viewer={sequenceViewer}
+                    />
+                  ) : null}
+                </Stack>
+              ),
+            },
+            {
+              id: "rough-cut",
+              label: "Rough cut",
+              content: (
+                <Stack spacing="compact">
+                  {ready && roughCutOccurrences.length === 0 ? (
+                    <EmptyState
+                      hint="In Write, send a source excerpt to the rough cut — queued occurrences appear here for one atomic apply."
+                      title="No rough cut queued"
+                    />
+                  ) : null}
+                  {ready ? (
+                    <CreatorRoughCutPanel
+                      assets={ready.assets.assets}
+                      currentPlayhead={sequencePreview.playhead}
+                      occurrences={roughCutOccurrences}
+                      onChange={setRoughCutOccurrences}
+                      onCommitted={async (receipt) => {
+                        setRoughCutOccurrences([]);
+                        await recordAndRefreshCreativeCommit(receipt);
+                      }}
+                      onReload={refreshCommittedWorkspace}
+                      onTimelineStartChange={setRoughCutTimelineStart}
+                      projectId={project.id}
+                      projectRevision={ready.overview.project.revision}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                      sequenceRevision={ready.sequence.sequenceRevision}
+                      timelineStart={roughCutTimelineStart ?? sequencePreview.playhead}
+                      tracks={ready.overview.tracks}
+                    />
+                  ) : null}
+                </Stack>
+              ),
+            },
+            {
+              id: "captions",
+              label: "Captions",
+              content: (
+                <Stack spacing="compact">
+                  {ready ? (
+                    <CreatorCaptions
+                      alignments={ready.sequence.alignments}
+                      clips={ready.sequence.clips}
+                      onCommitted={recordAndRefreshCreativeCommit}
+                      onReload={refreshCommittedWorkspace}
+                      projectId={project.id}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                      source={captionSource}
+                      tracks={ready.overview.tracks}
+                    />
+                  ) : null}
+                  {ready ? (
+                    <ManualCaptionEditor
+                      captions={ready.sequence.captions}
+                      onCommitted={recordAndRefreshCreativeCommit}
+                      onContextCaption={(caption) => selectContext(captionContext(caption))}
+                      onReload={refreshCommittedWorkspace}
+                      projectId={project.id}
+                      sequenceId={ready.overview.project.mainSequenceId}
+                      tracks={ready.overview.tracks}
+                      viewer={sequenceViewer}
+                    />
+                  ) : null}
+                </Stack>
+              ),
+            },
+          ]}
+        />
+      }
+      timelineLabel="Main sequence"
       title={project.name}
       viewer={
         <Stack spacing="compact">
@@ -648,28 +760,6 @@ export function CreatorWorkspace({ project }: { project: Project }) {
               tracks={ready.overview.tracks}
             />
           ) : null}
-          <Text tone="eyebrow">ASSETS</Text>
-          <SourceImportSurface
-            disabled={!ready || importing}
-            error={importError}
-            onSelect={(file) => void importFootage(file)}
-          />
-          {ready?.assets.assets.map((asset) => (
-            <AssetSummary
-              asset={asset}
-              key={asset.id}
-              onContext={() => selectContext(assetContext(asset))}
-              onTranscript={() => {
-                setSelectedAssetId(asset.id);
-                void readTranscript(asset.id);
-              }}
-              onPreview={() => {
-                openSourceAsset(asset);
-              }}
-              previewAvailable={sourcePreviewAvailable}
-              selected={viewerMode === "source" && asset.id === sourceStreamSelection?.assetId}
-            />
-          ))}
         </Stack>
       }
       viewerLabel="Viewer"
