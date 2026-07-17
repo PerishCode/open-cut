@@ -85,8 +85,8 @@ Usage:
   oc-control version [--json]
   oc-control doctor
   oc-control bootstrap [--repo <path>]
-  oc-control clean [--repo <path>] [--scope temp|build|all] [--dry-run]
-  oc-control dev [--repo <path>] [--base-dir <path>] [--skip-build]
+  oc-control clean [--repo <path>] [--scope temp|build|quick|all] [--dry-run]
+  oc-control dev [--repo <path>] [--base-dir <path>]
   oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
   oc-control protocol generate [--repo <path>]
   oc-control protocol check [--repo <path>]
@@ -102,7 +102,7 @@ Usage:
   oc-control shutdown --bootstrap <bootstrap.json>
   oc-control harness guard [--repo <path>]
   oc-control harness broker [--workspace <path>]
-  oc-control harness sidecars [--repo <path>] [--workspace <path>] [--skip-build]
+  oc-control harness sidecars [--repo <path>] [--workspace <path>]
   oc-control harness cold-start [--repo <path>] [--workspace <path>]
   oc-control harness full-pack --bundle <release-bundle.tar.zst> [--workspace <path>]
   oc-control harness install <mac|win|linux> --arch <arch> --workspace <path> --origin <dir> --origin-url <url> --key <key.json>
@@ -144,7 +144,6 @@ func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	set.SetOutput(stderr)
 	repository := set.String("repo", ".", "open-cut repository root")
 	baseDir := set.String("base-dir", "", "development base directory; defaults below the repository")
-	skipBuild := set.Bool("skip-build", false, "use existing workspace build output")
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
@@ -161,7 +160,7 @@ func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	ready := make(chan devsession.Result, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- devsession.Run(ctx, repositoryRoot, selectedBaseDir, stderr, stderr, *skipBuild, ready)
+		done <- devsession.Run(ctx, repositoryRoot, selectedBaseDir, stderr, stderr, ready)
 	}()
 	select {
 	case result := <-ready:
@@ -186,7 +185,7 @@ func runClean(args []string, stdout, stderr io.Writer) int {
 	set := flag.NewFlagSet("clean", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	repository := set.String("repo", ".", "open-cut repository root")
-	scope := set.String("scope", string(cleaner.ScopeTemp), "generated surface: temp, build, or all")
+	scope := set.String("scope", string(cleaner.ScopeTemp), "generated surface: temp, build, quick, or all")
 	dryRun := set.Bool("dry-run", false, "report without removing generated paths")
 	if err := set.Parse(args); err != nil {
 		return 2
@@ -285,7 +284,6 @@ func runPack(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	version := set.String("version", "", "canonical X.Y.Z-channel.N version")
 	repository := set.String("repo", ".", "open-cut repository root")
 	launcher := set.String("launcher", "", "prebuilt target launcher")
-	skipBuild := set.Bool("skip-build", false, "use existing pnpm build output")
 	keepWork := set.Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
 	if err := set.Parse(args[1:]); err != nil {
 		return 2
@@ -301,7 +299,7 @@ func runPack(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := packager.Pack(ctx, packager.Options{
 		RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
-		SkipBuild: *skipBuild, KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
+		KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "pack: %v\n", err)
@@ -575,7 +573,6 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	set.SetOutput(stderr)
 	workspace := set.String("workspace", "", "harness workspace; defaults below the repository")
 	repository := set.String("repo", ".", "repository root for the sidecar-entry scenario")
-	skipBuild := set.Bool("skip-build", false, "use existing workspace build output")
 	bundlePath := set.String("bundle", "", "release-bundle.tar.zst for the full-pack scenario")
 	if err := set.Parse(args[1:]); err != nil {
 		return 2
@@ -621,19 +618,17 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		if !*skipBuild {
-			pnpm, resolveErr := tool.Resolve("pnpm")
-			if resolveErr != nil {
-				fmt.Fprintln(stderr, resolveErr)
-				return 1
-			}
-			if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-				Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
-				Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
-			}); err != nil {
-				fmt.Fprintf(stderr, "workspace build: %v\n", err)
-				return 1
-			}
+		pnpm, resolveErr := tool.Resolve("pnpm")
+		if resolveErr != nil {
+			fmt.Fprintln(stderr, resolveErr)
+			return 1
+		}
+		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
+			Executable: pnpm, Args: []string{"-r", "--if-present", "run", "build"}, Directory: repositoryRoot,
+			Stdout: stderr, Stderr: stderr, Profile: lifecycle.ProfileHarness,
+		}); err != nil {
+			fmt.Fprintf(stderr, "workspace build: %v\n", err)
+			return 1
 		}
 		report = harness.RunSidecars(ctx, selected, repositoryRoot)
 	} else {

@@ -16,11 +16,15 @@ import (
 )
 
 const (
-	initialRestartDelay  = 100 * time.Millisecond
-	maximumRestartDelay  = 5 * time.Second
-	stableProcessWindow  = 30 * time.Second
-	sessionCapabilityTTL = 7 * 24 * time.Hour
-	sessionRenewInterval = 12 * time.Hour
+	initialRestartDelay = 100 * time.Millisecond
+	maximumRestartDelay = 5 * time.Second
+	stableProcessWindow = 30 * time.Second
+	// A peer that keeps exiting before reaching the stable window is failing
+	// deterministically: the host re-executes the same binary, so retrying
+	// past this bound is pure churn and the session must surface the failure.
+	consecutiveFailureLimit = 5
+	sessionCapabilityTTL    = 7 * 24 * time.Hour
+	sessionRenewInterval    = 12 * time.Hour
 )
 
 type Options struct {
@@ -65,6 +69,7 @@ type managedProcess struct {
 	generation uint64
 	backoff    time.Duration
 	restart    *time.Timer
+	failures   int
 }
 
 func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr error) {
@@ -131,6 +136,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 		managed := processes[app]
 		if err := startProcess(ctx, control, options, managed, exits); err != nil {
 			fmt.Fprintf(options.Stderr, "runtime app %s start failed; retrying: %v\n", app, err)
+			managed.failures++
 			scheduleRestart(managed, restarts)
 		}
 	}
@@ -163,6 +169,21 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 			managed.command = nil
 			if time.Since(managed.startedAt) >= stableProcessWindow {
 				managed.backoff = initialRestartDelay
+				managed.failures = 0
+			}
+			managed.failures++
+			if managed.failures >= consecutiveFailureLimit {
+				shutdown(control, processes, exits, false)
+				if exited.err != nil {
+					return fmt.Errorf(
+						"runtime app %s exited %d consecutive times without becoming stable; giving up: %w",
+						exited.app, managed.failures, exited.err,
+					)
+				}
+				return fmt.Errorf(
+					"runtime app %s exited %d consecutive times without becoming stable; giving up",
+					exited.app, managed.failures,
+				)
 			}
 			if exited.err != nil {
 				fmt.Fprintf(options.Stderr, "runtime app %s exited; recovering: %v\n", exited.app, exited.err)
@@ -177,6 +198,14 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 			}
 			managed.restart = nil
 			if err := startProcess(ctx, control, options, managed, exits); err != nil {
+				managed.failures++
+				if managed.failures >= consecutiveFailureLimit {
+					shutdown(control, processes, exits, false)
+					return fmt.Errorf(
+						"runtime app %s failed to start %d consecutive times; giving up: %w",
+						restart.app, managed.failures, err,
+					)
+				}
 				fmt.Fprintf(options.Stderr, "runtime app %s restart failed; retrying: %v\n", restart.app, err)
 				scheduleRestart(managed, restarts)
 			}

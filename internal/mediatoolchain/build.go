@@ -71,10 +71,12 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		stderr = io.Discard
 	}
 	artifactRoot := filepath.Join(repositoryRoot, "apps", "api", "dist", "sidecar")
+	// Reuse trusts Load's exact contained-byte verification (digest, size, and
+	// tree closure for every manifest entry) — the same strength the production
+	// installer applies. Full re-qualification (relink, smoke, conformance
+	// probes) belongs to the cold build below, the explicit `media-tools check`
+	// command, and the pack lane's declared artifact checks.
 	if verified, loadErr := Load(artifactRoot, options.Target); loadErr == nil {
-		if err := VerifyCapabilities(ctx, verified); err != nil {
-			return BuildResult{}, fmt.Errorf("verify reused media capabilities: %w", err)
-		}
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry

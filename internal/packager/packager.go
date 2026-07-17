@@ -30,7 +30,6 @@ type Options struct {
 	Target         target.Target
 	Output         string
 	Launcher       string
-	SkipBuild      bool
 	KeepWork       bool
 	Stdout         io.Writer
 	Stderr         io.Writer
@@ -109,13 +108,11 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	if !options.SkipBuild {
-		if err := run(
-			ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
-			"pnpm", "-r", "--if-present", "run", "build",
-		); err != nil {
-			return Result{}, fmt.Errorf("build workspace: %w", err)
-		}
+	if err := run(
+		ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
+		"pnpm", "-r", "--if-present", "run", "build",
+	); err != nil {
+		return Result{}, fmt.Errorf("build workspace: %w", err)
 	}
 	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
 	if err != nil {
