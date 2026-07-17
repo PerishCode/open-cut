@@ -7,6 +7,13 @@ import (
 	"github.com/PerishCode/open-cut/product/domain"
 )
 
+// ChallengeHTTPBinding exposes the CLI challenge's command-to-path binding so
+// coverage tests can prove every registered Agent endpoint stays reachable: a
+// command missing here fails closed at challenge time in installed products.
+func ChallengeHTTPBinding(path []string, requestPath string) bool {
+	return validCLIHTTPBinding(path, requestPath)
+}
+
 func validCLIHTTPBinding(path []string, requestPath string) bool {
 	name := strings.Join(path, " ")
 	switch name {
@@ -90,6 +97,50 @@ func commandHTTPContext(name, value string) (command.Context, bool) {
 		turnID, turnErr := domain.ParseTurnID(segments[6])
 		_, assetErr := domain.ParseAssetID(segments[8])
 		if runErr != nil || turnErr != nil || assetErr != nil {
+			return command.Context{}, false
+		}
+		result.RunID, result.TurnID = &runID, &turnID
+		return result, true
+	case "sequence frames":
+		if len(segments) != 10 || segments[3] != "runs" || segments[5] != "turns" ||
+			segments[7] != "sequences" || segments[9] != "frames" {
+			return command.Context{}, false
+		}
+		runID, runErr := domain.ParseRunID(segments[4])
+		turnID, turnErr := domain.ParseTurnID(segments[6])
+		sequenceID, sequenceErr := domain.ParseSequenceID(segments[8])
+		if runErr != nil || turnErr != nil || sequenceErr != nil {
+			return command.Context{}, false
+		}
+		result.RunID, result.TurnID, result.SequenceID = &runID, &turnID, &sequenceID
+		return result, true
+	case "export start":
+		if len(segments) != 10 || segments[3] != "runs" || segments[5] != "turns" ||
+			segments[7] != "sequences" || segments[9] != "exports" {
+			return command.Context{}, false
+		}
+		runID, runErr := domain.ParseRunID(segments[4])
+		turnID, turnErr := domain.ParseTurnID(segments[6])
+		sequenceID, sequenceErr := domain.ParseSequenceID(segments[8])
+		if runErr != nil || turnErr != nil || sequenceErr != nil {
+			return command.Context{}, false
+		}
+		result.RunID, result.TurnID, result.SequenceID = &runID, &turnID, &sequenceID
+		return result, true
+	case "export show", "export retry", "export cancel":
+		expectedLength := 9
+		action := strings.TrimPrefix(name, "export ")
+		if action != "show" {
+			expectedLength = 10
+		}
+		if len(segments) != expectedLength || segments[3] != "runs" || segments[5] != "turns" ||
+			segments[7] != "exports" || (action != "show" && segments[9] != action) {
+			return command.Context{}, false
+		}
+		runID, runErr := domain.ParseRunID(segments[4])
+		turnID, turnErr := domain.ParseTurnID(segments[6])
+		_, jobErr := domain.ParseWorkJobID(segments[8])
+		if runErr != nil || turnErr != nil || jobErr != nil {
 			return command.Context{}, false
 		}
 		result.RunID, result.TurnID = &runID, &turnID
