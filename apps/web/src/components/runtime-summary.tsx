@@ -1,10 +1,10 @@
 import { Button, Heading, ProjectList, Stack, Status, Text, TextField } from "@open-cut/components";
-import { useCreateProject, useProjects } from "@open-cut/contracts";
+import { type DurableID, useCreateProject, useProjects } from "@open-cut/contracts";
 import { useState } from "react";
 
 import { AgentAccess } from "./agent-access.js";
 
-export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: string) => void }) {
+export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => void }) {
   const projects = useProjects();
   const write = useCreateProject();
   const [name, setName] = useState("Untitled story");
@@ -26,7 +26,10 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: string) => voi
         <ProjectList
           label="Projects"
           projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
-          onOpen={onOpen}
+          onOpen={(id) => {
+            const match = projects.projects.find((project) => project.id === id);
+            if (match) onOpen(match.id);
+          }}
         />
       ) : null}
       {projects.status === "ready" && projects.projects.length === 0 ? (

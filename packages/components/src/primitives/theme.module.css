@@ -119,20 +119,22 @@
   box-sizing: border-box;
 }
 
+:global(html),
+:global(body),
+:global(#app) {
+  height: 100%;
+  overflow: hidden;
+}
+
 :global(body) {
   min-width: 320px;
-  min-height: 100vh;
   margin: 0;
   background: var(--oc-canvas-wash);
 }
 
-:global(#app) {
-  min-height: 100vh;
-}
-
 .editorShell {
   display: grid;
-  min-height: 100vh;
+  height: 100%;
   grid-template-rows: 54px minmax(340px, 1fr) minmax(220px, 34vh);
   background: var(--oc-canvas);
 }
@@ -233,7 +235,8 @@
 
 .surface {
   display: grid;
-  min-height: 100vh;
+  height: 100%;
+  overflow: auto;
   padding: 48px;
   place-items: center;
 }
@@ -569,6 +572,7 @@
 
 @media (max-width: 900px) {
   .editorShell {
+    overflow: auto;
     grid-template-rows: auto auto auto;
   }
 
