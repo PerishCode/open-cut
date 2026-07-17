@@ -49,8 +49,8 @@ func ResolveBaseDir(repositoryRoot, requested string) (string, error) {
 	return baseDir, nil
 }
 
-func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.Writer, skipBuild bool, ready chan<- Result) error {
-	return run(ctx, repositoryRoot, baseDir, stdout, stderr, skipBuild, ready, buildWorkspace)
+func Run(ctx context.Context, repositoryRoot, baseDir string, stdout, stderr io.Writer, ready chan<- Result) error {
+	return run(ctx, repositoryRoot, baseDir, stdout, stderr, ready, buildWorkspace)
 }
 
 type workspaceBuilder func(context.Context, string, io.Writer) error
@@ -59,7 +59,6 @@ func run(
 	ctx context.Context,
 	repositoryRoot, baseDir string,
 	stdout, stderr io.Writer,
-	skipBuild bool,
 	ready chan<- Result,
 	build workspaceBuilder,
 ) error {
@@ -94,10 +93,8 @@ func run(
 		return err
 	}
 	defer cellBroker.Close()
-	if !skipBuild {
-		if err := build(ctx, repositoryRoot, stderr); err != nil {
-			return fmt.Errorf("build workspace: %w", err)
-		}
+	if err := build(ctx, repositoryRoot, stderr); err != nil {
+		return fmt.Errorf("build workspace: %w", err)
 	}
 	controlConfig, err := workspace.Load(repositoryRoot)
 	if err != nil {

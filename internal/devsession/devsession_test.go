@@ -37,7 +37,7 @@ func TestRunReservesCellBeforeWorkspaceBuild(t *testing.T) {
 	firstDone := make(chan error, 1)
 	go func() {
 		firstDone <- run(
-			context.Background(), repository, baseDir, io.Discard, io.Discard, false, make(chan Result, 1),
+			context.Background(), repository, baseDir, io.Discard, io.Discard, make(chan Result, 1),
 			func(context.Context, string, io.Writer) error {
 				close(enteredBuild)
 				<-releaseBuild
@@ -49,7 +49,7 @@ func TestRunReservesCellBeforeWorkspaceBuild(t *testing.T) {
 
 	var competingBuildCalled atomic.Bool
 	err = run(
-		context.Background(), repository, baseDir, io.Discard, io.Discard, false, make(chan Result, 1),
+		context.Background(), repository, baseDir, io.Discard, io.Discard, make(chan Result, 1),
 		func(context.Context, string, io.Writer) error {
 			competingBuildCalled.Store(true)
 			return nil
@@ -67,7 +67,7 @@ func TestRunReservesCellBeforeWorkspaceBuild(t *testing.T) {
 	}
 
 	err = run(
-		context.Background(), repository, baseDir, io.Discard, io.Discard, false, make(chan Result, 1),
+		context.Background(), repository, baseDir, io.Discard, io.Discard, make(chan Result, 1),
 		func(context.Context, string, io.Writer) error { return stoppedBuild },
 	)
 	if !errors.Is(err, stoppedBuild) {

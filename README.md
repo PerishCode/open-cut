@@ -47,7 +47,7 @@ go install ./cmd/oc-control
 oc-control bootstrap
 oc-control doctor
 oc-control protocol check
-oc-control clean --scope temp
+oc-control clean --scope quick
 oc-control dev
 ```
 
@@ -153,11 +153,19 @@ full packs; macOS additionally runs the install/offline-relaunch/uninstall loop.
 Generated workspace cleanup is deliberately repository-scoped:
 
 ```sh
+oc-control clean --scope quick      # per-entry .tmp cleanup; keeps media-toolchain caches
 oc-control clean --scope temp       # .tmp only
 oc-control clean --scope build      # apps/*/dist and packages/*/dist
 oc-control clean --scope all        # both generated surfaces
 oc-control clean --scope all --dry-run
 ```
+
+Every report item carries its measured byte size, so `--dry-run` doubles as a
+disk usage probe over the generated surfaces. `quick` removes harness
+workspaces, ad-hoc debug directories, and the dev cell, but keeps the
+`media-toolchain` download cache whose loss forces a full native recompile.
+Directories holding a held `broker.lock` belong to a running cell and are
+reported `in-use` instead of being removed, in every scope.
 
 The command never accepts arbitrary deletion targets and never removes dependency
 trees. Use it instead of shell-recursive deletion during normal development.
