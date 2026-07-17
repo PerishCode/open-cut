@@ -737,9 +737,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           <Text>
             {ready ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}` : "Preparing"}
           </Text>
-          <Button disabled={viewerMode === "sequence"} onPress={() => setViewerMode("sequence")}>
-            Open Sequence Viewer
-          </Button>
+          {viewerMode === "source" ? (
+            <Button onPress={() => setViewerMode("sequence")}>Open Sequence Viewer</Button>
+          ) : null}
           {viewerMode === "sequence" ? (
             sequencePreviewAvailable ? (
               <SequencePreviewSurface controller={sequenceViewer} snapshot={sequencePreview} />
