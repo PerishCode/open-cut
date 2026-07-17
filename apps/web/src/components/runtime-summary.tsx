@@ -9,7 +9,7 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
 
   const createAndOpen = async () => {
     const created = await write.create({ requestId: `ui:create-project:${crypto.randomUUID()}`, name });
-    if (created && onOpen) onOpen(created.id);
+    if (created && onOpen) onOpen(created.project.project.id);
   };
 
   return (
