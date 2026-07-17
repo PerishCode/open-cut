@@ -36,6 +36,7 @@ export async function startElectronApp(): Promise<ElectronApp> {
     minHeight: 800,
     show: false,
     webPreferences: {
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: fileURLToPath(new URL("../preload.cjs", import.meta.url)),

@@ -87,7 +87,8 @@ Usage:
   oc-control bootstrap [--repo <path>]
   oc-control clean [--repo <path>] [--scope temp|build|quick|all] [--dry-run]
   oc-control dev [--repo <path>] [--base-dir <path>]
-  oc-control dev inspect (--screenshot <path> | --eval <expression>) [--repo <path>] [--base-dir <path>]
+  oc-control dev inspect (--screenshot <path> | --eval <expression> | --set-file <path>) [--repo <path>] [--base-dir <path>]
+  oc-control dev record --output <path.webm> [--duration <seconds>] [--speech <text>] [--voice <voice>] [--repo <path>] [--base-dir <path>]
   oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
   oc-control protocol generate [--repo <path>]
   oc-control protocol check [--repo <path>]
@@ -143,6 +144,9 @@ func runProtocol(ctx context.Context, args []string, stdout, stderr io.Writer) i
 func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "inspect" {
 		return runDevInspect(ctx, args[1:], stdout, stderr)
+	}
+	if len(args) > 0 && args[0] == "record" {
+		return runDevRecord(ctx, args[1:], stdout, stderr)
 	}
 	set := flag.NewFlagSet("dev", flag.ContinueOnError)
 	set.SetOutput(stderr)
