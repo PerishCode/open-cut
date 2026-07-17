@@ -33,8 +33,11 @@ func runDevRecord(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	output := set.String("output", "", "write the WebM recording to this path")
 	duration := set.Float64("duration", 30, "recording length in seconds")
 	speech := set.String("speech", "", "narrate the recording with this exact text through macOS say")
-	voice := set.String("voice", "", "say voice for the narration")
+	// The system default voice follows the OS locale and garbles or drops
+	// English narration on non-English systems, so an English voice is pinned.
+	voice := set.String("voice", "Samantha", "say voice for the narration")
 	maxWidth := set.Int("max-width", 1920, "cap the captured frame width")
+	endpoint := set.String("endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
@@ -76,13 +79,16 @@ func runDevRecord(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	recordContext, cancel := context.WithTimeout(ctx, time.Duration(*duration)*time.Second+3*time.Minute)
 	defer cancel()
 	// An occluded window never repaints, so the screencast would capture one
-	// stale frame; surface the renderer before recording starts.
-	if owner, ownerErr := connectDevCell(*repository, *baseDir); ownerErr == nil {
-		showContext, showCancel := context.WithTimeout(recordContext, 5*time.Second)
-		_, _ = owner.Control(showContext, protocol.ControlCommandShow)
-		showCancel()
+	// stale frame; surface the renderer before recording starts. An explicit
+	// endpoint target manages its own visibility.
+	if *endpoint == "" {
+		if owner, ownerErr := connectDevCell(*repository, *baseDir); ownerErr == nil {
+			showContext, showCancel := context.WithTimeout(recordContext, 5*time.Second)
+			_, _ = owner.Control(showContext, protocol.ControlCommandShow)
+			showCancel()
+		}
 	}
-	cdp, _, err := connectDevRenderer(recordContext, *repository, *baseDir, stderr)
+	cdp, _, err := connectDevRenderer(recordContext, *repository, *baseDir, *endpoint, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "dev record: %v\n", err)
 		return 1

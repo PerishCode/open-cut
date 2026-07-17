@@ -38,14 +38,22 @@ func connectDevCell(repository, baseDir string) (*client.Client, error) {
 	return owner, nil
 }
 
-// connectDevRenderer reaches the live development cell's Electron renderer
-// through the sidecar-published loopback CDP endpoint: control descriptor and
-// owner token select the cell, the session endpoint selects the renderer.
+// connectDevRenderer reaches a controlled renderer over loopback CDP. With an
+// explicit endpoint it attaches directly — any potentially controlled program
+// qualifies; otherwise the development cell's control descriptor and owner
+// token select the cell and its published payload endpoint.
 func connectDevRenderer(
 	ctx context.Context,
-	repository, baseDir string,
+	repository, baseDir, explicitEndpoint string,
 	stderr io.Writer,
 ) (*businessacceptance.CDPClient, string, error) {
+	if explicitEndpoint != "" {
+		cdp, err := businessacceptance.ConnectCreatorCDP(ctx, explicitEndpoint)
+		if err != nil {
+			return nil, "", fmt.Errorf("connect controlled renderer: %w", err)
+		}
+		return cdp, explicitEndpoint, nil
+	}
 	owner, err := connectDevCell(repository, baseDir)
 	if err != nil {
 		return nil, "", err
@@ -83,6 +91,7 @@ func runDevInspect(ctx context.Context, args []string, stdout, stderr io.Writer)
 	screenshot := set.String("screenshot", "", "write a PNG capture of the live renderer to this path")
 	evaluate := set.String("eval", "", "JavaScript expression to evaluate in the live renderer")
 	setFile := set.String("set-file", "", "attach this file to the first enabled file input in the live renderer")
+	endpoint := set.String("endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
@@ -92,13 +101,13 @@ func runDevInspect(ctx context.Context, args []string, stdout, stderr io.Writer)
 	}
 	requestContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cdp, endpoint, err := connectDevRenderer(requestContext, *repository, *baseDir, stderr)
+	cdp, resolvedEndpoint, err := connectDevRenderer(requestContext, *repository, *baseDir, *endpoint, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "dev inspect: %v\n", err)
 		return 1
 	}
 	defer cdp.Close()
-	result := map[string]any{"schema": 1, "endpoint": endpoint}
+	result := map[string]any{"schema": 1, "endpoint": resolvedEndpoint}
 	if *setFile != "" {
 		filename, absErr := filepath.Abs(*setFile)
 		if absErr != nil {
