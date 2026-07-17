@@ -22,13 +22,13 @@ func (creator Creator) Bootstrap(ctx context.Context, projectName, fixturePath s
 	if err := creator.wait(ctx, `document.readyState === "complete" && !!document.body`); err != nil {
 		return err
 	}
-	if err := creator.evaluateBoolean(ctx, setTextExpression("Project name", projectName)); err != nil {
+	if err := creator.evaluateBoolean(ctx, setTextExpression("Name your story", projectName)); err != nil {
 		return fmt.Errorf("set installed Creator Project name: %w", err)
 	}
-	if err := creator.wait(ctx, fieldValueAndButtonExpression("Project name", projectName, "Create project")); err != nil {
+	if err := creator.wait(ctx, fieldValueAndButtonExpression("Name your story", projectName, "Create and open")); err != nil {
 		return fmt.Errorf("wait for installed Creator Project form: %w", err)
 	}
-	if err := creator.evaluateBoolean(ctx, buttonExpression("Create project", true)); err != nil {
+	if err := creator.evaluateBoolean(ctx, buttonExpression("Create and open", true)); err != nil {
 		return fmt.Errorf("create Project through installed Creator: %w", err)
 	}
 	const sourceFieldSelector = `input[type="file"]:not(:disabled)`
@@ -69,6 +69,9 @@ func (creator Creator) ApprovePairing(ctx context.Context) error {
 	if err := creator.CDP.Call(ctx, "Page.reload", map[string]any{"ignoreCache": true}, nil); err != nil {
 		return err
 	}
+	if err := creator.openTab(ctx, "Agent"); err != nil {
+		return fmt.Errorf("open Creator Agent panel: %w", err)
+	}
 	if err := creator.wait(ctx, buttonExpression("Approve CLI", false)); err != nil {
 		return fmt.Errorf("wait for pending CLI pairing: %w", err)
 	}
@@ -84,6 +87,9 @@ func (creator Creator) ApprovePairing(ctx context.Context) error {
 func (creator Creator) AcquireTranscriptionModel(ctx context.Context) error {
 	if creator.CDP == nil {
 		return fmt.Errorf("Creator resource acquisition requires the installed UI target")
+	}
+	if err := creator.openTab(ctx, "System"); err != nil {
+		return fmt.Errorf("open Creator System panel: %w", err)
 	}
 	if err := creator.wait(ctx, buttonExpression("Download for offline use", false)); err != nil {
 		return fmt.Errorf("wait for Creator transcription resource action: %w", err)
@@ -110,6 +116,16 @@ func (creator Creator) AcquireTranscriptionModel(ctx context.Context) error {
 		return fmt.Errorf("wait for production transcription model: %w", err)
 	}
 	return nil
+}
+
+// openTab activates a workspace panel exactly as a human does: the panes
+// behind inactive tabs are unmounted, so every panel interaction selects its
+// tab first.
+func (creator Creator) openTab(ctx context.Context, label string) error {
+	if err := creator.wait(ctx, buttonExpression(label, false)); err != nil {
+		return err
+	}
+	return creator.evaluateBoolean(ctx, buttonExpression(label, true))
 }
 
 func (creator Creator) wait(ctx context.Context, expression string) error {
