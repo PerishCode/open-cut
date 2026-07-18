@@ -462,7 +462,10 @@ func (compositor *VideoCompositor) writeOutputYUV() error {
 func writeDownsampledChroma(full []uint16, width, height int, destination []byte) error {
 	if width <= 0 || height <= 0 || width%2 != 0 || height%2 != 0 || len(full) != width*height ||
 		len(destination) != width*height/4 {
-		return ErrIntegerOracleInput
+		return fmt.Errorf(
+			"%w: output chroma shape w=%d h=%d full=%d dst=%d",
+			ErrIntegerOracleInput, width, height, len(full), len(destination),
+		)
 	}
 	chromaWidth := width / 2
 	for y := 0; y < height/2; y++ {

@@ -45,6 +45,7 @@ type SequencePreviewArtifactVerifier interface {
 type FailSequencePreview struct {
 	Claim    WorkJobClaim
 	Code     string
+	Detail   string
 	EventID  domain.ActivityEventID
 	FailedAt time.Time
 }
@@ -248,8 +249,12 @@ func (executor *SequencePreviewWorkExecutor) fail(
 	if err != nil {
 		return err
 	}
+	detail := ""
+	if failure.Cause != nil {
+		detail = BoundedDiagnosticDetail(failure.Cause.Error())
+	}
 	return executor.repository.FailSequencePreview(ctx, FailSequencePreview{
-		Claim: claim, Code: failure.Code, EventID: eventID, FailedAt: now,
+		Claim: claim, Code: failure.Code, Detail: detail, EventID: eventID, FailedAt: now,
 	})
 }
 

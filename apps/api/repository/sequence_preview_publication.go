@@ -164,8 +164,9 @@ func (repository *SQLiteProjects) FailSequencePreview(
 	}
 	at := formatInstant(input.FailedAt.UTC())
 	diagnostics, _ := json.Marshal(struct {
-		Code string `json:"code"`
-	}{Code: input.Code})
+		Code   string `json:"code"`
+		Detail string `json:"detail,omitempty"`
+	}{Code: input.Code, Detail: input.Detail})
 	result, err := tx.ExecContext(ctx, `
 UPDATE work_job_attempts
 SET state = 'failed', heartbeat_at = ?, ended_at = ?, diagnostics_json = ?

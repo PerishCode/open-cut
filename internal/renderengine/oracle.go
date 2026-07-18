@@ -57,7 +57,10 @@ func ValidateIntegerOracle() error {
 
 func LimitedRec709ToLinearRGB16(input YUV8) (RGB16, error) {
 	if input.Y < 16 || input.Y > 235 || input.Cb < 16 || input.Cb > 240 || input.Cr < 16 || input.Cr > 240 {
-		return RGB16{}, ErrIntegerOracleInput
+		return RGB16{}, fmt.Errorf(
+			"%w: limited-range Rec.709 sample out of range Y=%d Cb=%d Cr=%d",
+			ErrIntegerOracleInput, input.Y, input.Cb, input.Cr,
+		)
 	}
 	gamma := limitedRec709ToGammaRGB16(input)
 	return RGB16{
@@ -110,7 +113,10 @@ func gammaRGB16ToLimitedRec709(input RGB16) YUV8 {
 func ReconstructLeftChroma420(plane []byte, chromaWidth, chromaHeight, x, y int) (uint8, error) {
 	if chromaWidth <= 0 || chromaHeight <= 0 || len(plane) != chromaWidth*chromaHeight || x < 0 || y < 0 ||
 		x/2 >= chromaWidth || y/2 >= chromaHeight {
-		return 0, ErrIntegerOracleInput
+		return 0, fmt.Errorf(
+			"%w: chroma reconstruct bounds w=%d h=%d len=%d x=%d y=%d",
+			ErrIntegerOracleInput, chromaWidth, chromaHeight, len(plane), x, y,
+		)
 	}
 	row, column := y/2, x/2
 	left := plane[row*chromaWidth+column]
@@ -126,7 +132,10 @@ func ReconstructLeftChroma420(plane []byte, chromaWidth, chromaHeight, x, y int)
 // round-half-even division by eight.
 func DownsampleLeftChroma420(full []uint16, width, height int) ([]uint16, error) {
 	if width <= 0 || height <= 0 || len(full) != width*height {
-		return nil, ErrIntegerOracleInput
+		return nil, fmt.Errorf(
+			"%w: chroma downsample shape w=%d h=%d len=%d",
+			ErrIntegerOracleInput, width, height, len(full),
+		)
 	}
 	chromaWidth, chromaHeight := (width+1)/2, (height+1)/2
 	result := make([]uint16, chromaWidth*chromaHeight)
