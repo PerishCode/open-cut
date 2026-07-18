@@ -105,6 +105,7 @@ type ReblockMediaTranscriptResource struct {
 type FailMediaJobInput struct {
 	Claim        MediaJobClaim
 	Code         string
+	Detail       string
 	Availability *domain.AssetAvailability
 	EventID      domain.ActivityEventID
 	FailedAt     time.Time
@@ -310,8 +311,12 @@ func (scheduler *mediaWorkDispatcher) executeClaim(
 			)
 		}
 		failure := classifyMediaExecutionError(executionErr)
+		detail := ""
+		if failure.Cause != nil {
+			detail = BoundedDiagnosticDetail(failure.Cause.Error())
+		}
 		return true, scheduler.repository.FailMediaJob(ctx, FailMediaJobInput{
-			Claim: claim, Code: failure.Code, Availability: failure.Availability,
+			Claim: claim, Code: failure.Code, Detail: detail, Availability: failure.Availability,
 			EventID: eventID, FailedAt: scheduler.clock.Now().UTC(),
 		})
 	}
