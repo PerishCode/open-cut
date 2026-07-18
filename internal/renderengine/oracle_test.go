@@ -18,19 +18,26 @@ func TestRec709IntegerOracleGoldenVectors(t *testing.T) {
 		{input: YUV8{Y: 81, Cb: 120, Cr: 140}, want: RGB16{R: 10408, G: 6095, B: 4509}},
 		{input: YUV8{Y: 145, Cb: 150, Cr: 110}, want: RGB16{R: 14736, G: 24609, B: 39019}},
 	} {
-		got, err := LimitedRec709ToLinearRGB16(fixture.input)
-		if err != nil || got != fixture.want {
-			t.Fatalf("input=%+v got=%+v want=%+v err=%v", fixture.input, got, fixture.want, err)
+		got := LimitedRec709ToLinearRGB16(fixture.input)
+		if got != fixture.want {
+			t.Fatalf("input=%+v got=%+v want=%+v", fixture.input, got, fixture.want)
 		}
+	}
+	// Out-of-legal-range decoded samples clamp to the range boundary instead of
+	// failing the render: a sample below 16 reads as 16, above 235 as 235.
+	if below, boundary := LimitedRec709ToLinearRGB16(YUV8{Y: 0, Cb: 0, Cr: 0}),
+		LimitedRec709ToLinearRGB16(YUV8{Y: 16, Cb: 16, Cr: 16}); below != boundary {
+		t.Fatalf("sub-legal sample did not clamp: %+v vs %+v", below, boundary)
+	}
+	if above, boundary := LimitedRec709ToLinearRGB16(YUV8{Y: 255, Cb: 255, Cr: 255}),
+		LimitedRec709ToLinearRGB16(YUV8{Y: 235, Cb: 240, Cr: 240}); above != boundary {
+		t.Fatalf("super-legal sample did not clamp: %+v vs %+v", above, boundary)
 	}
 	for _, input := range []YUV8{
 		{Y: 16, Cb: 128, Cr: 128}, {Y: 235, Cb: 128, Cr: 128},
 		{Y: 81, Cb: 120, Cr: 140}, {Y: 145, Cb: 150, Cr: 110},
 	} {
-		linear, err := LimitedRec709ToLinearRGB16(input)
-		if err != nil {
-			t.Fatal(err)
-		}
+		linear := LimitedRec709ToLinearRGB16(input)
 		roundTrip := LinearRGB16ToLimitedRec709(linear)
 		if absoluteByteDifference(roundTrip.Y, input.Y) > 1 ||
 			absoluteByteDifference(roundTrip.Cb, input.Cb) > 1 ||

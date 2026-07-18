@@ -359,12 +359,9 @@ func horizontalResampleRow(
 		if err != nil {
 			return nil, err
 		}
-		rgb, err := LimitedRec709ToLinearRGB16(YUV8{
+		rgb := LimitedRec709ToLinearRGB16(YUV8{
 			Y: yPlane[int(sourceY*layer.width+sourceX)], Cb: cb, Cr: cr,
 		})
-		if err != nil {
-			return nil, err
-		}
 		source[sourceX] = LinearRGBA16{R: rgb.R, G: rgb.G, B: rgb.B, A: math.MaxUint16}
 	}
 	result := make([]LinearRGBA16, len(layer.horizontal))
@@ -462,7 +459,10 @@ func (compositor *VideoCompositor) writeOutputYUV() error {
 func writeDownsampledChroma(full []uint16, width, height int, destination []byte) error {
 	if width <= 0 || height <= 0 || width%2 != 0 || height%2 != 0 || len(full) != width*height ||
 		len(destination) != width*height/4 {
-		return ErrIntegerOracleInput
+		return fmt.Errorf(
+			"%w: output chroma shape w=%d h=%d full=%d dst=%d",
+			ErrIntegerOracleInput, width, height, len(full), len(destination),
+		)
 	}
 	chromaWidth := width / 2
 	for y := 0; y < height/2; y++ {

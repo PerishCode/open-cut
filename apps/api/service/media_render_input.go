@@ -304,13 +304,30 @@ func renderInputColorInterpretation(video *domain.SourceStream) (string, error) 
 		return "", nil
 	}
 	facts := video.Descriptor.Video
-	if facts == nil || facts.PixelAspect == nil || facts.PixelAspect.Value.Value() != int64(facts.PixelAspect.Scale) ||
-		strings.ToLower(facts.ColorSpace) != "bt709" || strings.ToLower(facts.ColorTransfer) != "bt709" ||
-		strings.ToLower(facts.ColorPrimaries) != "bt709" ||
-		(strings.ToLower(facts.ColorRange) != "tv" && strings.ToLower(facts.ColorRange) != "mpeg") ||
-		strings.ToLower(facts.PixelFormat) != "yuv420p" ||
+	if facts == nil {
+		return "", fmt.Errorf("source video facts are unavailable")
+	}
+	transfer := strings.ToLower(facts.ColorTransfer)
+	if transfer == "smpte2084" || transfer == "arib-std-b67" ||
 		strings.Contains(strings.ToLower(video.Descriptor.CodecProfile), "dolby vision") {
-		return "", fmt.Errorf("source is not admitted square-pixel SDR Rec.709 yuv420p")
+		return "", fmt.Errorf("HDR source requires a later render-input profile")
+	}
+	// The render-input geometry contract is square-pixel SDR yuv420p at limited
+	// range; those are structural and stay strict.
+	if facts.PixelAspect == nil || facts.PixelAspect.Value.Value() != int64(facts.PixelAspect.Scale) ||
+		(strings.ToLower(facts.ColorRange) != "tv" && strings.ToLower(facts.ColorRange) != "mpeg") ||
+		strings.ToLower(facts.PixelFormat) != "yuv420p" {
+		return "", fmt.Errorf("source is not admitted square-pixel SDR yuv420p tv-range")
+	}
+	// Match the proxy path: incomplete color tags adopt a recorded Rec.709
+	// assumption rather than block export, so footage that previews also
+	// exports. Explicitly tagged non-Rec.709 SDR is still rejected.
+	if facts.ColorSpace == "" || facts.ColorTransfer == "" || facts.ColorPrimaries == "" {
+		return "assumed-bt709", nil
+	}
+	if strings.ToLower(facts.ColorSpace) != "bt709" || strings.ToLower(facts.ColorTransfer) != "bt709" ||
+		strings.ToLower(facts.ColorPrimaries) != "bt709" {
+		return "", fmt.Errorf("source is not Rec.709 SDR")
 	}
 	return "source-metadata", nil
 }
@@ -342,7 +359,8 @@ func renderInputEncodeArgs(
 	colorInterpretation string,
 	channelProjection string,
 ) ([]string, error) {
-	if colorInterpretation != "" && colorInterpretation != "source-metadata" {
+	if colorInterpretation != "" && colorInterpretation != "source-metadata" &&
+		colorInterpretation != "assumed-bt709" {
 		return nil, domain.ErrInvalidMediaFacts
 	}
 	filters := make([]string, 0, 1)
@@ -356,8 +374,12 @@ func renderInputEncodeArgs(
 			return nil, err
 		}
 		chain := orientationFilters(video.Descriptor.Video.Rotation)
+		color := "colorspace=all=bt709:range=tv:format=yuv420p:fast=0"
+		if colorInterpretation == "assumed-bt709" {
+			color += ":iall=bt709"
+		}
 		chain = append(chain,
-			"setsar=1", "colorspace=all=bt709:range=tv:format=yuv420p:fast=0",
+			"setsar=1", color,
 			"format=yuv420p", "setpts=PTS-STARTPTS+"+filterTime(offset)+"/TB",
 		)
 		filters = append(filters, fmt.Sprintf("[0:%d]%s[v]", video.Descriptor.Index, strings.Join(chain, ",")))
@@ -407,28 +429,55 @@ func validateRenderInputOutput(
 	width uint32,
 	height uint32,
 ) (*domain.SourceStreamDescriptor, *domain.SourceStreamDescriptor, error) {
-	if (!proxyContainer(probe.Container) && !anyProxyContainer(probe.ContainerAliases)) ||
-		len(probe.Streams) != boolCount(hasVideo)+boolCount(hasAudio) {
-		return nil, nil, domain.ErrInvalidMediaFacts
+	if !proxyContainer(probe.Container) && !anyProxyContainer(probe.ContainerAliases) {
+		return nil, nil, fmt.Errorf("render-input container %q is not the expected matroska", probe.Container)
+	}
+	if len(probe.Streams) != boolCount(hasVideo)+boolCount(hasAudio) {
+		return nil, nil, fmt.Errorf(
+			"render-input has %d streams, want %d", len(probe.Streams), boolCount(hasVideo)+boolCount(hasAudio),
+		)
 	}
 	var video, audio *domain.SourceStreamDescriptor
 	for _, descriptor := range probe.Streams {
 		current := descriptor
 		switch descriptor.MediaType {
 		case domain.MediaVideo:
-			if video != nil || !hasVideo || descriptor.Codec != "ffv1" || descriptor.Video == nil ||
-				descriptor.Video.Width != width || descriptor.Video.Height != height ||
-				descriptor.Video.PixelFormat != "yuv420p" || descriptor.Video.ColorRange != "tv" ||
-				descriptor.Video.ColorSpace != "bt709" || descriptor.Video.ColorTransfer != "bt709" ||
-				descriptor.Video.ColorPrimaries != "bt709" {
-				return nil, nil, domain.ErrInvalidMediaFacts
+			if video != nil || !hasVideo || descriptor.Video == nil {
+				return nil, nil, fmt.Errorf("render-input has an unexpected video stream")
+			}
+			if descriptor.Codec != "ffv1" || descriptor.Video.PixelFormat != "yuv420p" ||
+				descriptor.Video.Width != width || descriptor.Video.Height != height {
+				return nil, nil, fmt.Errorf(
+					"render-input video is %s %s %dx%d, want ffv1 yuv420p %dx%d",
+					descriptor.Codec, descriptor.Video.PixelFormat,
+					descriptor.Video.Width, descriptor.Video.Height, width, height,
+				)
+			}
+			if descriptor.Video.ColorRange != "tv" || descriptor.Video.ColorSpace != "bt709" ||
+				descriptor.Video.ColorTransfer != "bt709" || descriptor.Video.ColorPrimaries != "bt709" {
+				return nil, nil, fmt.Errorf(
+					"render-input video color is range=%q space=%q transfer=%q primaries=%q, want tv/bt709/bt709/bt709",
+					descriptor.Video.ColorRange, descriptor.Video.ColorSpace,
+					descriptor.Video.ColorTransfer, descriptor.Video.ColorPrimaries,
+				)
 			}
 			video = &current
 		case domain.MediaAudio:
-			if audio != nil || !hasAudio || descriptor.Codec != "pcm_s16le" || descriptor.Audio == nil ||
-				descriptor.Audio.SampleFormat != "s16" || descriptor.Audio.SampleRate != 48000 ||
-				descriptor.Audio.Channels != 2 || descriptor.Audio.ChannelLayout != "stereo" {
-				return nil, nil, domain.ErrInvalidMediaFacts
+			if audio != nil || !hasAudio || descriptor.Audio == nil {
+				return nil, nil, fmt.Errorf("render-input has an unexpected audio stream")
+			}
+			// The contained muxer does not persist a channel-layout tag on PCM,
+			// so a two-channel stream reads back with an empty or "unknown"
+			// layout; treat that as stereo rather than reject the material.
+			layout := strings.ToLower(descriptor.Audio.ChannelLayout)
+			if descriptor.Codec != "pcm_s16le" || descriptor.Audio.SampleFormat != "s16" ||
+				descriptor.Audio.SampleRate != 48000 || descriptor.Audio.Channels != 2 ||
+				(layout != "stereo" && layout != "" && layout != "unknown") {
+				return nil, nil, fmt.Errorf(
+					"render-input audio is %s %s %dHz %dch layout=%q, want pcm_s16le s16 48000Hz 2ch stereo",
+					descriptor.Codec, descriptor.Audio.SampleFormat, descriptor.Audio.SampleRate,
+					descriptor.Audio.Channels, descriptor.Audio.ChannelLayout,
+				)
 			}
 			audio = &current
 		default:

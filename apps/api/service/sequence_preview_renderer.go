@@ -204,9 +204,12 @@ func (renderer *ExternalSequencePreviewRenderer) Render(
 		}
 		if !stderr.exceeded && resultErr == nil && result.Status == renderengine.ResultFailed &&
 			result.Diagnostic != nil {
+			// The closed result names the failure; the helper's stderr explains
+			// it. Carry both so a real content failure stays diagnosable instead
+			// of collapsing to a bare code.
 			return application.SequencePreviewRenderExecution{}, application.NewSequencePreviewExecutionError(
-				result.Diagnostic.Code, fmt.Errorf("private renderer rejected %s/%s",
-					result.Diagnostic.SubjectKind, result.Diagnostic.SubjectID),
+				result.Diagnostic.Code, fmt.Errorf("private renderer rejected %s/%s: %s",
+					result.Diagnostic.SubjectKind, result.Diagnostic.SubjectID, strings.TrimSpace(stderr.String())),
 			)
 		}
 		return application.SequencePreviewRenderExecution{}, application.NewSequencePreviewExecutionError(

@@ -105,6 +105,7 @@ type ReblockMediaTranscriptResource struct {
 type FailMediaJobInput struct {
 	Claim        MediaJobClaim
 	Code         string
+	Detail       string
 	Availability *domain.AssetAvailability
 	EventID      domain.ActivityEventID
 	FailedAt     time.Time
@@ -310,8 +311,12 @@ func (scheduler *mediaWorkDispatcher) executeClaim(
 			)
 		}
 		failure := classifyMediaExecutionError(executionErr)
+		detail := ""
+		if failure.Cause != nil {
+			detail = BoundedDiagnosticDetail(failure.Cause.Error())
+		}
 		return true, scheduler.repository.FailMediaJob(ctx, FailMediaJobInput{
-			Claim: claim, Code: failure.Code, Availability: failure.Availability,
+			Claim: claim, Code: failure.Code, Detail: detail, Availability: failure.Availability,
 			EventID: eventID, FailedAt: scheduler.clock.Now().UTC(),
 		})
 	}
@@ -384,7 +389,9 @@ func (scheduler *mediaWorkDispatcher) executeClaim(
 			execution.FrameSet != nil || execution.Proxy != nil || execution.Transcript != nil ||
 			execution.TranscriptNoAudio || claim.AcceptedFingerprint == nil {
 			return true, scheduler.repository.FailMediaJob(ctx, FailMediaJobInput{
-				Claim: claim, Code: "executor-output-invalid", EventID: eventID, FailedAt: completedAt,
+				Claim: claim, Code: "executor-output-invalid",
+				Detail:  "render-input execution result shape is invalid",
+				EventID: eventID, FailedAt: completedAt,
 			})
 		}
 		publication, buildErr := scheduler.materializeRenderInput(
@@ -392,7 +399,9 @@ func (scheduler *mediaWorkDispatcher) executeClaim(
 		)
 		if buildErr != nil {
 			return true, scheduler.repository.FailMediaJob(ctx, FailMediaJobInput{
-				Claim: claim, Code: "executor-output-invalid", EventID: eventID, FailedAt: completedAt,
+				Claim: claim, Code: "executor-output-invalid",
+				Detail:  BoundedDiagnosticDetail("materialize render-input: " + buildErr.Error()),
+				EventID: eventID, FailedAt: completedAt,
 			})
 		}
 		return true, scheduler.repository.CompleteMediaRenderInput(ctx, publication)
