@@ -55,19 +55,24 @@ func ValidateIntegerOracle() error {
 	return nil
 }
 
-func LimitedRec709ToLinearRGB16(input YUV8) (RGB16, error) {
-	if input.Y < 16 || input.Y > 235 || input.Cb < 16 || input.Cb > 240 || input.Cr < 16 || input.Cr > 240 {
-		return RGB16{}, fmt.Errorf(
-			"%w: limited-range Rec.709 sample out of range Y=%d Cb=%d Cr=%d",
-			ErrIntegerOracleInput, input.Y, input.Cb, input.Cr,
-		)
+// LimitedRec709ToLinearRGB16 clamps its input to the Rec.709 legal range before
+// conversion. Lossy proxy decode and lanczos ringing legitimately push a few
+// decoded samples a step outside nominal [16,235]/[16,240]; a video renderer
+// must treat those as clamped legal values, not reject the whole frame. The
+// clamp is deterministic and is a no-op for in-range content, so conformance
+// evidence over in-range fixtures is unchanged.
+func LimitedRec709ToLinearRGB16(input YUV8) RGB16 {
+	clamped := YUV8{
+		Y:  clampUint8(int64(input.Y), 16, 235),
+		Cb: clampUint8(int64(input.Cb), 16, 240),
+		Cr: clampUint8(int64(input.Cr), 16, 240),
 	}
-	gamma := limitedRec709ToGammaRGB16(input)
+	gamma := limitedRec709ToGammaRGB16(clamped)
 	return RGB16{
 		R: rec709Lookup(gamma.R, 0),
 		G: rec709Lookup(gamma.G, 0),
 		B: rec709Lookup(gamma.B, 0),
-	}, nil
+	}
 }
 
 func LinearRGB16ToLimitedRec709(input RGB16) YUV8 {

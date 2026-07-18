@@ -359,12 +359,9 @@ func horizontalResampleRow(
 		if err != nil {
 			return nil, err
 		}
-		rgb, err := LimitedRec709ToLinearRGB16(YUV8{
+		rgb := LimitedRec709ToLinearRGB16(YUV8{
 			Y: yPlane[int(sourceY*layer.width+sourceX)], Cb: cb, Cr: cr,
 		})
-		if err != nil {
-			return nil, err
-		}
 		source[sourceX] = LinearRGBA16{R: rgb.R, G: rgb.G, B: rgb.B, A: math.MaxUint16}
 	}
 	result := make([]LinearRGBA16, len(layer.horizontal))
