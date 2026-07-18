@@ -304,13 +304,30 @@ func renderInputColorInterpretation(video *domain.SourceStream) (string, error) 
 		return "", nil
 	}
 	facts := video.Descriptor.Video
-	if facts == nil || facts.PixelAspect == nil || facts.PixelAspect.Value.Value() != int64(facts.PixelAspect.Scale) ||
-		strings.ToLower(facts.ColorSpace) != "bt709" || strings.ToLower(facts.ColorTransfer) != "bt709" ||
-		strings.ToLower(facts.ColorPrimaries) != "bt709" ||
-		(strings.ToLower(facts.ColorRange) != "tv" && strings.ToLower(facts.ColorRange) != "mpeg") ||
-		strings.ToLower(facts.PixelFormat) != "yuv420p" ||
+	if facts == nil {
+		return "", fmt.Errorf("source video facts are unavailable")
+	}
+	transfer := strings.ToLower(facts.ColorTransfer)
+	if transfer == "smpte2084" || transfer == "arib-std-b67" ||
 		strings.Contains(strings.ToLower(video.Descriptor.CodecProfile), "dolby vision") {
-		return "", fmt.Errorf("source is not admitted square-pixel SDR Rec.709 yuv420p")
+		return "", fmt.Errorf("HDR source requires a later render-input profile")
+	}
+	// The render-input geometry contract is square-pixel SDR yuv420p at limited
+	// range; those are structural and stay strict.
+	if facts.PixelAspect == nil || facts.PixelAspect.Value.Value() != int64(facts.PixelAspect.Scale) ||
+		(strings.ToLower(facts.ColorRange) != "tv" && strings.ToLower(facts.ColorRange) != "mpeg") ||
+		strings.ToLower(facts.PixelFormat) != "yuv420p" {
+		return "", fmt.Errorf("source is not admitted square-pixel SDR yuv420p tv-range")
+	}
+	// Match the proxy path: incomplete color tags adopt a recorded Rec.709
+	// assumption rather than block export, so footage that previews also
+	// exports. Explicitly tagged non-Rec.709 SDR is still rejected.
+	if facts.ColorSpace == "" || facts.ColorTransfer == "" || facts.ColorPrimaries == "" {
+		return "assumed-bt709", nil
+	}
+	if strings.ToLower(facts.ColorSpace) != "bt709" || strings.ToLower(facts.ColorTransfer) != "bt709" ||
+		strings.ToLower(facts.ColorPrimaries) != "bt709" {
+		return "", fmt.Errorf("source is not Rec.709 SDR")
 	}
 	return "source-metadata", nil
 }
@@ -342,7 +359,8 @@ func renderInputEncodeArgs(
 	colorInterpretation string,
 	channelProjection string,
 ) ([]string, error) {
-	if colorInterpretation != "" && colorInterpretation != "source-metadata" {
+	if colorInterpretation != "" && colorInterpretation != "source-metadata" &&
+		colorInterpretation != "assumed-bt709" {
 		return nil, domain.ErrInvalidMediaFacts
 	}
 	filters := make([]string, 0, 1)
@@ -356,8 +374,12 @@ func renderInputEncodeArgs(
 			return nil, err
 		}
 		chain := orientationFilters(video.Descriptor.Video.Rotation)
+		color := "colorspace=all=bt709:range=tv:format=yuv420p:fast=0"
+		if colorInterpretation == "assumed-bt709" {
+			color += ":iall=bt709"
+		}
 		chain = append(chain,
-			"setsar=1", "colorspace=all=bt709:range=tv:format=yuv420p:fast=0",
+			"setsar=1", color,
 			"format=yuv420p", "setpts=PTS-STARTPTS+"+filterTime(offset)+"/TB",
 		)
 		filters = append(filters, fmt.Sprintf("[0:%d]%s[v]", video.Descriptor.Index, strings.Join(chain, ",")))

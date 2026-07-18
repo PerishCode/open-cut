@@ -157,7 +157,7 @@ func runDevRecord(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		// Rec.709 and tag it so the footage matches what the media pipeline
 		// accepts as standard SDR. Full-range/mistagged input otherwise flows
 		// to the renderer's limited-range integer oracle and fails deep.
-		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2:in_range=full:out_range=tv,format=yuv420p",
+		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2:in_range=full:out_range=tv,setsar=1,format=yuv420p",
 		"-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
 		"-c:v", "libvpx-vp9", "-crf", "34", "-b:v", "0", "-cpu-used", "5",
 	)
