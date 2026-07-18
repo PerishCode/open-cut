@@ -198,7 +198,7 @@ func RegisterSequenceExports(
 		OperationID: "start-sequence-export", Method: http.MethodPost,
 		Path:    "/v1/projects/{projectId}/runs/{runId}/turns/{turnId}/sequences/{sequenceId}/exports",
 		Summary: "Start one pinned full-quality Sequence export", Tags: []string{"exports"},
-		Middlewares: requireCommandAuthority(api, runs, authorizer, "export", "start"),
+		Middlewares: requireCommandBodyAuthority(api, runs, authorizer, "export", "start"),
 		Extensions:  commandExtensions("export", "start"),
 	}, func(ctx context.Context, input *exportStartHTTPInput) (*exportHTTPOutput, error) {
 		if exports == nil {
@@ -240,7 +240,7 @@ func RegisterSequenceExports(
 		OperationID: "retry-sequence-export", Method: http.MethodPost,
 		Path:    "/v1/projects/{projectId}/runs/{runId}/turns/{turnId}/exports/{jobId}/retry",
 		Summary: "Retry one recoverable export lineage", Tags: []string{"exports"},
-		Middlewares: requireCommandAuthority(api, runs, authorizer, "export", "retry"),
+		Middlewares: requireCommandBodyAuthority(api, runs, authorizer, "export", "retry"),
 		Extensions:  commandExtensions("export", "retry"),
 	}, func(ctx context.Context, input *exportRetryHTTPInput) (*exportHTTPOutput, error) {
 		if exports == nil {
@@ -263,7 +263,7 @@ func RegisterSequenceExports(
 		OperationID: "cancel-sequence-export", Method: http.MethodPost,
 		Path:    "/v1/projects/{projectId}/runs/{runId}/turns/{turnId}/exports/{jobId}/cancel",
 		Summary: "Cancel one active export lineage", Tags: []string{"exports"},
-		Middlewares: requireCommandAuthority(api, runs, authorizer, "export", "cancel"),
+		Middlewares: requireCommandBodyAuthority(api, runs, authorizer, "export", "cancel"),
 		Extensions:  commandExtensions("export", "cancel"),
 	}, func(ctx context.Context, input *exportCancelHTTPInput) (*exportHTTPOutput, error) {
 		if exports == nil {

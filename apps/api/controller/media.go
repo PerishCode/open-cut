@@ -167,7 +167,7 @@ func RegisterMedia(
 		OperationID: "request-asset-frames", Method: http.MethodPost,
 		Path:    "/v1/projects/{projectId}/runs/{runId}/turns/{turnId}/assets/{assetId}/frames",
 		Summary: "Request bounded exact frame resources", Tags: []string{"media"},
-		Middlewares: requireCommandAuthority(api, runs, authorizer, "asset", "frames"),
+		Middlewares: requireCommandBodyAuthority(api, runs, authorizer, "asset", "frames"),
 		Extensions:  commandExtensions("asset", "frames"),
 	}, func(ctx context.Context, input *assetFramesHTTPInput) (*assetFramesHTTPOutput, error) {
 		if input.Body.AssetID != input.AssetID {

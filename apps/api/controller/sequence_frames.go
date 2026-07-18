@@ -34,7 +34,7 @@ func RegisterSequenceFrames(
 		OperationID: "inspect-sequence-frames", Method: http.MethodPost,
 		Path:    "/v1/projects/{projectId}/runs/{runId}/turns/{turnId}/sequences/{sequenceId}/frames",
 		Summary: "Inspect bounded exact frames of one committed Sequence revision",
-		Tags:    []string{"sequences"}, Middlewares: requireCommandAuthority(api, runs, authorizer, "sequence", "frames"),
+		Tags:    []string{"sequences"}, Middlewares: requireCommandBodyAuthority(api, runs, authorizer, "sequence", "frames"),
 		Extensions: commandExtensions("sequence", "frames"),
 	}, func(ctx context.Context, input *sequenceFramesHTTPInput) (*sequenceFramesHTTPOutput, error) {
 		if frames == nil {
