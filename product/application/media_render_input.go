@@ -128,7 +128,8 @@ func validateRenderInputVideo(track RenderInputVideoTrack, epoch domain.Rational
 		track.MaterialStartTime.IsNegative() || track.TimeBase.Validate() != nil || !track.TimeBase.IsPositive() ||
 		track.Codec != "ffv1" || track.PixelFormat != "yuv420p" || track.ColorRange != "tv" ||
 		track.ColorSpace != "bt709" || track.ColorTransfer != "bt709" || track.ColorPrimaries != "bt709" ||
-		track.ColorInterpretation != "source-metadata" || track.Width < 2 || track.Height < 2 ||
+		(track.ColorInterpretation != "source-metadata" && track.ColorInterpretation != "assumed-bt709") ||
+		track.Width < 2 || track.Height < 2 ||
 		track.Width > MaximumRenderMaterialDimension || track.Height > MaximumRenderMaterialDimension ||
 		track.Width%2 != 0 || track.Height%2 != 0 ||
 		track.FrameCount.Value() == 0 || track.FrameCount.Value() > MaximumRenderInputFrames ||

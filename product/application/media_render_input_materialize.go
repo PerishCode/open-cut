@@ -3,6 +3,7 @@ package application
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -20,19 +21,24 @@ func (scheduler *mediaWorkDispatcher) materializeRenderInput(
 	if err != nil || parameters.AssetID != claim.AssetID || parameters.Kind != domain.MediaJobRenderInput ||
 		parameters.Profile != RenderInputProfile || parameters.RenderInputSelection == nil ||
 		claim.AcceptedFingerprint == nil || execution.Workspace == nil {
-		return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input job parameters are invalid")
 	}
 	canonicalParameters, parametersDigest, err := CanonicalInitialMediaJobParameters(parameters)
 	if err != nil || !bytes.Equal(canonicalParameters, claim.ParametersJSON) ||
 		parametersDigest != claim.ParametersDigest {
-		return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input parameters are not canonical")
 	}
 	expectedVideo, expectedAudio, err := SelectSourceProxyStreams(
 		claim.SourceStreams, *parameters.RenderInputSelection,
 	)
-	if err != nil || !matchingRenderInputVideo(expectedVideo, execution.Video) ||
-		!matchingRenderInputAudio(expectedAudio, execution.Audio) {
-		return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+	if err != nil {
+		return CompleteMediaRenderInput{}, fmt.Errorf("select render-input source streams: %w", err)
+	}
+	if !matchingRenderInputVideo(expectedVideo, execution.Video) {
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input video track does not match the selected source stream")
+	}
+	if !matchingRenderInputAudio(expectedAudio, execution.Audio) {
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input audio track does not match the selected source stream")
 	}
 	artifactValue, err := scheduler.identities.NewID(ctx, at)
 	if err != nil {
@@ -50,17 +56,17 @@ func (scheduler *mediaWorkDispatcher) materializeRenderInput(
 	}
 	manifestCanonical, contentDigest, err := CanonicalRenderInputArtifactManifest(manifest)
 	if err != nil || len(manifestCanonical) > MaximumRenderInputManifestSize {
-		return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input manifest is not canonical or exceeds its bound")
 	}
 	total := uint64(len(manifestCanonical)) + manifest.Media.ByteSize.Value()
 	if manifest.Video != nil {
 		if manifest.Video.TimeMap.ByteSize.Value() > MaximumRenderInputArtifactSize-total {
-			return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+			return CompleteMediaRenderInput{}, fmt.Errorf("render-input time map exceeds the artifact bound")
 		}
 		total += manifest.Video.TimeMap.ByteSize.Value()
 	}
 	if total > MaximumRenderInputArtifactSize {
-		return CompleteMediaRenderInput{}, domain.ErrInvalidMediaFacts
+		return CompleteMediaRenderInput{}, fmt.Errorf("render-input artifact total %d exceeds its bound", total)
 	}
 	byteSize, err := domain.NewUInt64(total)
 	if err != nil {
