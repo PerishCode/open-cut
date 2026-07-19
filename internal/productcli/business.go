@@ -703,10 +703,47 @@ func writeHTTPFailure(
 		status = command.StatusUnavailable
 		code = "product-unavailable"
 	}
-	return writeCommandFailure(
+	return writeCommandFailureMessage(
 		stdout, stderr, cliVersion, invocation, status, code,
 		fmt.Errorf("product API returned %d: %s", response.StatusCode, strings.TrimSpace(string(body))), "",
+		productErrorReason(body),
 	)
+}
+
+// productErrorReason lifts the human-readable reason out of a product API
+// error body so a structured Agent result can carry it, instead of leaving the
+// explanation only in the raw stderr line. It returns "" when the body has no
+// more detail than the generic title.
+func productErrorReason(body []byte) string {
+	var document struct {
+		Detail string `json:"detail"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal(body, &document) != nil {
+		return ""
+	}
+	reasons := make([]string, 0, len(document.Errors))
+	for _, item := range document.Errors {
+		trimmed := strings.TrimSpace(item.Message)
+		if trimmed != "" && trimmed != document.Detail {
+			reasons = append(reasons, trimmed)
+		}
+	}
+	message := strings.TrimSpace(document.Detail)
+	if len(reasons) > 0 {
+		joined := strings.Join(reasons, "; ")
+		if message == "" {
+			message = joined
+		} else {
+			message += ": " + joined
+		}
+	}
+	if len(message) > 1024 {
+		message = message[:1024]
+	}
+	return message
 }
 
 func writeCommandFailure(
@@ -718,10 +755,23 @@ func writeCommandFailure(
 	cause error,
 	entityID string,
 ) int {
+	return writeCommandFailureMessage(stdout, stderr, cliVersion, invocation, status, code, cause, entityID, "")
+}
+
+func writeCommandFailureMessage(
+	stdout, stderr io.Writer,
+	cliVersion string,
+	invocation businessInvocation,
+	status command.Status,
+	code string,
+	cause error,
+	entityID string,
+	message string,
+) int {
 	if cause != nil {
 		fmt.Fprintln(stderr, cause)
 	}
-	issue := command.Issue{Code: code, EntityID: entityID}
+	issue := command.Issue{Code: code, EntityID: entityID, Message: message}
 	result := command.Result[json.RawMessage]{
 		Schema: command.CommandSchemaVersion, CLIVersion: cliVersion, Command: invocation.name,
 		Context: invocation.context, Status: status,

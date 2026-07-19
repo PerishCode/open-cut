@@ -21,6 +21,39 @@ var (
 	ErrEditEntityNotFound  = errors.New("edit entity not found")
 )
 
+// EditInvalidError is an ErrEditInvalid that carries a bounded, Agent-facing
+// reason: which operation and constraint rejected the request, so the Agent
+// can correct it instead of retrying an opaque "invalid". It unwraps to
+// ErrEditInvalid, so every existing errors.Is check and status mapping is
+// unchanged; only well-formed-but-unsatisfiable requests gain a reason, while
+// genuinely malformed input keeps returning bare ErrEditInvalid.
+type EditInvalidError struct {
+	Reason string
+}
+
+func (err EditInvalidError) Error() string {
+	if err.Reason == "" {
+		return ErrEditInvalid.Error()
+	}
+	return ErrEditInvalid.Error() + ": " + err.Reason
+}
+
+func (err EditInvalidError) Unwrap() error { return ErrEditInvalid }
+
+// editInvalidf builds an EditInvalidError with a bounded formatted reason.
+func editInvalidf(format string, args ...any) error {
+	return EditInvalidError{Reason: BoundedDiagnosticDetail(fmt.Sprintf(format, args...))}
+}
+
+// formatSeconds renders an exact rational time as a short decimal seconds
+// string for human-facing diagnostic reasons only; it never feeds computation.
+func formatSeconds(value domain.RationalTime) string {
+	if value.Scale <= 0 {
+		return "0s"
+	}
+	return fmt.Sprintf("%.3gs", float64(value.Value.Value())/float64(value.Scale))
+}
+
 const MaximumEditIntentBytes = 4000
 
 type EditReference struct {
