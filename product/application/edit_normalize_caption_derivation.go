@@ -101,7 +101,14 @@ func DeriveCaptionCues(
 			desiredEnd = readingEnd
 		}
 		if comparison, _ := desiredEnd.Compare(capEnd); comparison > 0 {
-			return nil, ErrEditInvalid
+			graphemes := uniseg.GraphemeClusterCount(strings.ReplaceAll(text, "\n", ""))
+			available, _ := capEnd.Subtract(evidenceStart)
+			needed, _ := desiredEnd.Subtract(evidenceStart)
+			return nil, editInvalidf(
+				"caption line does not fit: %d characters need %s at the %d-cps reading limit "+
+					"but only %s of clip time is available; shorten the text or extend the clip",
+				graphemes, formatSeconds(needed), policy.MaximumReadingRate, formatSeconds(available),
+			)
 		}
 		duration, err := desiredEnd.Subtract(evidenceStart)
 		if err != nil || !duration.IsPositive() {
