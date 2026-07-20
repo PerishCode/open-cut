@@ -75,7 +75,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	// probes) belongs to the cold build below, the explicit `media-tools check`
 	// command, and the pack lane's declared artifact checks.
 	if verified, loadErr := Load(artifactRoot, options.Target); loadErr == nil &&
-		rendererSourceFingerprintMatches(repositoryRoot, artifactRoot) {
+		rendererSourceFingerprintMatches(ctx, repositoryRoot, artifactRoot) {
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry
@@ -396,7 +396,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := publishStage(stageRoot, artifactRoot, staged.Manifest); err != nil {
 		return BuildResult{}, err
 	}
-	if err := writeRendererSourceFingerprint(repositoryRoot, artifactRoot); err != nil {
+	if err := writeRendererSourceFingerprint(ctx, repositoryRoot, artifactRoot); err != nil {
 		return BuildResult{}, fmt.Errorf("record renderer source fingerprint: %w", err)
 	}
 	verified, err := Load(artifactRoot, options.Target)
