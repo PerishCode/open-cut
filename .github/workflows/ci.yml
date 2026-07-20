@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   checks:
+    name: checks
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -34,10 +35,6 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
-      - name: Install Linux media build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes nasm
       - name: Build control CLI from checkout
         run: |
           mkdir -p .tmp/ci
@@ -58,46 +55,61 @@ jobs:
           pnpm format
           git diff --exit-code
       - run: go vet ./...
+
+  go-tests:
+    name: go tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - name: Build control CLI from checkout
+        run: |
+          mkdir -p .tmp/ci
+          go build -trimpath -o .tmp/ci/oc-control ./cmd/oc-control
+      - name: Bootstrap development environment
+        run: .tmp/ci/oc-control bootstrap --repo .
+      # Media-dependent integration tests skip here by design: they need a built
+      # closure, and building one belongs to the delivery lanes that already do.
       - run: go test -race ./...
-      - name: Compute media toolchain cache keys
-        id: media_cache
-        env:
-          CONTROL: .tmp/ci/oc-control
-        run: bash .github/scripts/media-cache-keys.sh
-      - name: Restore pinned media source archives
-        if: github.event_name != 'release' && github.event_name != 'schedule'
-        uses: actions/cache/restore@v4
-        continue-on-error: true
+
+  workspace:
+    name: workspace
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          path: .tmp/oc-control/media-toolchain/*/source
-          key: ${{ steps.media_cache.outputs.source-key }}
-          restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
-      - name: Restore verified media toolchain closure
-        if: github.event_name != 'release' && github.event_name != 'schedule'
-        id: media_closure_restore
-        uses: actions/cache/restore@v4
-        continue-on-error: true
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v6
         with:
-          path: apps/api/dist/sidecar
-          key: ${{ steps.media_cache.outputs.closure-key }}
-          restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
-      - run: pnpm build
-      - name: Save pinned media source archives
-        if: ${{ success() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
-        continue-on-error: true
+          node-version: 24
+      - uses: pnpm/action-setup@v4
         with:
-          path: .tmp/oc-control/media-toolchain/*/source
-          key: ${{ steps.media_cache.outputs.source-key }}
-      - name: Save verified media toolchain closure
-        if: ${{ success() && github.event_name == 'push' && steps.media_closure_restore.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        with:
-          path: apps/api/dist/sidecar
-          key: ${{ steps.media_cache.outputs.closure-key }}
-      - run: pnpm lint
-      - run: pnpm test
+          version: 10.33.2
+      - name: Build control CLI from checkout
+        run: |
+          mkdir -p .tmp/ci
+          go build -trimpath -o .tmp/ci/oc-control ./cmd/oc-control
+      - name: Bootstrap development environment
+        run: .tmp/ci/oc-control bootstrap --repo .
+      # The API package is excluded: its build produces the media closure, which
+      # is delivery material, and nothing in the workspace build, lint, or test
+      # graph consumes it. The filter has to name the root package too - its own
+      # build script recurses over every workspace package, so leaving it in
+      # would rebuild exactly what the filter is there to skip.
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run build
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run lint
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run test
 
   native-delivery:
     name: ${{ matrix.target }} delivery
@@ -234,6 +246,15 @@ jobs:
         with:
           path: apps/api/dist/sidecar
           key: ${{ steps.media_cache.outputs.closure-key }}
+      # These exercise real media behaviour against real binaries, so they run
+      # where a verified closure exists rather than forcing the fast lanes to
+      # build one. One target is enough: they assert product behaviour, not
+      # per-target delivery.
+      - name: Exercise media-dependent API integration tests
+        if: matrix.platform == 'linux'
+        shell: bash
+        working-directory: apps/api
+        run: go test ./tests -count=1
       - name: Exercise macOS install, inspect, offline run, and idempotent uninstall
         if: matrix.platform == 'mac'
         shell: bash
@@ -319,7 +340,7 @@ jobs:
             OPEN_CUT_ACCEPTANCE=1 \
             OPEN_CUT_ACCEPTANCE_PRODUCTION_MODEL=1 \
             OPEN_CUT_ACCEPTANCE_CDP_ENDPOINT=http://127.0.0.1:41011 \
-            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v
+            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v -timeout 40m
       - uses: actions/upload-artifact@v7
         if: always()
         with:

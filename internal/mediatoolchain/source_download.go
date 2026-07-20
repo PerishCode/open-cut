@@ -21,11 +21,17 @@ import (
 // build.
 const pinnedSourceAttempts = 3
 
+// pinnedSourceRetryDelay is the first backoff between download attempts.
+// Variable only so tests can exercise the retry policy without spending the
+// wall time it describes: a test that really waits is a test that makes the
+// suite it lives in too slow to run often.
+var pinnedSourceRetryDelay = 2 * time.Second
+
 func ensureSource(ctx context.Context, archive string, source SourceRecord) error {
 	if digest, _, err := digestFile(archive); err == nil && digest == source.SHA256 {
 		return nil
 	}
-	delay := 2 * time.Second
+	delay := pinnedSourceRetryDelay
 	for attempt := 1; ; attempt++ {
 		err := fetchSource(ctx, archive, source)
 		if err == nil {

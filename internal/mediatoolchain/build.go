@@ -69,13 +69,14 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		stderr = io.Discard
 	}
 	artifactRoot := filepath.Join(repositoryRoot, "apps", "api", "dist", "sidecar")
-	// Reuse trusts Load's exact contained-byte verification (digest, size, and
-	// tree closure for every manifest entry) — the same strength the production
-	// installer applies. Full re-qualification (relink, smoke, conformance
-	// probes) belongs to the cold build below, the explicit `media-tools check`
-	// command, and the pack lane's declared artifact checks.
-	if verified, loadErr := Load(artifactRoot, options.Target); loadErr == nil &&
-		rendererSourceFingerprintMatches(ctx, repositoryRoot, artifactRoot) {
+	// Falling through to a cold build costs many minutes, so the decision has to
+	// say why it went that way. A closure restored from a build cache and then
+	// silently rebuilt is indistinguishable from a cache that never worked.
+	verified, reusable, reuseReason := inspectReuse(ctx, repositoryRoot, artifactRoot, options.Target)
+	if !reusable {
+		fmt.Fprintf(stderr, "media toolchain cold build: %s\n", reuseReason)
+	}
+	if reusable {
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry
@@ -399,7 +400,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := writeRendererSourceFingerprint(ctx, repositoryRoot, artifactRoot); err != nil {
 		return BuildResult{}, fmt.Errorf("record renderer source fingerprint: %w", err)
 	}
-	verified, err := Load(artifactRoot, options.Target)
+	verified, err = Load(artifactRoot, options.Target)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("verify published media toolchain: %w", err)
 	}
@@ -741,4 +742,38 @@ func copyRegularFile(source, destination string, mode os.FileMode) error {
 		return err
 	}
 	return os.Rename(temporaryPath, destination)
+}
+
+// inspectReuse decides whether the built closure beside the API executable can
+// be reused, and names the reason when it cannot. Reuse trusts Load's exact
+// contained-byte verification (digest, size, and tree closure for every
+// manifest entry) - the same strength the production installer applies - plus
+// the renderer's source closure fingerprint. Full re-qualification (relink,
+// smoke, conformance probes) belongs to the cold build, the explicit
+// `media-tools check` command, and the pack lane's declared artifact checks.
+func inspectReuse(
+	ctx context.Context,
+	repositoryRoot, artifactRoot string,
+	buildTarget target.Target,
+) (Verified, bool, string) {
+	verified, loadErr := Load(artifactRoot, buildTarget)
+	if loadErr != nil {
+		return Verified{}, false, fmt.Sprintf("built closure is unusable: %v", loadErr)
+	}
+	recorded, readErr := os.ReadFile(filepath.Join(artifactRoot, rendererSourceFingerprintName))
+	if readErr != nil {
+		return Verified{}, false, fmt.Sprintf("renderer source fingerprint is unreadable: %v", readErr)
+	}
+	current, fingerprintErr := RendererSourceFingerprint(ctx, repositoryRoot)
+	if fingerprintErr != nil {
+		return Verified{}, false, fmt.Sprintf("renderer source fingerprint is uncomputable: %v", fingerprintErr)
+	}
+	if strings.TrimSpace(string(recorded)) != current {
+		return Verified{}, false, fmt.Sprintf(
+			"renderer source changed since the closure was built: %s (recorded %s, current %s)",
+			explainRendererFingerprintMismatch(ctx, repositoryRoot, artifactRoot),
+			strings.TrimSpace(string(recorded)), current,
+		)
+	}
+	return verified, true, ""
 }

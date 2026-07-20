@@ -24,6 +24,10 @@ import (
 // instead of silently shipping a stale open-cut-render.
 const rendererSourceFingerprintName = "renderer-source.fingerprint"
 
+// rendererSourceInputsName records the exact input set behind the digest, so a
+// mismatch can be explained instead of merely reported.
+const rendererSourceInputsName = "renderer-source.inputs"
+
 // RendererSourceFingerprint digests everything the Go toolchain would compile
 // into open-cut-render: the content of every first-party package in its
 // dependency closure, the identity of every external module it links, and the
@@ -185,5 +189,75 @@ func writeRendererSourceFingerprint(ctx context.Context, repositoryRoot, artifac
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(artifactRoot, rendererSourceFingerprintName), []byte(current+"\n"), 0o644)
+	if err := os.WriteFile(
+		filepath.Join(artifactRoot, rendererSourceFingerprintName), []byte(current+"\n"), 0o644,
+	); err != nil {
+		return err
+	}
+	// The inputs are recorded beside the digest so a mismatch can name what
+	// actually changed. A digest alone can only say that something did, which
+	// is not enough to tell a genuine source change from a fingerprint that is
+	// unstable across environments.
+	entries, err := rendererFingerprintInputs(ctx, repositoryRoot)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(
+		filepath.Join(artifactRoot, rendererSourceInputsName),
+		[]byte(strings.Join(entries, "\n")+"\n"), 0o644,
+	)
+}
+
+// explainRendererFingerprintMismatch names the inputs that differ between the
+// recorded closure and the working tree, bounded so a wholesale difference
+// cannot flood a build log.
+func explainRendererFingerprintMismatch(ctx context.Context, repositoryRoot, artifactRoot string) string {
+	recorded, err := os.ReadFile(filepath.Join(artifactRoot, rendererSourceInputsName))
+	if err != nil {
+		return "recorded inputs are unavailable"
+	}
+	current, err := rendererFingerprintInputs(ctx, repositoryRoot)
+	if err != nil {
+		return "current inputs are uncomputable"
+	}
+	before := make(map[string]string, 256)
+	for _, entry := range strings.Split(strings.TrimSpace(string(recorded)), "\n") {
+		kind, name, value := splitFingerprintEntry(entry)
+		before[kind+" "+name] = value
+	}
+	differences := make([]string, 0, 8)
+	for _, entry := range current {
+		kind, name, value := splitFingerprintEntry(entry)
+		key := kind + " " + name
+		previous, present := before[key]
+		switch {
+		case !present:
+			differences = append(differences, "added "+key)
+		case previous != value:
+			differences = append(differences, "changed "+key)
+		}
+		delete(before, key)
+	}
+	for key := range before {
+		differences = append(differences, "removed "+key)
+	}
+	if len(differences) == 0 {
+		return "inputs are identical; the digest differs for another reason"
+	}
+	sort.Strings(differences)
+	const maximumReported = 8
+	if len(differences) > maximumReported {
+		return fmt.Sprintf(
+			"%d inputs differ, including %s", len(differences), strings.Join(differences[:maximumReported], ", "),
+		)
+	}
+	return strings.Join(differences, ", ")
+}
+
+func splitFingerprintEntry(entry string) (string, string, string) {
+	parts := strings.Split(entry, "\x00")
+	if len(parts) < 3 {
+		return "malformed", entry, ""
+	}
+	return parts[0], parts[1], strings.Join(parts[2:], "\x00")
 }
