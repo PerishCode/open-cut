@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/internal/peerinventory"
+	"github.com/PerishCode/open-cut/internal/procident"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
@@ -344,8 +345,13 @@ func recordInventory(options Options, processes map[string]*managedProcess) {
 		if pid <= 0 {
 			continue
 		}
+		createTimeMs, err := procident.CreateTimeMs(pid)
+		if err != nil {
+			createTimeMs = 0
+		}
 		peers = append(peers, peerinventory.Peer{
 			App: app, PID: pid, Executable: managed.definition.Command, StartedAt: managed.startedAt.UTC(),
+			CreateTimeMs: createTimeMs,
 		})
 	}
 	if err := peerinventory.Write(options.InventoryFile, peers); err != nil {

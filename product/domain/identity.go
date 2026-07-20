@@ -2,7 +2,6 @@ package domain
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -303,13 +304,10 @@ func GenerateUUIDv7From(at time.Time, source io.Reader) (string, error) {
 	bytes[6] = 0x70 | bytes[6]&0x0f
 	bytes[8] = 0x80 | bytes[8]&0x3f
 
-	value := fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		binary.BigEndian.Uint32(bytes[0:4]),
-		binary.BigEndian.Uint16(bytes[4:6]),
-		binary.BigEndian.Uint16(bytes[6:8]),
-		binary.BigEndian.Uint16(bytes[8:10]),
-		bytes[10:16],
-	)
+	// google/uuid cannot mint a v7 for a caller-supplied time and entropy
+	// source, so the packing above stays ours; the library owns canonical
+	// formatting and the byte-level type.
+	value := uuid.UUID(bytes).String()
 	if !isUUIDv7(value) {
 		return "", ErrInvalidDurableID
 	}

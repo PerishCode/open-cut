@@ -15,6 +15,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/install"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/procident"
 	"github.com/PerishCode/open-cut/internal/publisher"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/internal/verifier"
@@ -306,6 +307,7 @@ func Uninstall(ctx context.Context, receiptPath, workspace string, purge bool) (
 	}
 	brokerClosed := true
 	brokerPID := 0
+	var brokerStartedAt time.Time
 	bootstrap, bootstrapErr := config.LoadBootstrap(receipt.BootstrapPath)
 	if bootstrapErr == nil {
 		identity, _ := cell.New(bootstrap.Channel, bootstrap.Namespace)
@@ -318,6 +320,7 @@ func Uninstall(ctx context.Context, receiptPath, workspace string, purge bool) (
 			var descriptor protocol.ControlDescriptor
 			if jsonErr := json.Unmarshal(descriptorBytes, &descriptor); jsonErr == nil {
 				brokerPID = descriptor.PID
+				brokerStartedAt = descriptor.StartedAt
 			}
 		}
 		if owner, loadErr := client.Load(paths.ControlFile, paths.OwnerTokenFile); loadErr == nil {
@@ -332,8 +335,12 @@ func Uninstall(ctx context.Context, receiptPath, workspace string, purge bool) (
 			time.Sleep(50 * time.Millisecond)
 		}
 		if !brokerClosed && brokerPID > 0 {
-			if process, findErr := os.FindProcess(brokerPID); findErr == nil {
-				_ = process.Kill()
+			// The descriptor's pid may have been recycled since the broker
+			// died; only kill a process provably no younger than the recorded
+			// session start.
+			if createdMs, createErr := procident.CreateTimeMs(brokerPID); createErr == nil &&
+				!brokerStartedAt.IsZero() && createdMs <= brokerStartedAt.Add(time.Second).UnixMilli() {
+				_ = procident.Kill(brokerPID)
 			}
 			killDeadline := time.Now().Add(2 * time.Second)
 			for time.Now().Before(killDeadline) {

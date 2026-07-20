@@ -50,8 +50,15 @@ func waitHelperGone(t *testing.T, pid int) {
 
 func TestSweepReapsVerifiedStalePeer(t *testing.T) {
 	command, executable := startHelper(t)
+	createTimeMs, err := procident.CreateTimeMs(command.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := Path(t.TempDir())
-	peer := Peer{App: "payload", PID: command.Process.Pid, Executable: executable, StartedAt: time.Now().UTC()}
+	peer := Peer{
+		App: "payload", PID: command.Process.Pid, Executable: executable,
+		StartedAt: time.Now().UTC(), CreateTimeMs: createTimeMs,
+	}
 	if err := Write(path, []Peer{peer}); err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +93,31 @@ func TestSweepLeavesMismatchedExecutableAlone(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("inventory survived the sweep: %v", err)
+	}
+}
+
+func TestSweepLeavesRecycledPidAlone(t *testing.T) {
+	command, executable := startHelper(t)
+	createTimeMs, err := procident.CreateTimeMs(command.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := Path(t.TempDir())
+	// Same pid and executable, but a creation time from a different life:
+	// exactly what a recycled pid looks like. The sweep must not kill it.
+	peer := Peer{
+		App: "payload", PID: command.Process.Pid, Executable: executable,
+		StartedAt: time.Now().UTC(), CreateTimeMs: createTimeMs - 12_345,
+	}
+	if err := Write(path, []Peer{peer}); err != nil {
+		t.Fatal(err)
+	}
+	var log bytes.Buffer
+	if reaped := Sweep(path, &log); len(reaped) != 0 {
+		t.Fatalf("reaped recycled-looking peer: %+v", reaped)
+	}
+	if !procident.Alive(command.Process.Pid) {
+		t.Fatal("sweep terminated a process whose creation time did not match")
 	}
 }
 

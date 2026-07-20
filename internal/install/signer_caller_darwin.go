@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/PerishCode/open-cut/internal/procident"
@@ -33,7 +32,7 @@ func verifyPlatformSignerCaller(
 	foundCLI := false
 	parentExecutable := ""
 	for depth := 0; pid > 1 && depth < 32; depth++ {
-		processExecutable, parent, err := processExecutableAndParent(ctx, pid)
+		processExecutable, parent, err := processExecutableAndParent(pid)
 		if err != nil {
 			return fmt.Errorf("attest platform signer caller: %w", err)
 		}
@@ -91,18 +90,14 @@ func activeAppBundleFromCommand(command, activeVersionRoot string) (string, bool
 	return command[:index+len(".app")], true
 }
 
-func processExecutableAndParent(ctx context.Context, pid int) (string, int, error) {
+func processExecutableAndParent(pid int) (string, int, error) {
 	executable, err := procident.Executable(pid)
 	if err != nil {
 		return "", 0, fmt.Errorf("read process %d executable: %w", pid, err)
 	}
-	parentOutput, err := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "ppid=").Output()
+	parent, err := procident.ParentPID(pid)
 	if err != nil {
 		return "", 0, fmt.Errorf("read process %d parent: %w", pid, err)
-	}
-	parent, err := strconv.Atoi(strings.TrimSpace(string(parentOutput)))
-	if err != nil {
-		return "", 0, fmt.Errorf("decode process %d parent: %w", pid, err)
 	}
 	return executable, parent, nil
 }
