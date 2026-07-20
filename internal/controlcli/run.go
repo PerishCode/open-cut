@@ -30,6 +30,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/harness"
 	"github.com/PerishCode/open-cut/internal/harnessguard"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/mediatoolchain"
 	"github.com/PerishCode/open-cut/internal/originserver"
 	"github.com/PerishCode/open-cut/internal/packager"
 	"github.com/PerishCode/open-cut/internal/protocolgen"
@@ -88,6 +89,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 		newCleanCommand(stdout, stderr),
 		newDevCommand(stdout, stderr),
 		newPackCommand(stdout, stderr),
+		newMediaCacheKeyCommand(stdout, stderr),
 		newProtocolCommand(stdout, stderr),
 		newReleaseCommand(stdout, stderr),
 		newServeCommand(stdout, stderr),
@@ -267,6 +269,42 @@ func newPackCommand(stdout, stderr io.Writer) *cobra.Command {
 			return exitCodeError{code: 1}
 		}
 		return asExit(writeOutput(stdout, stderr, result))
+	}
+	return command
+}
+
+// newMediaCacheKeyCommand prints the reuse keys a build environment needs to
+// restore the media toolchain. The keys are derived from the same authorities
+// the build itself consults, so a caching environment never has to maintain
+// its own idea of what the toolchain depends on.
+func newMediaCacheKeyCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "media-cache-key",
+		Short: "Print the media toolchain reuse keys for a target",
+		Args:  cobra.NoArgs,
+	}
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	platform := command.Flags().String("platform", "", "target platform: mac, win, or linux; defaults to the host")
+	arch := command.Flags().String("arch", "", "target architecture: arm64 or x64; defaults to the host")
+	environment := command.Flags().String("environment", "", "build environment identity, such as the runner image version")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		buildTarget := target.Host()
+		if *platform != "" || *arch != "" {
+			resolved, err := target.New(*platform, *arch)
+			if err != nil {
+				fmt.Fprintf(stderr, "media-cache-key: %v\n", err)
+				return exitCodeError{code: 2}
+			}
+			buildTarget = resolved
+		}
+		keys, err := mediatoolchain.ComputeCacheKeys(cmd.Context(), mediatoolchain.CacheKeyOptions{
+			RepositoryRoot: *repository, Target: buildTarget, Environment: *environment,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "media-cache-key: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, keys))
 	}
 	return command
 }

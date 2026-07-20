@@ -59,7 +59,43 @@ jobs:
           git diff --exit-code
       - run: go vet ./...
       - run: go test -race ./...
+      - name: Compute media toolchain cache keys
+        id: media_cache
+        env:
+          CONTROL: .tmp/ci/oc-control
+        run: bash .github/scripts/media-cache-keys.sh
+      - name: Restore pinned media source archives
+        if: github.event_name != 'release' && github.event_name != 'schedule'
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: .tmp/oc-control/media-toolchain/*/source
+          key: ${{ steps.media_cache.outputs.source-key }}
+          restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
+      - name: Restore verified media toolchain closure
+        if: github.event_name != 'release' && github.event_name != 'schedule'
+        id: media_closure_restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: apps/api/dist/sidecar
+          key: ${{ steps.media_cache.outputs.closure-key }}
+          restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
       - run: pnpm build
+      - name: Save pinned media source archives
+        if: ${{ success() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: .tmp/oc-control/media-toolchain/*/source
+          key: ${{ steps.media_cache.outputs.source-key }}
+      - name: Save verified media toolchain closure
+        if: ${{ success() && github.event_name == 'push' && steps.media_closure_restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: apps/api/dist/sidecar
+          key: ${{ steps.media_cache.outputs.closure-key }}
       - run: pnpm lint
       - run: pnpm test
 
@@ -121,6 +157,31 @@ jobs:
       - name: Bootstrap development environment
         shell: bash
         run: ${{ matrix.control }} bootstrap --repo .
+      - name: Compute media toolchain cache keys
+        id: media_cache
+        shell: bash
+        env:
+          CONTROL: ${{ matrix.control }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: bash .github/scripts/media-cache-keys.sh
+      - name: Restore pinned media source archives
+        if: github.event_name != 'release' && github.event_name != 'schedule'
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: .tmp/oc-control/media-toolchain/*/source
+          key: ${{ steps.media_cache.outputs.source-key }}
+          restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
+      - name: Restore verified media toolchain closure
+        if: github.event_name != 'release' && github.event_name != 'schedule'
+        id: media_closure_restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: apps/api/dist/sidecar
+          key: ${{ steps.media_cache.outputs.closure-key }}
+          restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
       - name: Pack, publish, and verify native full pack
         if: matrix.platform != 'win'
         shell: bash
@@ -159,6 +220,20 @@ jobs:
           "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$bundle"
           "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --origin .tmp/ci/origin --channel ci --key .tmp/ci/key.json
           "$CONTROL" harness full-pack --bundle "$bundle" --workspace .tmp/ci/full-pack
+      - name: Save pinned media source archives
+        if: ${{ success() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: .tmp/oc-control/media-toolchain/*/source
+          key: ${{ steps.media_cache.outputs.source-key }}
+      - name: Save verified media toolchain closure
+        if: ${{ success() && github.event_name == 'push' && steps.media_closure_restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: apps/api/dist/sidecar
+          key: ${{ steps.media_cache.outputs.closure-key }}
       - name: Exercise macOS install, inspect, offline run, and idempotent uninstall
         if: matrix.platform == 'mac'
         shell: bash
