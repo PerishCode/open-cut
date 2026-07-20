@@ -11,10 +11,20 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+// fastRetries keeps the retry policy under test without paying its wall time.
+func fastRetries(t *testing.T) {
+	t.Helper()
+	previous := pinnedSourceRetryDelay
+	pinnedSourceRetryDelay = time.Millisecond
+	t.Cleanup(func() { pinnedSourceRetryDelay = previous })
+}
 
 func pinnedSource(t *testing.T, origin string, body []byte) SourceRecord {
 	t.Helper()
+	fastRetries(t)
 	digest := sha256.Sum256(body)
 	return SourceRecord{
 		ID: "freetype", URL: origin + "/freetype.tar.gz",
