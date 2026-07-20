@@ -1,15 +1,24 @@
+// Package controlcli is the oc-control command surface. cobra owns the
+// command tree, flag parsing, help, and argument rejection; every leaf
+// declares cobra.NoArgs or an exact positional arity, so accepting stray
+// arguments is structurally impossible. Command bodies keep the historical
+// contract: they print their own diagnostics to stderr and yield an exit
+// code (0 success, 1 runtime failure, 2 usage), carried through cobra as an
+// exitCodeError. Errors cobra itself produces (unknown command, bad flag,
+// arity) are usage errors and exit 2.
 package controlcli
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/PerishCode/open-cut/internal/buildinfo"
 	"github.com/PerishCode/open-cut/internal/cell"
@@ -34,137 +43,171 @@ import (
 	"github.com/PerishCode/open-cut/utils/tool"
 )
 
+// exitCodeError carries a command body's exit code through cobra. The body
+// has already printed its diagnostics; Run only translates the code.
+type exitCodeError struct{ code int }
+
+func (e exitCodeError) Error() string { return fmt.Sprintf("exit %d", e.code) }
+
+func asExit(code int) error {
+	if code == 0 {
+		return nil
+	}
+	return exitCodeError{code: code}
+}
+
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		printHelp(stdout)
+	root := newRootCommand(stdout, stderr)
+	root.SetArgs(args)
+	err := root.ExecuteContext(ctx)
+	if err == nil {
 		return 0
 	}
-	switch args[0] {
-	case "help", "-h", "--help":
-		printHelp(stdout)
-		return 0
-	case "version":
-		return runVersion(args[1:], stdout, stderr)
-	case "doctor":
-		return runDoctor(ctx, args[1:], stdout, stderr)
-	case "bootstrap":
-		return runBootstrap(ctx, args[1:], stdout, stderr)
-	case "clean":
-		return runClean(args[1:], stdout, stderr)
-	case "dev":
-		return runDev(ctx, args[1:], stdout, stderr)
-	case "pack":
-		return runPack(ctx, args[1:], stdout, stderr)
-	case "protocol":
-		return runProtocol(ctx, args[1:], stdout, stderr)
-	case "release":
-		return runRelease(args[1:], stdout, stderr)
-	case "serve":
-		return runServe(ctx, args[1:], stdout, stderr)
-	case "verify":
-		return runVerify(args[1:], stdout, stderr)
-	case "inspect":
-		return runInspect(args[1:], stdout, stderr)
-	case "status":
-		return runStatus(ctx, args[1:], stdout, stderr)
-	case string(protocol.ControlCommandShow), string(protocol.ControlCommandShutdown):
-		return runControl(ctx, protocol.ControlCommand(args[0]), args[1:], stdout, stderr)
-	case "harness":
-		return runHarness(ctx, args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
-		printHelp(stderr)
-		return 2
+	var exit exitCodeError
+	if errors.As(err, &exit) {
+		return exit.code
 	}
+	fmt.Fprintln(stderr, err)
+	return 2
 }
 
-func printHelp(writer io.Writer) {
-	fmt.Fprint(writer, `oc-control controls the Open Cut development and runtime substrate.
-
-Usage:
-  oc-control version [--json]
-  oc-control doctor
-  oc-control bootstrap [--repo <path>]
-  oc-control clean [--repo <path>] [--scope temp|build|quick|all] [--dry-run]
-  oc-control dev [--repo <path>] [--base-dir <path>]
-  oc-control dev inspect (--screenshot <path> | --eval <expression> | --set-file <path>) [--repo <path>] [--base-dir <path>]
-  oc-control dev record --output <path.webm> [--duration <seconds>] [--speech <text>] [--voice <voice>] [--repo <path>] [--base-dir <path>]
-  oc-control pack <mac|win|linux> --arch <arm64|x64> --version <X.Y.Z-channel.N> [--output <path>]
-  oc-control protocol generate [--repo <path>]
-  oc-control protocol check [--repo <path>]
-  oc-control release keygen --output <key.json> [--id dev]
-  oc-control release create --bundle <bundle> --origin <dir> --key <key.json>
-  oc-control release display-version <X.Y.Z-channel.N>
-  oc-control serve --root <origin-dir> [--listen 127.0.0.1:0]
-  oc-control verify <mac|win|linux> --arch <arm64|x64> --bundle <bundle>
-  oc-control verify <mac|win|linux> --arch <arm64|x64> --origin <dir> --channel <channel> --key <key.json>
-  oc-control inspect --receipt <install-receipt.json>
-  oc-control status --bootstrap <bootstrap.json>
-  oc-control show --bootstrap <bootstrap.json>
-  oc-control shutdown --bootstrap <bootstrap.json>
-  oc-control harness guard [--repo <path>]
-  oc-control harness broker [--workspace <path>]
-  oc-control harness sidecars [--repo <path>] [--workspace <path>]
-  oc-control harness cold-start [--repo <path>] [--workspace <path>]
-  oc-control harness full-pack --bundle <release-bundle.tar.zst> [--workspace <path>]
-  oc-control harness install <mac|win|linux> --arch <arch> --workspace <path> --origin <dir> --origin-url <url> --key <key.json>
-  oc-control harness run --workspace <path> --receipt <install-receipt.json> [--headless]
-  oc-control harness uninstall --workspace <path> --receipt <install-receipt.json> [--purge]
-`)
+func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
+	root := &cobra.Command{
+		Use:           "oc-control",
+		Short:         "oc-control controls the Open Cut development and runtime substrate.",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	root.CompletionOptions.HiddenDefaultCmd = true
+	root.AddCommand(
+		newVersionCommand(stdout, stderr),
+		newDoctorCommand(stdout, stderr),
+		newBootstrapCommand(stdout, stderr),
+		newCleanCommand(stdout, stderr),
+		newDevCommand(stdout, stderr),
+		newPackCommand(stdout, stderr),
+		newProtocolCommand(stdout, stderr),
+		newReleaseCommand(stdout, stderr),
+		newServeCommand(stdout, stderr),
+		newVerifyCommand(stdout, stderr),
+		newInspectCommand(stdout, stderr),
+		newStatusCommand(stdout, stderr),
+		newControlCommand(protocol.ControlCommandShow, "Bring the cell's interactive payload to the foreground", stdout, stderr),
+		newControlCommand(protocol.ControlCommandShutdown, "Shut down the running cell and wait for its control descriptor to vanish", stdout, stderr),
+		newHarnessCommand(stdout, stderr),
+	)
+	return root
 }
 
-func runProtocol(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
-		return 2
+// requireSubcommand keeps the historical exit-2 contract for bare parent
+// commands instead of cobra's default help-and-succeed.
+func requireSubcommand(command *cobra.Command) {
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		fmt.Fprintln(cmd.ErrOrStderr(), cmd.UsageString())
+		return exitCodeError{code: 2}
 	}
-	mode := protocolgen.Mode(args[0])
-	if mode != protocolgen.ModeGenerate && mode != protocolgen.ModeCheck {
-		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
-		return 2
-	}
-	set := flag.NewFlagSet("protocol "+args[0], flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	if err := set.Parse(args[1:]); err != nil {
-		return 2
-	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control protocol <generate|check> [--repo <path>]")
-		return 2
-	}
-	result, err := protocolgen.Run(ctx, *repository, mode, stderr, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "protocol %s: %v\n", mode, err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
+	command.Args = cobra.NoArgs
 }
 
-func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "inspect" {
-		return runDevInspect(ctx, args[1:], stdout, stderr)
+func newVersionCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "version", Short: "Print build information", Args: cobra.NoArgs}
+	asJSON := command.Flags().Bool("json", false, "print machine-readable build information")
+	command.RunE = func(*cobra.Command, []string) error {
+		info := buildinfo.Current()
+		if *asJSON {
+			return asExit(writeOutput(stdout, stderr, info))
+		}
+		fmt.Fprintf(stdout, "oc-control %s %s\n", info.ModuleVersion, info.SidecarProtocol)
+		fmt.Fprintf(stdout, "executable: %s\nrevision: %s\nmodified: %t\n", info.Executable, info.VCSRevision, info.VCSModified)
+		return nil
 	}
-	if len(args) > 0 && args[0] == "record" {
-		return runDevRecord(ctx, args[1:], stdout, stderr)
+	return command
+}
+
+type doctorCheck struct {
+	Name    string `json:"name"`
+	Path    string `json:"path,omitempty"`
+	Version string `json:"version,omitempty"`
+	OK      bool   `json:"ok"`
+}
+
+func newDoctorCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "doctor", Short: "Check required host tooling", Args: cobra.NoArgs}
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		checks := make([]doctorCheck, 0, 3)
+		passed := true
+		for _, toolName := range []string{"go", "node", "pnpm"} {
+			info, inspectErr := tool.Inspect(cmd.Context(), toolName)
+			check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: inspectErr == nil}
+			if !check.OK {
+				passed = false
+			}
+			checks = append(checks, check)
+		}
+		json.NewEncoder(stdout).Encode(map[string]any{"ok": passed, "checks": checks})
+		if !passed {
+			return exitCodeError{code: 1}
+		}
+		return nil
 	}
-	set := flag.NewFlagSet("dev", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	baseDir := set.String("base-dir", "", "development base directory; defaults below the repository")
-	if err := set.Parse(args); err != nil {
-		return 2
+	_ = stderr
+	return command
+}
+
+func newBootstrapCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "bootstrap", Short: "Prepare the repository development substrate", Args: cobra.NoArgs}
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		result, err := devbootstrap.Run(cmd.Context(), devbootstrap.Options{
+			RepositoryRoot: *repository,
+			Stdout:         stderr,
+			Stderr:         stderr,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "bootstrap: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, result))
 	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control dev [inspect|record] [--repo <path>] [--base-dir <path>]")
-		return 2
+	return command
+}
+
+func newCleanCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "clean", Short: "Remove generated surfaces", Args: cobra.NoArgs}
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	scope := command.Flags().String("scope", string(cleaner.ScopeTemp), "generated surface: temp, build, quick, or all")
+	dryRun := command.Flags().Bool("dry-run", false, "report without removing generated paths")
+	command.RunE = func(*cobra.Command, []string) error {
+		report, err := cleaner.Clean(*repository, cleaner.Scope(*scope), *dryRun)
+		if err != nil {
+			fmt.Fprintf(stderr, "clean: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, report))
 	}
-	repositoryRoot, err := filepath.Abs(*repository)
+	return command
+}
+
+func newDevCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "dev", Short: "Run the development cell", Args: cobra.NoArgs}
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	baseDir := command.Flags().String("base-dir", "", "development base directory; defaults below the repository")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		return asExit(runDev(cmd.Context(), *repository, *baseDir, stdout, stderr))
+	}
+	command.AddCommand(newDevInspectCommand(stdout, stderr), newDevRecordCommand(stdout, stderr))
+	return command
+}
+
+func runDev(ctx context.Context, repository, baseDir string, stdout, stderr io.Writer) int {
+	repositoryRoot, err := filepath.Abs(repository)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	selectedBaseDir, err := devsession.ResolveBaseDir(repositoryRoot, *baseDir)
+	selectedBaseDir, err := devsession.ResolveBaseDir(repositoryRoot, baseDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -193,333 +236,253 @@ func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runClean(args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("clean", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	scope := set.String("scope", string(cleaner.ScopeTemp), "generated surface: temp, build, quick, or all")
-	dryRun := set.Bool("dry-run", false, "report without removing generated paths")
-	if err := set.Parse(args); err != nil {
-		return 2
+func newPackCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "pack <mac|win|linux>",
+		Short: "Build a signed release bundle for a target",
+		Args:  cobra.ExactArgs(1),
 	}
-	report, err := cleaner.Clean(*repository, cleaner.Scope(*scope), *dryRun)
-	if err != nil {
-		fmt.Fprintf(stderr, "clean: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, report)
-}
-
-func runVersion(args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("version", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	asJSON := set.Bool("json", false, "print machine-readable build information")
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	info := buildinfo.Current()
-	if *asJSON {
-		return writeOutput(stdout, stderr, info)
-	}
-	fmt.Fprintf(stdout, "oc-control %s %s\n", info.ModuleVersion, info.SidecarProtocol)
-	fmt.Fprintf(stdout, "executable: %s\nrevision: %s\nmodified: %t\n", info.Executable, info.VCSRevision, info.VCSModified)
-	return 0
-}
-
-type doctorCheck struct {
-	Name    string `json:"name"`
-	Path    string `json:"path,omitempty"`
-	Version string `json:"version,omitempty"`
-	OK      bool   `json:"ok"`
-}
-
-func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control doctor")
-		return 2
-	}
-	checks := make([]doctorCheck, 0, 3)
-	passed := true
-	for _, toolName := range []string{"go", "node", "pnpm"} {
-		info, inspectErr := tool.Inspect(ctx, toolName)
-		check := doctorCheck{Name: toolName, Path: info.Path, Version: info.Version, OK: inspectErr == nil}
-		if !check.OK {
-			passed = false
+	arch := command.Flags().String("arch", "", "target architecture: arm64 or x64")
+	output := command.Flags().String("output", "", "bundle path; defaults to dist/releases/<version>/<target>")
+	version := command.Flags().String("version", "", "canonical X.Y.Z-channel.N version")
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	launcher := command.Flags().String("launcher", "", "prebuilt target launcher")
+	keepWork := command.Flags().Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		if *version == "" || *arch == "" {
+			fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
+			return exitCodeError{code: 2}
 		}
-		checks = append(checks, check)
-	}
-	json.NewEncoder(stdout).Encode(map[string]any{"ok": passed, "checks": checks})
-	if !passed {
-		return 1
-	}
-	return 0
-}
-
-func runBootstrap(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("bootstrap", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control bootstrap [--repo <path>]")
-		return 2
-	}
-	result, err := devbootstrap.Run(ctx, devbootstrap.Options{
-		RepositoryRoot: *repository,
-		Stdout:         stderr,
-		Stderr:         stderr,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "bootstrap: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
-}
-
-func runPack(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
-		return 2
-	}
-	platform := args[0]
-	set := flag.NewFlagSet("pack "+platform, flag.ContinueOnError)
-	set.SetOutput(stderr)
-	arch := set.String("arch", "", "target architecture: arm64 or x64")
-	output := set.String("output", "", "bundle path; defaults to dist/releases/<version>/<target>")
-	version := set.String("version", "", "canonical X.Y.Z-channel.N version")
-	repository := set.String("repo", ".", "open-cut repository root")
-	launcher := set.String("launcher", "", "prebuilt target launcher")
-	keepWork := set.Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
-	if err := set.Parse(args[1:]); err != nil {
-		return 2
-	}
-	if *version == "" || *arch == "" {
-		fmt.Fprintln(stderr, "pack requires a platform, --arch, and --version")
-		return 2
-	}
-	buildTarget, err := target.New(platform, *arch)
-	if err != nil {
-		fmt.Fprintf(stderr, "pack: %v\n", err)
-		return 2
-	}
-	result, err := packager.Pack(ctx, packager.Options{
-		RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
-		KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "pack: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
-}
-
-func runRelease(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 2 && args[0] == "display-version" {
-		version, err := release.ParseVersion(args[1])
+		buildTarget, err := target.New(args[0], *arch)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+			fmt.Fprintf(stderr, "pack: %v\n", err)
+			return exitCodeError{code: 2}
 		}
-		fmt.Fprintln(stdout, version.Display())
-		return 0
-	}
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: oc-control release <keygen|create|display-version> [options]")
-		return 2
-	}
-	switch args[0] {
-	case "keygen":
-		set := flag.NewFlagSet("release keygen", flag.ContinueOnError)
-		set.SetOutput(stderr)
-		output := set.String("output", "", "private development signing key path")
-		keyID := set.String("id", "dev", "signing key ID")
-		if err := set.Parse(args[1:]); err != nil {
-			return 2
+		result, err := packager.Pack(cmd.Context(), packager.Options{
+			RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
+			KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "pack: %v\n", err)
+			return exitCodeError{code: 1}
 		}
-		if *output == "" {
+		return asExit(writeOutput(stdout, stderr, result))
+	}
+	return command
+}
+
+func newProtocolCommand(stdout, stderr io.Writer) *cobra.Command {
+	parent := &cobra.Command{Use: "protocol", Short: "Generate or check the sidecar protocol surface"}
+	requireSubcommand(parent)
+	for _, mode := range []protocolgen.Mode{protocolgen.ModeGenerate, protocolgen.ModeCheck} {
+		command := &cobra.Command{Use: string(mode), Short: string(mode) + " the generated protocol surface", Args: cobra.NoArgs}
+		repository := command.Flags().String("repo", ".", "open-cut repository root")
+		command.RunE = func(cmd *cobra.Command, _ []string) error {
+			result, err := protocolgen.Run(cmd.Context(), *repository, mode, stderr, stderr)
+			if err != nil {
+				fmt.Fprintf(stderr, "protocol %s: %v\n", mode, err)
+				return exitCodeError{code: 1}
+			}
+			return asExit(writeOutput(stdout, stderr, result))
+		}
+		parent.AddCommand(command)
+	}
+	return parent
+}
+
+func newReleaseCommand(stdout, stderr io.Writer) *cobra.Command {
+	parent := &cobra.Command{Use: "release", Short: "Create and sign release material"}
+	requireSubcommand(parent)
+
+	keygen := &cobra.Command{Use: "keygen", Short: "Generate a development signing key", Args: cobra.NoArgs}
+	keygenOutput := keygen.Flags().String("output", "", "private development signing key path")
+	keyID := keygen.Flags().String("id", "dev", "signing key ID")
+	keygen.RunE = func(*cobra.Command, []string) error {
+		if *keygenOutput == "" {
 			fmt.Fprintln(stderr, "release keygen requires --output")
-			return 2
+			return exitCodeError{code: 2}
 		}
-		key, err := publisher.GenerateKey(*output, *keyID)
+		key, err := publisher.GenerateKey(*keygenOutput, *keyID)
 		if err != nil {
 			fmt.Fprintf(stderr, "release keygen: %v\n", err)
-			return 1
+			return exitCodeError{code: 1}
 		}
-		return writeOutput(stdout, stderr, map[string]any{"schema": 1, "keyId": key.KeyID, "publicKey": key.PublicKey, "path": *output})
-	case "create":
-		set := flag.NewFlagSet("release create", flag.ContinueOnError)
-		set.SetOutput(stderr)
-		bundlePath := set.String("bundle", "", "target release bundle")
-		origin := set.String("origin", "", "origin directory")
-		key := set.String("key", "", "Ed25519 signing key generated by release keygen")
-		expires := set.Duration("expires", 24*time.Hour, "release metadata validity")
-		if err := set.Parse(args[1:]); err != nil {
-			return 2
-		}
+		return asExit(writeOutput(stdout, stderr, map[string]any{"schema": 1, "keyId": key.KeyID, "publicKey": key.PublicKey, "path": *keygenOutput}))
+	}
+
+	create := &cobra.Command{Use: "create", Short: "Publish a signed release into an origin", Args: cobra.NoArgs}
+	bundlePath := create.Flags().String("bundle", "", "target release bundle")
+	origin := create.Flags().String("origin", "", "origin directory")
+	key := create.Flags().String("key", "", "Ed25519 signing key generated by release keygen")
+	expires := create.Flags().Duration("expires", 24*time.Hour, "release metadata validity")
+	create.RunE = func(*cobra.Command, []string) error {
 		if *bundlePath == "" || *origin == "" || *key == "" {
 			fmt.Fprintln(stderr, "release create requires --bundle, --origin, and --key")
-			return 2
+			return exitCodeError{code: 2}
 		}
 		result, err := publisher.Create(*bundlePath, *origin, *key, *expires, time.Now())
 		if err != nil {
 			fmt.Fprintf(stderr, "release create: %v\n", err)
-			return 1
+			return exitCodeError{code: 1}
 		}
-		return writeOutput(stdout, stderr, result)
-	default:
-		fmt.Fprintf(stderr, "unknown release command %q\n", args[0])
-		return 2
+		return asExit(writeOutput(stdout, stderr, result))
 	}
+
+	displayVersion := &cobra.Command{Use: "display-version <X.Y.Z-channel.N>", Short: "Print the display form of a canonical version", Args: cobra.ExactArgs(1)}
+	displayVersion.RunE = func(_ *cobra.Command, args []string) error {
+		version, err := release.ParseVersion(args[0])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitCodeError{code: 1}
+		}
+		fmt.Fprintln(stdout, version.Display())
+		return nil
+	}
+
+	parent.AddCommand(keygen, create, displayVersion)
+	return parent
 }
 
-func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("serve", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	root := set.String("root", "", "release origin directory")
-	listen := set.String("listen", "127.0.0.1:0", "loopback TCP listen address")
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	if *root == "" {
-		fmt.Fprintln(stderr, "serve requires --root")
-		return 2
-	}
-	server, err := originserver.Start(*root, *listen)
-	if err != nil {
-		fmt.Fprintf(stderr, "serve: %v\n", err)
-		return 1
-	}
-	defer server.Close()
-	if writeOutput(stdout, stderr, map[string]any{"schema": 1, "root": server.Root, "endpoint": server.Endpoint}) != 0 {
-		return 1
-	}
-	select {
-	case <-ctx.Done():
-		return 0
-	case err := <-func() <-chan error {
-		result := make(chan error, 1)
-		go func() { result <- server.Wait() }()
-		return result
-	}():
+func newServeCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "serve", Short: "Serve a release origin over loopback HTTP", Args: cobra.NoArgs}
+	root := command.Flags().String("root", "", "release origin directory")
+	listen := command.Flags().String("listen", "127.0.0.1:0", "loopback TCP listen address")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		if *root == "" {
+			fmt.Fprintln(stderr, "serve requires --root")
+			return exitCodeError{code: 2}
+		}
+		server, err := originserver.Start(*root, *listen)
 		if err != nil {
 			fmt.Fprintf(stderr, "serve: %v\n", err)
-			return 1
+			return exitCodeError{code: 1}
 		}
-		return 0
-	}
-}
-
-func runVerify(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "verify requires a target platform")
-		return 2
-	}
-	set := flag.NewFlagSet("verify "+args[0], flag.ContinueOnError)
-	set.SetOutput(stderr)
-	arch := set.String("arch", "", "target architecture: arm64 or x64")
-	bundlePath := set.String("bundle", "", "release bundle")
-	origin := set.String("origin", "", "release origin directory")
-	channel := set.String("channel", "", "release channel for origin verification")
-	key := set.String("key", "", "release signing key for origin verification")
-	if err := set.Parse(args[1:]); err != nil {
-		return 2
-	}
-	buildTarget, err := target.New(args[0], *arch)
-	if err != nil {
-		fmt.Fprintf(stderr, "verify: %v\n", err)
-		return 2
-	}
-	if (*bundlePath == "") == (*origin == "") {
-		fmt.Fprintln(stderr, "verify requires exactly one of --bundle or --origin")
-		return 2
-	}
-	var report verifier.Report
-	if *bundlePath != "" {
-		report, err = verifier.VerifyBundle(*bundlePath, buildTarget)
-	} else {
-		if *channel == "" || *key == "" {
-			fmt.Fprintln(stderr, "origin verification requires --channel and --key")
-			return 2
+		defer server.Close()
+		if writeOutput(stdout, stderr, map[string]any{"schema": 1, "root": server.Root, "endpoint": server.Endpoint}) != 0 {
+			return exitCodeError{code: 1}
 		}
-		report, err = verifier.VerifyOrigin(*origin, *channel, buildTarget, *key, time.Now())
-	}
-	if err != nil {
-		fmt.Fprintf(stderr, "verify: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, report)
-}
-
-func runInspect(args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("inspect", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	receipt := set.String("receipt", "", "install receipt path")
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	if *receipt == "" {
-		fmt.Fprintln(stderr, "inspect requires --receipt")
-		return 2
-	}
-	result, err := delivery.Inspect(*receipt)
-	if err != nil {
-		fmt.Fprintf(stderr, "inspect: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
-}
-
-func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	controlClient, _, code := loadClient(args, stderr, true)
-	if code != 0 {
-		return code
-	}
-	status, err := controlClient.Status(ctx)
-	if err != nil {
-		fmt.Fprintf(stderr, "status: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, status)
-}
-
-func runControl(ctx context.Context, command protocol.ControlCommand, args []string, stdout, stderr io.Writer) int {
-	controlClient, paths, code := loadClient(args, stderr, false)
-	if code != 0 {
-		return code
-	}
-	response, err := controlClient.Control(ctx, command)
-	if err != nil {
-		fmt.Fprintf(stderr, "%s: %v\n", command, err)
-		return 1
-	}
-	if command == protocol.ControlCommandShutdown {
-		if err := waitForControlExit(ctx, paths.ControlFile, 15*time.Second); err != nil {
-			fmt.Fprintf(stderr, "shutdown: %v\n", err)
-			return 1
+		served := make(chan error, 1)
+		go func() { served <- server.Wait() }()
+		select {
+		case <-cmd.Context().Done():
+			return nil
+		case err := <-served:
+			if err != nil {
+				fmt.Fprintf(stderr, "serve: %v\n", err)
+				return exitCodeError{code: 1}
+			}
+			return nil
 		}
 	}
-	return writeOutput(stdout, stderr, response)
+	return command
 }
 
-func loadClient(args []string, stderr io.Writer, observer bool) (*client.Client, layout.CellPaths, int) {
-	set := flag.NewFlagSet("cell", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	bootstrapPath := set.String("bootstrap", "", "bootstrap.json path")
-	if err := set.Parse(args); err != nil {
-		return nil, layout.CellPaths{}, 2
+func newVerifyCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "verify <mac|win|linux>",
+		Short: "Verify a release bundle or origin for a target",
+		Args:  cobra.ExactArgs(1),
 	}
-	if *bootstrapPath == "" {
+	arch := command.Flags().String("arch", "", "target architecture: arm64 or x64")
+	bundlePath := command.Flags().String("bundle", "", "release bundle")
+	origin := command.Flags().String("origin", "", "release origin directory")
+	channel := command.Flags().String("channel", "", "release channel for origin verification")
+	key := command.Flags().String("key", "", "release signing key for origin verification")
+	command.RunE = func(_ *cobra.Command, args []string) error {
+		buildTarget, err := target.New(args[0], *arch)
+		if err != nil {
+			fmt.Fprintf(stderr, "verify: %v\n", err)
+			return exitCodeError{code: 2}
+		}
+		if (*bundlePath == "") == (*origin == "") {
+			fmt.Fprintln(stderr, "verify requires exactly one of --bundle or --origin")
+			return exitCodeError{code: 2}
+		}
+		var report verifier.Report
+		if *bundlePath != "" {
+			report, err = verifier.VerifyBundle(*bundlePath, buildTarget)
+		} else {
+			if *channel == "" || *key == "" {
+				fmt.Fprintln(stderr, "origin verification requires --channel and --key")
+				return exitCodeError{code: 2}
+			}
+			report, err = verifier.VerifyOrigin(*origin, *channel, buildTarget, *key, time.Now())
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "verify: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, report))
+	}
+	return command
+}
+
+func newInspectCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "inspect", Short: "Inspect an install receipt", Args: cobra.NoArgs}
+	receipt := command.Flags().String("receipt", "", "install receipt path")
+	command.RunE = func(*cobra.Command, []string) error {
+		if *receipt == "" {
+			fmt.Fprintln(stderr, "inspect requires --receipt")
+			return exitCodeError{code: 2}
+		}
+		result, err := delivery.Inspect(*receipt)
+		if err != nil {
+			fmt.Fprintf(stderr, "inspect: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, result))
+	}
+	return command
+}
+
+func newStatusCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "status", Short: "Read a running cell's status", Args: cobra.NoArgs}
+	bootstrapPath := command.Flags().String("bootstrap", "", "bootstrap.json path")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		controlClient, _, code := loadClient(*bootstrapPath, stderr, true)
+		if code != 0 {
+			return exitCodeError{code: code}
+		}
+		status, err := controlClient.Status(cmd.Context())
+		if err != nil {
+			fmt.Fprintf(stderr, "status: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, status))
+	}
+	return command
+}
+
+func newControlCommand(control protocol.ControlCommand, short string, stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: string(control), Short: short, Args: cobra.NoArgs}
+	bootstrapPath := command.Flags().String("bootstrap", "", "bootstrap.json path")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		controlClient, paths, code := loadClient(*bootstrapPath, stderr, false)
+		if code != 0 {
+			return exitCodeError{code: code}
+		}
+		response, err := controlClient.Control(cmd.Context(), control)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", control, err)
+			return exitCodeError{code: 1}
+		}
+		if control == protocol.ControlCommandShutdown {
+			if err := waitForControlExit(cmd.Context(), paths.ControlFile, 15*time.Second); err != nil {
+				fmt.Fprintf(stderr, "shutdown: %v\n", err)
+				return exitCodeError{code: 1}
+			}
+		}
+		return asExit(writeOutput(stdout, stderr, response))
+	}
+	return command
+}
+
+func loadClient(bootstrapPath string, stderr io.Writer, observer bool) (*client.Client, layout.CellPaths, int) {
+	if bootstrapPath == "" {
 		fmt.Fprintln(stderr, "--bootstrap is required")
 		return nil, layout.CellPaths{}, 2
 	}
-	bootstrap, err := config.LoadBootstrap(*bootstrapPath)
+	bootstrap, err := config.LoadBootstrap(bootstrapPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return nil, layout.CellPaths{}, 1
@@ -563,35 +526,51 @@ func waitForControlExit(ctx context.Context, controlFile string, timeout time.Du
 	}
 }
 
-func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "guard" {
-		return runHarnessGuard(ctx, args[1:], stdout, stderr)
+func newHarnessCommand(stdout, stderr io.Writer) *cobra.Command {
+	parent := &cobra.Command{Use: "harness", Short: "Run substrate acceptance scenarios"}
+	requireSubcommand(parent)
+
+	guard := &cobra.Command{Use: "guard", Short: "Run the repository guard checks", Args: cobra.NoArgs}
+	guardRepository := guard.Flags().String("repo", ".", "open-cut repository root")
+	guard.RunE = func(cmd *cobra.Command, _ []string) error {
+		result := harnessguard.Run(cmd.Context(), *guardRepository)
+		if writeOutput(stdout, stderr, result) != 0 || !result.Passed {
+			return exitCodeError{code: 1}
+		}
+		return nil
 	}
-	if len(args) > 0 && args[0] == "install" {
-		return runHarnessInstall(ctx, args[1:], stdout, stderr)
+	parent.AddCommand(guard)
+
+	for _, scenario := range []string{"broker", "sidecars", "cold-start", "full-pack"} {
+		command := &cobra.Command{Use: scenario, Short: "Run the " + scenario + " scenario", Args: cobra.NoArgs}
+		workspace := command.Flags().String("workspace", "", "harness workspace; defaults below the repository")
+		repository := command.Flags().String("repo", ".", "repository root for the sidecar-entry scenario")
+		var bundlePath *string
+		if scenario == "full-pack" {
+			bundlePath = command.Flags().String("bundle", "", "release-bundle.tar.zst for the full-pack scenario")
+		}
+		command.RunE = func(cmd *cobra.Command, _ []string) error {
+			bundle := ""
+			if bundlePath != nil {
+				bundle = *bundlePath
+			}
+			return asExit(runHarnessScenario(cmd.Context(), scenario, *workspace, *repository, bundle, stdout, stderr))
+		}
+		parent.AddCommand(command)
 	}
-	if len(args) > 0 && args[0] == "uninstall" {
-		return runHarnessUninstall(ctx, args[1:], stdout, stderr)
-	}
-	if len(args) > 0 && args[0] == "run" {
-		return runHarnessRun(ctx, args[1:], stdout, stderr)
-	}
-	if len(args) == 0 || (args[0] != "broker" && args[0] != "sidecars" && args[0] != "cold-start" && args[0] != "full-pack") {
-		fmt.Fprintln(stderr, "usage: oc-control harness <guard|broker|sidecars|cold-start|full-pack|install|run|uninstall> [options]")
-		return 2
-	}
-	scenario := args[0]
-	set := flag.NewFlagSet("harness "+scenario, flag.ContinueOnError)
-	set.SetOutput(stderr)
-	workspace := set.String("workspace", "", "harness workspace; defaults below the repository")
-	repository := set.String("repo", ".", "repository root for the sidecar-entry scenario")
-	bundlePath := set.String("bundle", "", "release-bundle.tar.zst for the full-pack scenario")
-	if err := set.Parse(args[1:]); err != nil {
-		return 2
-	}
-	selected := *workspace
+
+	parent.AddCommand(
+		newHarnessInstallCommand(stdout, stderr),
+		newHarnessRunCommand(stdout, stderr),
+		newHarnessUninstallCommand(stdout, stderr),
+	)
+	return parent
+}
+
+func runHarnessScenario(ctx context.Context, scenario, workspace, repository, bundlePath string, stdout, stderr io.Writer) int {
+	selected := workspace
 	if selected == "" {
-		repositoryRoot, err := filepath.Abs(*repository)
+		repositoryRoot, err := filepath.Abs(repository)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -609,23 +588,23 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if scenario == "broker" {
 		report = harness.RunBroker(ctx, selected)
 	} else if scenario == "full-pack" {
-		if *bundlePath == "" {
+		if bundlePath == "" {
 			fmt.Fprintln(stderr, "harness full-pack requires --bundle")
 			return 2
 		}
-		absoluteBundle, err := filepath.Abs(*bundlePath)
+		absoluteBundle, err := filepath.Abs(bundlePath)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		repositoryRoot, err := filepath.Abs(*repository)
+		repositoryRoot, err := filepath.Abs(repository)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		report = harness.RunFullPack(ctx, selected, repositoryRoot, absoluteBundle)
 	} else if scenario == "sidecars" {
-		repositoryRoot, err := filepath.Abs(*repository)
+		repositoryRoot, err := filepath.Abs(repository)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -644,7 +623,7 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 		report = harness.RunSidecars(ctx, selected, repositoryRoot)
 	} else {
-		repositoryRoot, err := filepath.Abs(*repository)
+		repositoryRoot, err := filepath.Abs(repository)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -681,106 +660,85 @@ func runHarness(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	return 0
 }
 
-func runHarnessGuard(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("harness guard", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	if err := set.Parse(args); err != nil {
-		return 2
+func newHarnessInstallCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "install <mac|win|linux>",
+		Short: "Install a verified release into an isolated workspace",
+		Args:  cobra.ExactArgs(1),
 	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control harness guard [--repo <path>]")
-		return 2
+	arch := command.Flags().String("arch", "", "target architecture")
+	repository := command.Flags().String("repo", ".", "open-cut repository root")
+	workspace := command.Flags().String("workspace", "", "isolated install workspace")
+	origin := command.Flags().String("origin", "", "verified release origin directory")
+	originURL := command.Flags().String("origin-url", "", "HTTP origin consumed by the installed launcher")
+	key := command.Flags().String("key", "", "development release key")
+	channel := command.Flags().String("channel", "beta", "release channel")
+	namespace := command.Flags().String("namespace", "delivery", "cell namespace")
+	headless := command.Flags().Bool("headless", false, "run the installed Electron carrier without a window")
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		if *arch == "" || *workspace == "" || *origin == "" || *originURL == "" || *key == "" {
+			fmt.Fprintln(stderr, "harness install requires --arch, --workspace, --origin, --origin-url, and --key")
+			return exitCodeError{code: 2}
+		}
+		buildTarget, err := target.New(args[0], *arch)
+		if err != nil {
+			fmt.Fprintf(stderr, "harness install: %v\n", err)
+			return exitCodeError{code: 2}
+		}
+		result, err := delivery.Install(cmd.Context(), delivery.InstallOptions{
+			RepositoryRoot: *repository, Workspace: *workspace, OriginRoot: *origin, OriginURL: *originURL,
+			KeyPath: *key, Channel: *channel, Namespace: *namespace, Target: buildTarget,
+			Headless: *headless, Stdout: stderr, Stderr: stderr,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "harness install: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, result))
 	}
-	result := harnessguard.Run(ctx, *repository)
-	if writeOutput(stdout, stderr, result) != 0 || !result.Passed {
-		return 1
-	}
-	return 0
+	return command
 }
 
-func runHarnessInstall(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "harness install requires a target platform")
-		return 2
+func newHarnessRunCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "run", Short: "Run an installed workspace", Args: cobra.NoArgs}
+	workspace := command.Flags().String("workspace", "", "isolated install workspace")
+	receipt := command.Flags().String("receipt", "", "install receipt path")
+	headless := command.Flags().Bool("headless", false, "run the installed Electron carrier without a window")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		if *workspace == "" || *receipt == "" {
+			fmt.Fprintln(stderr, "harness run requires --workspace and --receipt")
+			return exitCodeError{code: 2}
+		}
+		result, err := delivery.Run(cmd.Context(), delivery.RunOptions{
+			Receipt: *receipt, Workspace: *workspace, Headless: *headless, Stdout: stderr, Stderr: stderr,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "harness run: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, result))
 	}
-	set := flag.NewFlagSet("harness install "+args[0], flag.ContinueOnError)
-	set.SetOutput(stderr)
-	arch := set.String("arch", "", "target architecture")
-	repository := set.String("repo", ".", "open-cut repository root")
-	workspace := set.String("workspace", "", "isolated install workspace")
-	origin := set.String("origin", "", "verified release origin directory")
-	originURL := set.String("origin-url", "", "HTTP origin consumed by the installed launcher")
-	key := set.String("key", "", "development release key")
-	channel := set.String("channel", "beta", "release channel")
-	namespace := set.String("namespace", "delivery", "cell namespace")
-	headless := set.Bool("headless", false, "run the installed Electron carrier without a window")
-	if err := set.Parse(args[1:]); err != nil {
-		return 2
-	}
-	if *arch == "" || *workspace == "" || *origin == "" || *originURL == "" || *key == "" {
-		fmt.Fprintln(stderr, "harness install requires --arch, --workspace, --origin, --origin-url, and --key")
-		return 2
-	}
-	buildTarget, err := target.New(args[0], *arch)
-	if err != nil {
-		fmt.Fprintf(stderr, "harness install: %v\n", err)
-		return 2
-	}
-	result, err := delivery.Install(ctx, delivery.InstallOptions{
-		RepositoryRoot: *repository, Workspace: *workspace, OriginRoot: *origin, OriginURL: *originURL,
-		KeyPath: *key, Channel: *channel, Namespace: *namespace, Target: buildTarget,
-		Headless: *headless, Stdout: stderr, Stderr: stderr,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "harness install: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
+	return command
 }
 
-func runHarnessUninstall(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("harness uninstall", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	workspace := set.String("workspace", "", "isolated install workspace")
-	receipt := set.String("receipt", "", "install receipt path")
-	purge := set.Bool("purge", false, "remove all receipt-owned cold-start roots")
-	if err := set.Parse(args); err != nil {
-		return 2
+func newHarnessUninstallCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "uninstall", Short: "Uninstall an installed workspace", Args: cobra.NoArgs}
+	workspace := command.Flags().String("workspace", "", "isolated install workspace")
+	receipt := command.Flags().String("receipt", "", "install receipt path")
+	purge := command.Flags().Bool("purge", false, "remove all receipt-owned cold-start roots")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		if *workspace == "" || *receipt == "" {
+			fmt.Fprintln(stderr, "harness uninstall requires --workspace and --receipt")
+			return exitCodeError{code: 2}
+		}
+		result, err := delivery.Uninstall(cmd.Context(), *receipt, *workspace, *purge)
+		if err != nil {
+			fmt.Fprintf(stderr, "harness uninstall: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return asExit(writeOutput(stdout, stderr, result))
 	}
-	if *workspace == "" || *receipt == "" {
-		fmt.Fprintln(stderr, "harness uninstall requires --workspace and --receipt")
-		return 2
-	}
-	result, err := delivery.Uninstall(ctx, *receipt, *workspace, *purge)
-	if err != nil {
-		fmt.Fprintf(stderr, "harness uninstall: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
-}
-
-func runHarnessRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("harness run", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	workspace := set.String("workspace", "", "isolated install workspace")
-	receipt := set.String("receipt", "", "install receipt path")
-	headless := set.Bool("headless", false, "run the installed Electron carrier without a window")
-	if err := set.Parse(args); err != nil {
-		return 2
-	}
-	if *workspace == "" || *receipt == "" {
-		fmt.Fprintln(stderr, "harness run requires --workspace and --receipt")
-		return 2
-	}
-	result, err := delivery.Run(ctx, delivery.RunOptions{
-		Receipt: *receipt, Workspace: *workspace, Headless: *headless, Stdout: stderr, Stderr: stderr,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "harness run: %v\n", err)
-		return 1
-	}
-	return writeOutput(stdout, stderr, result)
+	return command
 }
 
 func writeOutput(stdout, stderr io.Writer, value any) int {
