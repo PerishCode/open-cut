@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
@@ -609,58 +607,6 @@ func stageBaseConformanceEvidence(
 		result = append(result, notice)
 	}
 	return result, nil
-}
-
-func ensureSource(ctx context.Context, archive string, source SourceRecord) error {
-	if digest, _, err := digestFile(archive); err == nil && digest == source.SHA256 {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(archive), 0o700); err != nil {
-		return fmt.Errorf("create media source cache: %w", err)
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(archive), ".media-source-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source.URL, nil)
-	if err != nil {
-		temporary.Close()
-		return err
-	}
-	request.Header.Set("User-Agent", "open-cut-media-toolchain/1")
-	client := &http.Client{Timeout: 5 * time.Minute}
-	response, err := client.Do(request)
-	if err != nil {
-		temporary.Close()
-		return fmt.Errorf("download pinned %s source: %w", source.ID, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.ContentLength > maximumSourceBytes {
-		temporary.Close()
-		return fmt.Errorf("download pinned %s source: unexpected response", source.ID)
-	}
-	written, copyErr := io.Copy(temporary, io.LimitReader(response.Body, maximumSourceBytes+1))
-	if copyErr != nil || written <= 0 || written > maximumSourceBytes {
-		temporary.Close()
-		return fmt.Errorf("download pinned %s source: invalid body", source.ID)
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	digest, _, err := digestFile(temporaryPath)
-	if err != nil || digest != source.SHA256 {
-		return fmt.Errorf("pinned %s source digest mismatch", source.ID)
-	}
-	if err := os.Rename(temporaryPath, archive); err != nil {
-		return fmt.Errorf("publish media source cache: %w", err)
-	}
-	return nil
 }
 
 func stageNotices(

@@ -63,7 +63,7 @@ func SequenceFramesDataFrom(result application.SequenceFrameSetResult) SequenceF
 	return SequenceFramesData{
 		Status: result.Status, ProjectID: result.ProjectID, SequenceID: result.SequenceID,
 		SequenceRevision: result.SequenceRevision, Profile: result.Profile,
-		Samples: append([]application.SequenceFrameCoordinate(nil), result.Samples...),
+		Samples: jsonArray(result.Samples),
 		Job: SequenceFrameJobData{
 			ID: result.Job.ID, State: result.Job.State,
 			ProgressBasisPoints: result.Job.ProgressBasisPoints,
@@ -71,7 +71,7 @@ func SequenceFramesDataFrom(result application.SequenceFrameSetResult) SequenceF
 			CreatedAt:           result.Job.CreatedAt.UTC(), UpdatedAt: result.Job.UpdatedAt.UTC(),
 		},
 		Recovery:       result.Recovery,
-		Resources:      append([]application.SequenceFrameResourceLease(nil), result.Resources...),
+		Resources:      jsonArray(result.Resources),
 		ActivityCursor: result.ActivityCursor,
 	}
 }
