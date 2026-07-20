@@ -55,6 +55,10 @@ sidecar = await SidecarConnection.connect({
   onCommand: async (command) => {
     if (command === controlCommand.shutdown) await stop();
   },
+  onAbandoned: () => {
+    console.error("control broker stayed unreachable beyond the reconnect window; failing closed");
+    void stop(1);
+  },
 });
 web = await startWebServer(sidecar.mode);
 sidecar.publishEndpoint(runtimePeer.web.httpEndpoint, web.url);

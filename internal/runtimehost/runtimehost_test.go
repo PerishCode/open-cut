@@ -13,6 +13,8 @@ import (
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/peerinventory"
+	"github.com/PerishCode/open-cut/internal/procident"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
@@ -77,6 +79,7 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 			DataDir: dataDir, Installation: runtimeHostTestInstallation(), App: "runtime",
 			Mode: protocol.LifecycleModeHarness, Presentation: protocol.PresentationHeadless, Source: "harness",
 			Plan: plan, ReadyTimeout: 5 * time.Second,
+			InventoryFile: peerinventory.Path(paths.Runtime),
 		}, ready)
 	}()
 	select {
@@ -88,6 +91,21 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 		t.Fatalf("runtime stopped before recovery: %v", err)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
+	}
+	inventoryBytes, err := os.ReadFile(peerinventory.Path(paths.Runtime))
+	if err != nil {
+		t.Fatalf("read peer inventory: %v", err)
+	}
+	var inventory struct {
+		Schema int                  `json:"schema"`
+		Peers  []peerinventory.Peer `json:"peers"`
+	}
+	if err := json.Unmarshal(inventoryBytes, &inventory); err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Peers) != 1 || inventory.Peers[0].App != "recovering-peer" ||
+		inventory.Peers[0].Executable != executable || !procident.Alive(inventory.Peers[0].PID) {
+		t.Fatalf("peer inventory = %s", inventoryBytes)
 	}
 	startsBytes, err := os.ReadFile(counter)
 	if err != nil {
@@ -111,6 +129,9 @@ func TestRuntimeHostRestartsPeerBeforeInitialReady(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
+	}
+	if _, err := os.Stat(peerinventory.Path(paths.Runtime)); !os.IsNotExist(err) {
+		t.Fatalf("peer inventory survived a clean shutdown: %v", err)
 	}
 }
 

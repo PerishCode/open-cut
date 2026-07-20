@@ -505,6 +505,8 @@ func run(args []string) error {
 		select {
 		case <-ctx.Done():
 			return shutdownServer(server, nil)
+		case <-session.Abandoned():
+			return shutdownServer(server, fmt.Errorf("control broker stayed unreachable beyond the reconnect window; failing closed"))
 		case err := <-served:
 			if errors.Is(err, http.ErrServerClosed) {
 				return nil

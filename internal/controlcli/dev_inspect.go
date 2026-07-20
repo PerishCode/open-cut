@@ -95,6 +95,10 @@ func runDevInspect(ctx context.Context, args []string, stdout, stderr io.Writer)
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control dev inspect (--screenshot <path> | --eval <expression> | --set-file <path>) [--repo <path>] [--base-dir <path>]")
+		return 2
+	}
 	if *screenshot == "" && *evaluate == "" && *setFile == "" {
 		fmt.Fprintln(stderr, "dev inspect requires --screenshot, --eval, and/or --set-file")
 		return 2

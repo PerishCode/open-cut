@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/PerishCode/open-cut/internal/procident"
 )
 
 func TestActiveAppBundleCallerAllowsPackagedProductNameWithoutModelingElectron(t *testing.T) {
@@ -47,13 +49,13 @@ func TestProcessExecutableIgnoresCallerArgvZero(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	actual, inspectErr := processExecutable(command.Process.Pid)
+	actual, inspectErr := procident.Executable(command.Process.Pid)
 	_ = input.Close()
 	waitErr := command.Wait()
 	if inspectErr != nil || waitErr != nil {
 		t.Fatalf("inspect error = %v, wait error = %v", inspectErr, waitErr)
 	}
-	if !sameProcessExecutable(actual, executable) {
+	if !procident.SameExecutable(actual, executable) {
 		t.Fatalf("process executable = %q, want %q", actual, executable)
 	}
 }

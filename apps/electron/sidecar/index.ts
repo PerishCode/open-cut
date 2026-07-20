@@ -101,6 +101,10 @@ async function main(): Promise<void> {
       if (command === controlCommand.show) electron?.show();
       if (command === controlCommand.shutdown) await stop();
     },
+    onAbandoned: () => {
+      console.error("control broker stayed unreachable beyond the reconnect window; failing closed");
+      void stop(1);
+    },
   });
   if (cdpPort !== undefined) {
     sidecar.publishEndpoint(runtimePeer.payload.cdpEndpoint, `http://127.0.0.1:${cdpPort}`);

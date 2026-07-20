@@ -12,6 +12,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/peerinventory"
 	"github.com/PerishCode/open-cut/internal/runtimehost"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/internal/workspace"
@@ -121,6 +122,10 @@ func run(
 		return err
 	}
 	defer cellBroker.Close()
+	// The lock is held, so any recorded peers belong to a dead session; reap
+	// verified residues before spending a workspace build next to them.
+	inventoryFile := peerinventory.Path(paths.Runtime)
+	peerinventory.Sweep(inventoryFile, stderr)
 	if err := build(ctx, repositoryRoot, stderr); err != nil {
 		return fmt.Errorf("build workspace: %w", err)
 	}
@@ -167,7 +172,7 @@ func run(
 				CDPPortEnvironment:                strconv.Itoa(cdpPort),
 			},
 			Mode: protocol.LifecycleModeDev, Presentation: protocol.PresentationInteractive, Source: "oc-control",
-			Plan: plan, Stdout: stdout, Stderr: stderr,
+			Plan: plan, InventoryFile: inventoryFile, Stdout: stdout, Stderr: stderr,
 		}, runtimeReady)
 	}()
 	select {
