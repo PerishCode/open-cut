@@ -319,7 +319,7 @@ jobs:
             OPEN_CUT_ACCEPTANCE=1 \
             OPEN_CUT_ACCEPTANCE_PRODUCTION_MODEL=1 \
             OPEN_CUT_ACCEPTANCE_CDP_ENDPOINT=http://127.0.0.1:41011 \
-            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v
+            go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v -timeout 40m
       - uses: actions/upload-artifact@v7
         if: always()
         with:
