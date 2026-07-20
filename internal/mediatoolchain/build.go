@@ -770,7 +770,8 @@ func inspectReuse(
 	}
 	if strings.TrimSpace(string(recorded)) != current {
 		return Verified{}, false, fmt.Sprintf(
-			"renderer source changed since the closure was built (recorded %s, current %s)",
+			"renderer source changed since the closure was built: %s (recorded %s, current %s)",
+			explainRendererFingerprintMismatch(ctx, repositoryRoot, artifactRoot),
 			strings.TrimSpace(string(recorded)), current,
 		)
 	}
