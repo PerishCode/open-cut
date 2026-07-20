@@ -479,6 +479,7 @@ func (repository *SQLiteProjects) reconcileMediaPublicationWork() error {
 	if err != nil {
 		return err
 	}
+	removed := false
 	for _, entry := range entries {
 		name := entry.Name()
 		if len(name) != 73 || name[36] != '-' {
@@ -493,6 +494,10 @@ func (repository *SQLiteProjects) reconcileMediaPublicationWork() error {
 		if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
 			return err
 		}
+		removed = true
+	}
+	if removed {
+		return syncDirectory(root)
 	}
 	return nil
 }

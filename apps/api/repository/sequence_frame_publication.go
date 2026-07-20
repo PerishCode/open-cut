@@ -22,7 +22,7 @@ import (
 func (repository *SQLiteProjects) CompleteSequenceFrameSet(
 	ctx context.Context,
 	input application.CompleteSequenceFrameSet,
-) error {
+) (resultErr error) {
 	if err := validateSequenceFramePublication(input); err != nil {
 		return err
 	}
@@ -32,12 +32,7 @@ func (repository *SQLiteProjects) CompleteSequenceFrameSet(
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -104,12 +99,7 @@ WHERE id = ? AND job_id = ? AND state = 'running'`, at, at,
 	); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		committed = true
-		return err
-	}
-	committed = true
-	return nil
+	return commitPublication(tx)
 }
 
 func (repository *SQLiteProjects) FailSequenceFrameSet(

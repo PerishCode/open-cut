@@ -293,6 +293,11 @@ func (repository *SQLiteProjects) evictCorruptSequenceFrameArtifact(
 		if err := syncDirectory(artifactRoot); err != nil {
 			return repository.restoreSequenceFrameEviction(canonicalRoot, eventRoot, quarantineRoot, err)
 		}
+		// The quarantine directory must be durable too: without this the rename
+		// can be visible in the artifact root while the entry it moved to is not.
+		if err := syncDirectory(eventRoot); err != nil {
+			return repository.restoreSequenceFrameEviction(canonicalRoot, eventRoot, quarantineRoot, err)
+		}
 	} else if !os.IsNotExist(statErr) {
 		return statErr
 	}
@@ -323,9 +328,9 @@ DELETE FROM sequence_frame_scratch_leases WHERE artifact_id = ?`, record.id.Stri
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		if quarantined {
-			return repository.restoreSequenceFrameEviction(canonicalRoot, eventRoot, quarantineRoot, err)
-		}
+		// A failed commit is ambiguous. Restoring the canonical tree would put
+		// back bytes for an artifact SQLite may already consider evicted; leave
+		// the recognized quarantine work for startup reconciliation instead.
 		return err
 	}
 	if quarantined {

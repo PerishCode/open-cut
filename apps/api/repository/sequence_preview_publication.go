@@ -24,7 +24,7 @@ var sequencePreviewFailureCodePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63
 func (repository *SQLiteProjects) CompleteSequencePreview(
 	ctx context.Context,
 	input application.CompleteSequencePreview,
-) error {
+) (resultErr error) {
 	if err := validateSequencePreviewPublication(input); err != nil {
 		return err
 	}
@@ -38,12 +38,7 @@ func (repository *SQLiteProjects) CompleteSequencePreview(
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -138,11 +133,7 @@ WHERE id = ? AND job_id = ? AND state = 'running'`,
 	); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	return nil
+	return commitPublication(tx)
 }
 
 func (repository *SQLiteProjects) FailSequencePreview(
@@ -310,7 +301,7 @@ func copySequencePreviewFile(
 		return err
 	}
 	defer source.Close()
-	path := filepath.Join(stageRoot, record.Path)
+	path := filepath.Join(stageRoot, filepath.FromSlash(record.Path))
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

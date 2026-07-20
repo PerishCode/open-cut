@@ -19,7 +19,7 @@ import (
 func (repository *SQLiteProjects) CompleteMediaRenderInput(
 	ctx context.Context,
 	input application.CompleteMediaRenderInput,
-) error {
+) (resultErr error) {
 	if err := validateRenderInputPublication(input); err != nil {
 		return application.ErrAssetInvalid
 	}
@@ -73,12 +73,7 @@ WHERE asset_id = ? AND kind = 'render-input' AND producer_version = ?
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -171,12 +166,7 @@ WHERE id = ? AND state = 'running'`, at, at, input.Claim.AttemptID.String())
 	); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		committed = true
-		return err
-	}
-	committed = true
-	return nil
+	return commitPublication(tx)
 }
 
 func validateRenderInputPublication(input application.CompleteMediaRenderInput) error {

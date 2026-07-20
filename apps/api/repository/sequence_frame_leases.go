@@ -19,7 +19,7 @@ import (
 func (repository *SQLiteProjects) MaterializeSequenceFrameLeases(
 	ctx context.Context,
 	record application.MaterializeSequenceFrameLeasesRecord,
-) ([]application.SequenceFrameResourceLease, error) {
+) (leases []application.SequenceFrameResourceLease, resultErr error) {
 	if err := validateSequenceFrameLeaseRecord(record); err != nil {
 		return nil, err
 	}
@@ -115,20 +115,10 @@ func (repository *SQLiteProjects) MaterializeSequenceFrameLeases(
 	for index := range result {
 		result[index].ReadOnlyPath = filepath.Join(finalRoot, result[index].ResourceID.String()+".png")
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 	if err := repository.commitSequenceFrameLeases(ctx, record, result); err != nil {
-		var commitError ambiguousCommitError
-		if errors.As(err, &commitError) {
-			committed = true
-		}
 		return nil, err
 	}
-	committed = true
 	return result, nil
 }
 
@@ -245,10 +235,7 @@ INSERT INTO sequence_frame_scratch_leases (
 			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return ambiguousCommitError{cause: err}
-	}
-	return nil
+	return commitPublication(tx)
 }
 
 func (repository *SQLiteProjects) loadReusableSequenceFrameLeases(
