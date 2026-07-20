@@ -32,6 +32,8 @@ keys = json.loads(sys.argv[1])
 for field, name in (
     ("sourcePrefix", "source-prefix"),
     ("sourceKey", "source-key"),
+    ("cbuildPrefix", "cbuild-prefix"),
+    ("cbuildKey", "cbuild-key"),
     ("closurePrefix", "closure-prefix"),
     ("closureKey", "closure-key"),
 ):
