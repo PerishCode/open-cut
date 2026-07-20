@@ -104,10 +104,12 @@ jobs:
         run: .tmp/ci/oc-control bootstrap --repo .
       # The API package is excluded: its build produces the media closure, which
       # is delivery material, and nothing in the workspace build, lint, or test
-      # graph consumes it.
-      - run: pnpm -r --filter '!@open-cut/api' run build
-      - run: pnpm -r --filter '!@open-cut/api' run lint
-      - run: pnpm -r --filter '!@open-cut/api' run test
+      # graph consumes it. The filter has to name the root package too - its own
+      # build script recurses over every workspace package, so leaving it in
+      # would rebuild exactly what the filter is there to skip.
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run build
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run lint
+      - run: pnpm -r --filter '!@open-cut/api' --filter '!open-cut' run test
 
   native-delivery:
     name: ${{ matrix.target }} delivery
