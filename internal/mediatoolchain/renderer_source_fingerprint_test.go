@@ -1,51 +1,87 @@
 package mediatoolchain
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestRendererSourceFingerprintDetectsChangeAndReuse(t *testing.T) {
-	root := t.TempDir()
-	write := func(relative, content string) {
-		path := filepath.Join(root, relative)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("internal/renderengine/oracle.go", "package renderengine\n")
-	write("internal/renderhelper/runner.go", "package renderhelper\n")
-	write("internal/rendernative/abi.h", "// abi\n")
-	write("cmd/open-cut-render/main.go", "package main\n")
-
-	first, err := RendererSourceFingerprint(root)
+func fingerprintRepositoryRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := RendererSourceFingerprint(root)
+	return root
+}
+
+// The fingerprint's whole purpose is to notice that something compiled into
+// open-cut-render changed. A hand-kept list of renderer source trees could not
+// see past the renderer's own packages, so a change to a package it imports -
+// domain value types, the process lifecycle it spawns FFmpeg with - left the
+// recorded fingerprint matching and a stale helper in place. The input set now
+// comes from the compiler's own view of the closure, and these are the
+// dependencies that view must include.
+func TestRendererFingerprintCoversItsTransitiveDependencies(t *testing.T) {
+	root := fingerprintRepositoryRoot(t)
+	entries, err := rendererFingerprintInputs(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"file\x00internal/renderengine/",
+		"file\x00internal/renderhelper/",
+		"file\x00internal/rendernative/",
+		"file\x00cmd/open-cut-render/",
+		"file\x00product/domain/",
+		"file\x00product/application/",
+		"file\x00lifecycle/",
+		"file\x00internal/mediaclosure/",
+		"file\x00utils/target/",
+		"module\x00",
+	} {
+		found := false
+		for _, entry := range entries {
+			if strings.HasPrefix(entry, required) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("renderer fingerprint input set omits %q", strings.ReplaceAll(required, "\x00", " "))
+		}
+	}
+}
+
+func TestRendererFingerprintIsStableAndRoundTrips(t *testing.T) {
+	root := fingerprintRepositoryRoot(t)
+	ctx := context.Background()
+	first, err := RendererSourceFingerprint(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := RendererSourceFingerprint(ctx, root)
 	if err != nil || again != first {
-		t.Fatalf("fingerprint not stable: %q vs %q err=%v", first, again, err)
+		t.Fatalf("fingerprint is not stable: %q vs %q err=%v", first, again, err)
 	}
 
-	artifact := filepath.Join(root, "apps", "api", "dist", "sidecar")
-	if err := os.MkdirAll(artifact, 0o755); err != nil {
+	artifact := t.TempDir()
+	if rendererSourceFingerprintMatches(ctx, root, artifact) {
+		t.Fatal("a missing fingerprint file must not match")
+	}
+	if err := writeRendererSourceFingerprint(ctx, root, artifact); err != nil {
 		t.Fatal(err)
 	}
-	if rendererSourceFingerprintMatches(root, artifact) {
-		t.Fatal("missing fingerprint file must not match")
+	if !rendererSourceFingerprintMatches(ctx, root, artifact) {
+		t.Fatal("a freshly recorded fingerprint must match")
 	}
-	if err := writeRendererSourceFingerprint(root, artifact); err != nil {
+	recorded := filepath.Join(artifact, rendererSourceFingerprintName)
+	if err := os.WriteFile(recorded, []byte("sha256:0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !rendererSourceFingerprintMatches(root, artifact) {
-		t.Fatal("freshly recorded fingerprint must match")
-	}
-	write("internal/renderengine/oracle.go", "package renderengine\n// clamp\n")
-	if rendererSourceFingerprintMatches(root, artifact) {
-		t.Fatal("renderer source change must invalidate the recorded fingerprint")
+	if rendererSourceFingerprintMatches(ctx, root, artifact) {
+		t.Fatal("a different recorded fingerprint must not match")
 	}
 }
