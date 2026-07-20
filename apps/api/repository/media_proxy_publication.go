@@ -18,7 +18,7 @@ import (
 func (repository *SQLiteProjects) CompleteMediaProxy(
 	ctx context.Context,
 	input application.CompleteMediaProxy,
-) error {
+) (resultErr error) {
 	if err := validateProxyPublication(input); err != nil {
 		return application.ErrAssetInvalid
 	}
@@ -70,12 +70,7 @@ WHERE asset_id = ? AND kind = 'proxy' AND producer_version = ?
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -170,12 +165,7 @@ WHERE id = ? AND state = 'running'`, at, at, input.Claim.AttemptID.String())
 	); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		committed = true
-		return err
-	}
-	committed = true
-	return nil
+	return commitPublication(tx)
 }
 
 func validateProxyPublication(input application.CompleteMediaProxy) error {

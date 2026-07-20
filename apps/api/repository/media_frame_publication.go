@@ -16,7 +16,7 @@ import (
 func (repository *SQLiteProjects) CompleteMediaFrameSet(
 	ctx context.Context,
 	input application.CompleteMediaFrameSet,
-) error {
+) (resultErr error) {
 	if err := validateFrameSetPublication(input); err != nil {
 		return application.ErrAssetInvalid
 	}
@@ -38,12 +38,7 @@ func (repository *SQLiteProjects) CompleteMediaFrameSet(
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -120,14 +115,7 @@ WHERE id = ? AND state = 'running'`, at, at, input.Claim.AttemptID.String())
 	); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		// A commit error is ambiguous. Preserve the immutable files so recovery can
-		// reconcile them against SQLite instead of deleting a possibly committed result.
-		committed = true
-		return err
-	}
-	committed = true
-	return nil
+	return commitPublication(tx)
 }
 
 func validateFrameSetPublication(input application.CompleteMediaFrameSet) error {

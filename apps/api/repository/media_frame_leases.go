@@ -20,7 +20,7 @@ import (
 func (repository *SQLiteProjects) MaterializeMediaFrameLeases(
 	ctx context.Context,
 	record application.MaterializeMediaFrameLeasesRecord,
-) ([]application.FrameResourceLease, error) {
+) (leases []application.FrameResourceLease, resultErr error) {
 	if err := repository.ReconcileMediaScratchLeases(ctx, record.CreatedAt.UTC()); err != nil {
 		return nil, err
 	}
@@ -107,20 +107,10 @@ func (repository *SQLiteProjects) MaterializeMediaFrameLeases(
 	for index := range result {
 		result[index].ReadOnlyPath = filepath.Join(finalRoot, result[index].ResourceID.String()+".png")
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.RemoveAll(finalRoot)
-		}
-	}()
+	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
 	if err := repository.commitFrameLeases(ctx, record, result); err != nil {
-		var commitError ambiguousCommitError
-		if errors.As(err, &commitError) {
-			committed = true
-		}
 		return nil, err
 	}
-	committed = true
 	return result, nil
 }
 
@@ -201,10 +191,7 @@ INSERT INTO media_scratch_leases (
 			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return ambiguousCommitError{cause: err}
-	}
-	return nil
+	return commitPublication(tx)
 }
 
 func verifyActiveFrameTurn(
@@ -268,11 +255,6 @@ func validScratchRelative(value string) bool {
 func stringsHasDotDotPrefix(value string) bool {
 	return len(value) > 3 && value[:3] == ".."+string(filepath.Separator)
 }
-
-type ambiguousCommitError struct{ cause error }
-
-func (err ambiguousCommitError) Error() string { return err.cause.Error() }
-func (err ambiguousCommitError) Unwrap() error { return err.cause }
 
 func (repository *SQLiteProjects) revokeTurnScratchLeases(
 	ctx context.Context,
