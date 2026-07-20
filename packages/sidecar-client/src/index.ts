@@ -11,6 +11,7 @@ import {
   decodeStatus,
   eventType,
   type LifecycleMode,
+  lifecycleMode,
   operations,
   type RenewResponse,
   type ServerEvent,
@@ -27,8 +28,16 @@ export type ConnectOptions = {
   heartbeatIntervalMs?: number;
   reconcileIntervalMs?: number;
   capabilityRenewIntervalMs?: number;
+  abandonWindowMs?: number;
   onCommand?: (command: ControlCommand) => void | Promise<void>;
+  onAbandoned?: () => void;
 };
+
+// A dev or harness peer whose control broker stays unreachable beyond this
+// window abandons the session and must exit: nothing owns its lifetime any
+// more. Production and packaged peers keep the unbounded retry because their
+// runner owns cell lifetime.
+const developmentAbandonWindowMs = 60_000;
 
 type StatusListener = (status: Status) => void;
 type AppStatusListener = (status: SessionStatus | undefined, broker: Status) => void;
@@ -166,6 +175,7 @@ export class SidecarConnection {
   }
 
   async #reconnectLoop(): Promise<void> {
+    const lostAt = Date.now();
     let delayMs = 50;
     while (!this.#closed) {
       try {
@@ -173,11 +183,33 @@ export class SidecarConnection {
         return;
       } catch {
         if (this.#closed) break;
+        const abandonWindowMs = this.#abandonWindowMs();
+        if (abandonWindowMs !== undefined && Date.now() - lostAt >= abandonWindowMs) {
+          this.#abandon();
+          break;
+        }
         await delay(delayMs);
         delayMs = Math.min(delayMs * 2, 2_000);
       }
     }
     throw new Error("sidecar connection closed while reconnecting");
+  }
+
+  // Returns the fail-closed reconnect bound for the launch mode; undefined
+  // keeps the unbounded retry.
+  #abandonWindowMs(): number | undefined {
+    if (this.#launch.mode !== lifecycleMode.dev && this.#launch.mode !== lifecycleMode.harness) return undefined;
+    return this.#options.abandonWindowMs ?? developmentAbandonWindowMs;
+  }
+
+  #abandon(): void {
+    if (this.#closed) return;
+    this.close(1);
+    try {
+      this.#options.onAbandoned?.();
+    } catch (error) {
+      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    }
   }
 
   async #open(): Promise<void> {

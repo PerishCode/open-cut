@@ -33,6 +33,22 @@ func TestProtocolRejectsUnknownMode(t *testing.T) {
 	}
 }
 
+func TestDevRejectsUnexpectedArguments(t *testing.T) {
+	for _, arguments := range [][]string{
+		{"dev", "stop"},
+		{"dev", "stop", "--help"},
+		{"dev", "--repo", ".", "unexpected"},
+		{"dev", "inspect", "--eval", "1", "unexpected"},
+		{"dev", "record", "--output", "out.webm", "unexpected"},
+	} {
+		var stdout, stderr bytes.Buffer
+		code := Run(context.Background(), arguments, &stdout, &stderr)
+		if code != 2 {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", arguments, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
 func TestBootstrapRejectsUnexpectedArguments(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), []string{"bootstrap", "unexpected"}, &stdout, &stderr)

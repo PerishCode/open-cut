@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/PerishCode/open-cut/internal/peerinventory"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/sidecar/client"
@@ -41,8 +42,12 @@ type Options struct {
 	Source       string
 	Plan         runtimetopology.Plan
 	ReadyTimeout time.Duration
-	Stdout       io.Writer
-	Stderr       io.Writer
+	// InventoryFile records spawned peer identities so the next session of the
+	// same cell can reap residues of a host that died without teardown. Empty
+	// disables recording; production launchers own cell lifetime and pass none.
+	InventoryFile string
+	Stdout        io.Writer
+	Stderr        io.Writer
 }
 
 type Result struct {
@@ -132,6 +137,9 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 	for _, definition := range options.Plan.Processes {
 		processes[definition.App] = &managedProcess{definition: definition, backoff: initialRestartDelay}
 	}
+	if options.InventoryFile != "" {
+		defer func() { _ = peerinventory.Remove(options.InventoryFile) }()
+	}
 	for _, app := range runtimetopology.Apps(options.Plan) {
 		managed := processes[app]
 		if err := startProcess(ctx, control, options, managed, exits); err != nil {
@@ -140,6 +148,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 			scheduleRestart(managed, restarts)
 		}
 	}
+	recordInventory(options, processes)
 
 	apps := runtimetopology.Apps(options.Plan)
 	readyDeadline := time.NewTimer(options.ReadyTimeout)
@@ -167,6 +176,7 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 				continue
 			}
 			managed.command = nil
+			recordInventory(options, processes)
 			if time.Since(managed.startedAt) >= stableProcessWindow {
 				managed.backoff = initialRestartDelay
 				managed.failures = 0
@@ -208,6 +218,8 @@ func Run(ctx context.Context, options Options, ready chan<- Result) (resultErr e
 				}
 				fmt.Fprintf(options.Stderr, "runtime app %s restart failed; retrying: %v\n", restart.app, err)
 				scheduleRestart(managed, restarts)
+			} else {
+				recordInventory(options, processes)
 			}
 		case <-statusTicker.C:
 			if confirmed {
@@ -313,6 +325,31 @@ func lifecycleProfile(mode protocol.LifecycleMode) (lifecycle.Profile, error) {
 		return lifecycle.ProfileHarness, nil
 	default:
 		return "", fmt.Errorf("unsupported runtime lifecycle mode %q", mode)
+	}
+}
+
+// recordInventory snapshots the live peers in plan order so a later session
+// can prove and reap residues if this host dies without teardown.
+func recordInventory(options Options, processes map[string]*managedProcess) {
+	if options.InventoryFile == "" {
+		return
+	}
+	peers := make([]peerinventory.Peer, 0, len(processes))
+	for _, app := range runtimetopology.Apps(options.Plan) {
+		managed := processes[app]
+		if managed == nil || managed.command == nil {
+			continue
+		}
+		pid := managed.command.PID()
+		if pid <= 0 {
+			continue
+		}
+		peers = append(peers, peerinventory.Peer{
+			App: app, PID: pid, Executable: managed.definition.Command, StartedAt: managed.startedAt.UTC(),
+		})
+	}
+	if err := peerinventory.Write(options.InventoryFile, peers); err != nil {
+		fmt.Fprintf(options.Stderr, "record peer inventory: %v\n", err)
 	}
 }
 

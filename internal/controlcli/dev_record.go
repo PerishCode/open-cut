@@ -41,6 +41,10 @@ func runDevRecord(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control dev record --output <path.webm> [--duration <seconds>] [--speech <text>] [--voice <voice>] [--repo <path>] [--base-dir <path>]")
+		return 2
+	}
 	if *output == "" || filepath.Ext(*output) != ".webm" {
 		fmt.Fprintln(stderr, "dev record requires --output <path.webm>")
 		return 2

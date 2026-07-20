@@ -155,6 +155,10 @@ func runDev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err := set.Parse(args); err != nil {
 		return 2
 	}
+	if set.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: oc-control dev [inspect|record] [--repo <path>] [--base-dir <path>]")
+		return 2
+	}
 	repositoryRoot, err := filepath.Abs(*repository)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

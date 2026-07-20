@@ -142,18 +142,27 @@ type Registration struct {
 	Source     string
 }
 
+// developmentAbandonWindow bounds how long a dev or harness peer keeps
+// reconnecting to a lost control broker before failing closed. Production and
+// packaged peers keep the unbounded retry: their runner owns cell lifetime.
+// Variable only so tests can compress the window.
+var developmentAbandonWindow = 60 * time.Second
+
 type Session struct {
 	descriptor   protocol.ControlDescriptor
 	token        string
 	registration Registration
 
-	mu           sync.Mutex
-	connection   *websocket.Conn
-	endpoints    map[string]string
-	desiredReady bool
-	events       chan protocol.ServerEvent
-	closed       chan struct{}
-	closeOnce    sync.Once
+	mu            sync.Mutex
+	connection    *websocket.Conn
+	endpoints     map[string]string
+	desiredReady  bool
+	events        chan protocol.ServerEvent
+	closed        chan struct{}
+	closeOnce     sync.Once
+	abandoned     chan struct{}
+	abandonOnce   sync.Once
+	abandonWindow time.Duration
 }
 
 func DialSession(ctx context.Context, descriptor protocol.ControlDescriptor, token string, registration Registration) (*Session, error) {
@@ -172,9 +181,34 @@ func DialSession(ctx context.Context, descriptor protocol.ControlDescriptor, tok
 		descriptor: descriptor, token: token, registration: registration,
 		connection: connection, endpoints: make(map[string]string),
 		events: make(chan protocol.ServerEvent, 64), closed: make(chan struct{}),
+		abandoned: make(chan struct{}), abandonWindow: abandonWindow(registration.Mode),
 	}
 	go session.run(connection)
 	return session, nil
+}
+
+// abandonWindow selects the fail-closed reconnect bound for a session mode; a
+// zero window keeps the unbounded retry.
+func abandonWindow(mode protocol.LifecycleMode) time.Duration {
+	if mode == protocol.LifecycleModeDev || mode == protocol.LifecycleModeHarness {
+		return developmentAbandonWindow
+	}
+	return 0
+}
+
+// Abandoned is closed when the session gave up reconnecting to a lost broker
+// and failed closed; the owning process must treat this as a shutdown signal.
+func (session *Session) Abandoned() <-chan struct{} {
+	return session.abandoned
+}
+
+func (session *Session) abandon() {
+	session.closeOnce.Do(func() {
+		close(session.closed)
+	})
+	session.abandonOnce.Do(func() {
+		close(session.abandoned)
+	})
 }
 
 func (session *Session) Heartbeat() error {
@@ -298,6 +332,7 @@ func (session *Session) run(connection *websocket.Conn) {
 		default:
 		}
 
+		lostAt := time.Now()
 		delay := 50 * time.Millisecond
 		for {
 			reconnectContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -323,6 +358,10 @@ func (session *Session) run(connection *websocket.Conn) {
 					break
 				}
 				next.Close()
+			}
+			if session.abandonWindow > 0 && time.Since(lostAt) >= session.abandonWindow {
+				session.abandon()
+				return
 			}
 			select {
 			case <-session.closed:

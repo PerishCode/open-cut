@@ -3,16 +3,14 @@
 package install
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	"golang.org/x/sys/unix"
+	"github.com/PerishCode/open-cut/internal/procident"
 )
 
 const (
@@ -42,10 +40,10 @@ func verifyPlatformSignerCaller(
 		if depth == 0 {
 			parentExecutable = processExecutable
 		}
-		if sameProcessExecutable(processExecutable, executable) {
+		if procident.SameExecutable(processExecutable, executable) {
 			foundHost = true
 		}
-		if sameProcessExecutable(processExecutable, receipt.CLIPath) {
+		if procident.SameExecutable(processExecutable, receipt.CLIPath) {
 			foundCLI = true
 		}
 		pid = parent
@@ -94,7 +92,7 @@ func activeAppBundleFromCommand(command, activeVersionRoot string) (string, bool
 }
 
 func processExecutableAndParent(ctx context.Context, pid int) (string, int, error) {
-	executable, err := processExecutable(pid)
+	executable, err := procident.Executable(pid)
 	if err != nil {
 		return "", 0, fmt.Errorf("read process %d executable: %w", pid, err)
 	}
@@ -107,33 +105,4 @@ func processExecutableAndParent(ctx context.Context, pid int) (string, int, erro
 		return "", 0, fmt.Errorf("decode process %d parent: %w", pid, err)
 	}
 	return executable, parent, nil
-}
-
-func processExecutable(pid int) (string, error) {
-	arguments, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return "", err
-	}
-	const argumentCountBytes = 4
-	if len(arguments) <= argumentCountBytes {
-		return "", fmt.Errorf("process %d has invalid arguments", pid)
-	}
-	pathBytes := arguments[argumentCountBytes:]
-	end := bytes.IndexByte(pathBytes, 0)
-	if end <= 0 {
-		return "", fmt.Errorf("process %d has no executable path", pid)
-	}
-	return string(pathBytes[:end]), nil
-}
-
-func sameProcessExecutable(actual, expected string) bool {
-	if actual == "" || expected == "" {
-		return false
-	}
-	if filepath.Clean(actual) == filepath.Clean(expected) {
-		return true
-	}
-	actualInfo, actualErr := os.Stat(actual)
-	expectedInfo, expectedErr := os.Stat(expected)
-	return actualErr == nil && expectedErr == nil && os.SameFile(actualInfo, expectedInfo)
 }
