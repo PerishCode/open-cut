@@ -3,7 +3,8 @@
 // tearing them down. The inventory is dev/harness substrate state only:
 // production launchers own cell lifetime and never write one. Reaping fails
 // closed — a recorded pid is only terminated when its kernel-reported
-// executable still matches the record.
+// creation time exactly matches the record, which a recycled pid cannot
+// satisfy; records without a creation time fall back to executable identity.
 package peerinventory
 
 import (
@@ -31,6 +32,9 @@ type Peer struct {
 	PID        int       `json:"pid"`
 	Executable string    `json:"executable"`
 	StartedAt  time.Time `json:"startedAt"`
+	// CreateTimeMs is the kernel-reported process creation time; an exact
+	// match at sweep time proves the pid was not recycled.
+	CreateTimeMs int64 `json:"createTimeMs,omitempty"`
 }
 
 type document struct {
@@ -82,8 +86,7 @@ func Sweep(path string, stderr io.Writer) []Peer {
 		if !procident.Alive(peer.PID) {
 			continue
 		}
-		executable, err := procident.Executable(peer.PID)
-		if err != nil || !procident.SameExecutable(executable, peer.Executable) {
+		if !sameRecordedProcess(peer) {
 			fmt.Fprintf(stderr, "pid %d no longer matches recorded %s peer; leaving it alone\n", peer.PID, peer.App)
 			continue
 		}
@@ -97,6 +100,18 @@ func Sweep(path string, stderr io.Writer) []Peer {
 	}
 	_ = Remove(path)
 	return reaped
+}
+
+// sameRecordedProcess proves the live pid is still the recorded process.
+// Exact kernel creation-time equality is the decisive check; legacy records
+// without one fall back to kernel-reported executable identity.
+func sameRecordedProcess(peer Peer) bool {
+	if peer.CreateTimeMs > 0 {
+		created, err := procident.CreateTimeMs(peer.PID)
+		return err == nil && created == peer.CreateTimeMs
+	}
+	executable, err := procident.Executable(peer.PID)
+	return err == nil && procident.SameExecutable(executable, peer.Executable)
 }
 
 func waitGone(pid int, patience time.Duration) bool {
