@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,7 +37,6 @@ func TestProtocolRejectsUnknownMode(t *testing.T) {
 func TestDevRejectsUnexpectedArguments(t *testing.T) {
 	for _, arguments := range [][]string{
 		{"dev", "stop"},
-		{"dev", "stop", "--help"},
 		{"dev", "--repo", ".", "unexpected"},
 		{"dev", "inspect", "--eval", "1", "unexpected"},
 		{"dev", "record", "--output", "out.webm", "unexpected"},
@@ -44,6 +44,31 @@ func TestDevRejectsUnexpectedArguments(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		code := Run(context.Background(), arguments, &stdout, &stderr)
 		if code != 2 {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", arguments, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
+func TestDevHelpNeverStartsASession(t *testing.T) {
+	// --help wins over argument validation by mature-CLI convention; the
+	// load-bearing property is that no dev session starts.
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"dev", "stop", "--help"}, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Usage:") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestUnknownCommandFailsClosed(t *testing.T) {
+	for _, arguments := range [][]string{
+		{"unknown-command"},
+		{"release", "unknown"},
+		{"harness", "unknown"},
+		{"clean", "unexpected"},
+	} {
+		var stdout, stderr bytes.Buffer
+		code := Run(context.Background(), arguments, &stdout, &stderr)
+		if code != 2 || stderr.Len() == 0 {
 			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", arguments, code, stdout.String(), stderr.String())
 		}
 	}

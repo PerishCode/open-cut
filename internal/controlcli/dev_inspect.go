@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/PerishCode/open-cut/internal/businessacceptance"
 	"github.com/PerishCode/open-cut/internal/devsession"
@@ -83,22 +84,28 @@ func connectDevRenderer(
 	return cdp, endpoint, nil
 }
 
-func runDevInspect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("dev inspect", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	baseDir := set.String("base-dir", "", "development base directory; defaults below the repository")
-	screenshot := set.String("screenshot", "", "write a PNG capture of the live renderer to this path")
-	evaluate := set.String("eval", "", "JavaScript expression to evaluate in the live renderer")
-	setFile := set.String("set-file", "", "attach this file to the first enabled file input in the live renderer")
-	endpoint := set.String("endpoint", "", "explicit loopback CDP origin of a controlled renderer")
-	if err := set.Parse(args); err != nil {
-		return 2
+type devInspectOptions struct {
+	repository, baseDir, screenshot, evaluate, setFile, endpoint string
+}
+
+func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "inspect", Short: "Inspect the live development renderer over CDP", Args: cobra.NoArgs}
+	options := devInspectOptions{}
+	command.Flags().StringVar(&options.repository, "repo", ".", "open-cut repository root")
+	command.Flags().StringVar(&options.baseDir, "base-dir", "", "development base directory; defaults below the repository")
+	command.Flags().StringVar(&options.screenshot, "screenshot", "", "write a PNG capture of the live renderer to this path")
+	command.Flags().StringVar(&options.evaluate, "eval", "", "JavaScript expression to evaluate in the live renderer")
+	command.Flags().StringVar(&options.setFile, "set-file", "", "attach this file to the first enabled file input in the live renderer")
+	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		return asExit(runDevInspect(cmd.Context(), options, stdout, stderr))
 	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control dev inspect (--screenshot <path> | --eval <expression> | --set-file <path>) [--repo <path>] [--base-dir <path>]")
-		return 2
-	}
+	return command
+}
+
+func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stderr io.Writer) int {
+	repository, baseDir, endpoint := &options.repository, &options.baseDir, &options.endpoint
+	screenshot, evaluate, setFile := &options.screenshot, &options.evaluate, &options.setFile
 	if *screenshot == "" && *evaluate == "" && *setFile == "" {
 		fmt.Fprintln(stderr, "dev inspect requires --screenshot, --eval, and/or --set-file")
 		return 2

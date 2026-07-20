@@ -3,7 +3,6 @@ package controlcli
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/PerishCode/open-cut/internal/businessacceptance"
 	"github.com/PerishCode/open-cut/internal/mediatoolchain"
@@ -25,26 +26,35 @@ const maximumRecordSeconds = 300
 // footage through the CDP screencast and encodes it with the repository's
 // contained media toolchain. Optional --speech narrates the recording through
 // macOS `say`, giving downstream transcription exact ground-truth text.
-func runDevRecord(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	set := flag.NewFlagSet("dev record", flag.ContinueOnError)
-	set.SetOutput(stderr)
-	repository := set.String("repo", ".", "open-cut repository root")
-	baseDir := set.String("base-dir", "", "development base directory; defaults below the repository")
-	output := set.String("output", "", "write the WebM recording to this path")
-	duration := set.Float64("duration", 30, "recording length in seconds")
-	speech := set.String("speech", "", "narrate the recording with this exact text through macOS say")
+type devRecordOptions struct {
+	repository, baseDir, output, speech, voice, endpoint string
+	duration                                             float64
+	maxWidth                                             int
+}
+
+func newDevRecordCommand(stdout, stderr io.Writer) *cobra.Command {
+	command := &cobra.Command{Use: "record", Short: "Record the live development renderer to WebM", Args: cobra.NoArgs}
+	options := devRecordOptions{}
+	command.Flags().StringVar(&options.repository, "repo", ".", "open-cut repository root")
+	command.Flags().StringVar(&options.baseDir, "base-dir", "", "development base directory; defaults below the repository")
+	command.Flags().StringVar(&options.output, "output", "", "write the WebM recording to this path")
+	command.Flags().Float64Var(&options.duration, "duration", 30, "recording length in seconds")
+	command.Flags().StringVar(&options.speech, "speech", "", "narrate the recording with this exact text through macOS say")
 	// The system default voice follows the OS locale and garbles or drops
 	// English narration on non-English systems, so an English voice is pinned.
-	voice := set.String("voice", "Samantha", "say voice for the narration")
-	maxWidth := set.Int("max-width", 1920, "cap the captured frame width")
-	endpoint := set.String("endpoint", "", "explicit loopback CDP origin of a controlled renderer")
-	if err := set.Parse(args); err != nil {
-		return 2
+	command.Flags().StringVar(&options.voice, "voice", "Samantha", "say voice for the narration")
+	command.Flags().IntVar(&options.maxWidth, "max-width", 1920, "cap the captured frame width")
+	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		return asExit(runDevRecord(cmd.Context(), options, stdout, stderr))
 	}
-	if set.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: oc-control dev record --output <path.webm> [--duration <seconds>] [--speech <text>] [--voice <voice>] [--repo <path>] [--base-dir <path>]")
-		return 2
-	}
+	return command
+}
+
+func runDevRecord(ctx context.Context, options devRecordOptions, stdout, stderr io.Writer) int {
+	repository, baseDir, endpoint := &options.repository, &options.baseDir, &options.endpoint
+	output, duration := &options.output, &options.duration
+	speech, voice, maxWidth := &options.speech, &options.voice, &options.maxWidth
 	if *output == "" || filepath.Ext(*output) != ".webm" {
 		fmt.Fprintln(stderr, "dev record requires --output <path.webm>")
 		return 2

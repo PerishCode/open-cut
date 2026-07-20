@@ -10,12 +10,15 @@ require (
 	github.com/klauspost/compress v1.18.5
 	github.com/ncruces/go-sqlite3 v0.35.2
 	github.com/rivo/uniseg v0.4.7
+	github.com/spf13/cobra v1.10.2
 	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/sys v0.46.0
 	golang.org/x/text v0.39.0
 )
 
 require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 )
