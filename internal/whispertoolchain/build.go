@@ -40,6 +40,7 @@ type BuildResult struct {
 	Manifest      string `json:"manifest"`
 	Transcriber   string `json:"transcriber"`
 	TranscriberSH string `json:"transcriberSha256"`
+	Reused        bool   `json:"reused"`
 }
 
 func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
@@ -63,6 +64,30 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	}
 	backend := Backend(options.Target)
 	artifactRoot := filepath.Join(repositoryRoot, "apps", "api", "dist", "sidecar")
+
+	// A published closure that still matches the logic which produced it is
+	// reused rather than rebuilt. Skipping this was a measurable regression:
+	// the engine costs seconds to build on macOS but well over a minute under
+	// MinGW, and it was being paid on every run including ones where every
+	// other artifact came from cache.
+	//
+	// Load already proves the bytes — manifest identity, exact digests, the
+	// recorded configuration for this target and backend, and every closure
+	// digest — so the only thing it cannot see is a change to the build logic
+	// that does not alter the manifest, such as a different qualification
+	// suite. The recorded fingerprint covers exactly that.
+	if reused, ok, reason := inspectReuse(repositoryRoot, artifactRoot, options.Target); ok {
+		capability := reused.Capabilities[CapabilityLocalTranscriptionV1]
+		return BuildResult{
+			Schema: ManifestSchema, Target: options.Target.String(), Version: reused.Manifest.Version,
+			Backend:     reused.Manifest.Build.Backend,
+			Manifest:    filepath.Join(artifactRoot, ManifestName),
+			Transcriber: capability.Entry.Path, TranscriberSH: capability.Entry.SHA256,
+			Reused: true,
+		}, nil
+	} else {
+		fmt.Fprintf(stderr, "whisper toolchain cold build: %s\n", reason)
+	}
 	workRoot := filepath.Join(
 		repositoryRoot, ".tmp", "oc-control", buildCacheRoot, options.Target.String(),
 	)
@@ -207,6 +232,9 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 	if err := publishStage(stageRoot, artifactRoot); err != nil {
+		return BuildResult{}, err
+	}
+	if err := writeBuildFingerprint(repositoryRoot, artifactRoot); err != nil {
 		return BuildResult{}, err
 	}
 	return BuildResult{
@@ -364,8 +392,10 @@ func publishStage(stageRoot, artifactRoot string) error {
 	if err := os.MkdirAll(artifactRoot, 0o755); err != nil {
 		return err
 	}
+	// The fingerprint is removed with everything else it describes, so a fresh
+	// closure can never be paired with a stale record of how it was made.
 	for _, owned := range []string{
-		"whisper", filepath.Join("licenses", "whisper"), ManifestName,
+		"whisper", filepath.Join("licenses", "whisper"), ManifestName, buildFingerprintName,
 	} {
 		if err := os.RemoveAll(filepath.Join(artifactRoot, owned)); err != nil {
 			return err
@@ -467,4 +497,57 @@ func inspectTool(ctx context.Context, executable string) (string, error) {
 		return "", fmt.Errorf("inspect whisper build tool")
 	}
 	return strings.Join(identity, "\n"), nil
+}
+
+// buildFingerprintName records which build logic produced the published
+// closure. It sits beside the manifest rather than inside it: it describes how
+// the artifacts were made, not what they are, and nothing at runtime consults
+// it.
+const buildFingerprintName = "whisper-build.fingerprint"
+
+// inspectReuse reports whether the published closure can stand in for a build.
+// Any doubt at all is answered with a cold build and a reason, never a partial
+// repair.
+func inspectReuse(
+	repositoryRoot, artifactRoot string, buildTarget target.Target,
+) (Verified, bool, string) {
+	verified, loadErr := Load(artifactRoot, buildTarget)
+	if loadErr != nil {
+		return Verified{}, false, fmt.Sprintf("published closure is unusable: %v", loadErr)
+	}
+	recorded, readErr := os.ReadFile(filepath.Join(artifactRoot, buildFingerprintName))
+	if readErr != nil {
+		return Verified{}, false, fmt.Sprintf("build fingerprint is unreadable: %v", readErr)
+	}
+	current, fingerprintErr := buildFingerprint(repositoryRoot)
+	if fingerprintErr != nil {
+		return Verified{}, false, fmt.Sprintf("build fingerprint is uncomputable: %v", fingerprintErr)
+	}
+	if strings.TrimSpace(string(recorded)) != current {
+		return Verified{}, false, "build logic changed since the closure was built"
+	}
+	if _, exists := verified.Capabilities[CapabilityLocalTranscriptionV1]; !exists {
+		return Verified{}, false, "published closure carries no transcription capability"
+	}
+	return verified, true, ""
+}
+
+// buildFingerprint hashes this closure's build logic wholesale. Over-
+// approximating is the right trade here and not in the media toolchain: an
+// unrelated edit costs a rebuild measured in seconds rather than the many
+// minutes a codec toolchain costs, so precision would buy little and a stale
+// list would cost correctness.
+func buildFingerprint(repositoryRoot string) (string, error) {
+	return toolchainclosure.HashDirectories(
+		filepath.Join(repositoryRoot, "internal", "whispertoolchain"),
+		filepath.Join(repositoryRoot, "internal", "toolchainclosure"),
+	)
+}
+
+func writeBuildFingerprint(repositoryRoot, artifactRoot string) error {
+	fingerprint, err := buildFingerprint(repositoryRoot)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(artifactRoot, buildFingerprintName), []byte(fingerprint+"\n"), 0o600)
 }

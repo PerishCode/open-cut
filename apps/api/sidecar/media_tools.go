@@ -43,8 +43,12 @@ func runMediaTools(mode string) error {
 		if err != nil {
 			return fmt.Errorf("build API whisper artifact closure: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "whisper toolchain %s (%s backend)\n",
-			whisperResult.Version, whisperResult.Backend)
+		state := "built"
+		if whisperResult.Reused {
+			state = "reused"
+		}
+		fmt.Fprintf(os.Stderr, "whisper toolchain %s (%s backend, %s)\n",
+			whisperResult.Version, whisperResult.Backend, state)
 		executable, err := os.Executable()
 		if err != nil {
 			return err
