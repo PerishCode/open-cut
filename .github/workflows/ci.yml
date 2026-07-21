@@ -185,6 +185,26 @@ jobs:
           path: .tmp/oc-control/media-toolchain/*/source
           key: ${{ steps.media_cache.outputs.source-key }}
           restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
+      - name: Restore compiled media C tree
+        if: github.event_name != 'release' && github.event_name != 'schedule'
+        id: media_cbuild_restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          # The whole compiled tree, minus the renderer outputs it exists to let
+          # us rebuild. It is around 500 MB uncompressed and 150 MB stored,
+          # mostly object files nothing reads again - but enumerating just the
+          # files reuse consumes was tried and is worse: the list is long, it
+          # spans licence and conformance material as well as libraries, and it
+          # goes stale the first time a stage learns to read one more file. The
+          # exhaustive check that decides reuse lives in Go, where it can fail
+          # closed; the cache only has to carry enough for that check to pass.
+          path: |
+            .tmp/oc-control/media-toolchain/*/build
+            !.tmp/oc-control/media-toolchain/*/build/renderer-helper
+            !.tmp/oc-control/media-toolchain/*/build/renderer-relink-kit
+          key: ${{ steps.media_cache.outputs.cbuild-key }}
+          restore-keys: ${{ steps.media_cache.outputs.cbuild-prefix }}
       - name: Restore verified media toolchain closure
         if: github.event_name != 'release' && github.event_name != 'schedule'
         id: media_closure_restore
@@ -239,6 +259,24 @@ jobs:
         with:
           path: .tmp/oc-control/media-toolchain/*/source
           key: ${{ steps.media_cache.outputs.source-key }}
+      - name: Save compiled media C tree
+        if: ${{ success() && github.event_name == 'push' && steps.media_cbuild_restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          # The whole compiled tree, minus the renderer outputs it exists to let
+          # us rebuild. It is around 500 MB uncompressed and 150 MB stored,
+          # mostly object files nothing reads again - but enumerating just the
+          # files reuse consumes was tried and is worse: the list is long, it
+          # spans licence and conformance material as well as libraries, and it
+          # goes stale the first time a stage learns to read one more file. The
+          # exhaustive check that decides reuse lives in Go, where it can fail
+          # closed; the cache only has to carry enough for that check to pass.
+          path: |
+            .tmp/oc-control/media-toolchain/*/build
+            !.tmp/oc-control/media-toolchain/*/build/renderer-helper
+            !.tmp/oc-control/media-toolchain/*/build/renderer-relink-kit
+          key: ${{ steps.media_cache.outputs.cbuild-key }}
       - name: Save verified media toolchain closure
         if: ${{ success() && github.event_name == 'push' && steps.media_closure_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

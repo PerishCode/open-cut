@@ -26,6 +26,8 @@ type CacheKeys struct {
 	Target        string `json:"target"`
 	SourcePrefix  string `json:"sourcePrefix"`
 	SourceKey     string `json:"sourceKey"`
+	CBuildPrefix  string `json:"cbuildPrefix"`
+	CBuildKey     string `json:"cbuildKey"`
 	ClosurePrefix string `json:"closurePrefix"`
 	ClosureKey    string `json:"closureKey"`
 }
@@ -78,11 +80,17 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	}
 
 	sourcePrefix := "media-sources-v1-" + options.Target.String() + "-"
+	// The compiled C tree sits between the two: the renderer cannot affect it,
+	// but the build environment can, because identical sources compiled against
+	// a different system compiler are different objects.
+	cbuildPrefix := "media-cbuild-v1-" + options.Target.String() + "-"
 	closurePrefix := "media-closure-v1-" + options.Target.String() + "-"
 	return CacheKeys{
 		Schema: 1, Target: options.Target.String(),
 		SourcePrefix:  sourcePrefix,
 		SourceKey:     sourcePrefix + shortDigest(toolchainVersion, catalog),
+		CBuildPrefix:  cbuildPrefix,
+		CBuildKey:     cbuildPrefix + shortDigest(toolchainVersion, catalog, options.Environment),
 		ClosurePrefix: closurePrefix,
 		ClosureKey: closurePrefix + shortDigest(
 			toolchainVersion, catalog, renderer, goVersion, options.Environment,

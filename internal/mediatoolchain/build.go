@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/PerishCode/open-cut/utils/environment"
 	"github.com/PerishCode/open-cut/utils/target"
-	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 const (
@@ -106,148 +104,28 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		}
 		archives[source.ID] = archive
 	}
-	buildRoot := filepath.Join(workspace, "build")
-	if err := os.RemoveAll(buildRoot); err != nil {
-		return BuildResult{}, fmt.Errorf("reset media build root: %w", err)
-	}
-	if err := os.MkdirAll(buildRoot, 0o700); err != nil {
-		return BuildResult{}, fmt.Errorf("create media build root: %w", err)
-	}
-	sourceRoot, err := extractSource(
-		archives["ffmpeg"], buildRoot, "ffmpeg-"+FFmpegSourceVersion, "configure",
-	)
+	products, err := ensureCBuildTree(ctx, repositoryRoot, workspace, archives, options.Target, stdout, stderr)
 	if err != nil {
 		return BuildResult{}, err
 	}
-	libvpxRoot, err := extractSource(
-		archives["libvpx"], buildRoot, "libvpx-"+LibVPXSourceVersion, "configure",
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	opusRoot, err := extractSource(
-		archives["libopus"], buildRoot, "opus-"+OpusSourceVersion, "configure",
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	whisperRoot, err := extractWhisperSource(archives["whisper.cpp"], buildRoot)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	nativeTextRoots, err := extractNativeTextSources(archives, buildRoot)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	compiler, err := tool.Resolve("cc")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	shell, err := tool.Resolve("sh")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	makeTool, err := tool.Resolve("make")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	cxx, err := tool.Resolve("c++")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	archiver, err := tool.Resolve("ar")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	cmake, err := tool.Resolve("cmake")
-	if err != nil {
-		return BuildResult{}, err
-	}
-	compilerVersion, err := inspectBuildTools(ctx, compiler, cxx, archiver, makeTool, cmake)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	dependencyRoot := filepath.Join(buildRoot, "dependencies")
-	parallelism := runtime.NumCPU()
-	if parallelism < 1 {
-		parallelism = 1
-	}
-	if parallelism > 16 {
-		parallelism = 16
-	}
-	nativeTextRecipe, err := buildStaticNativeTextDependencies(
-		ctx, nativeTextRoots, dependencyRoot, compiler, cxx, archiver, shell, makeTool,
-		parallelism, stdout, stderr,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	libvpxConfiguration, err := buildLibVPX(
-		ctx, libvpxRoot, dependencyRoot, compiler, shell, makeTool, parallelism, options.Target, stdout, stderr,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	opusConfiguration, err := buildOpus(
-		ctx, opusRoot, dependencyRoot, compiler, shell, makeTool, parallelism, stdout, stderr,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	configuration := buildConfiguration(
-		shellBuildPath(compiler), shellBuildPath(buildRoot), shellBuildPath(dependencyRoot), options.Target,
-	)
-	if !validLGPLConfiguration(configuration) {
-		return BuildResult{}, fmt.Errorf("generated media configuration violates the LGPL-only profile")
-	}
-	recordedConfiguration := normalizeBuildConfiguration(configuration, buildRoot, dependencyRoot, compiler)
-	recordedLibVPXConfiguration := normalizeBuildConfiguration(
-		libvpxConfiguration, buildRoot, dependencyRoot, compiler,
-	)
-	recordedOpusConfiguration := normalizeBuildConfiguration(
-		opusConfiguration, buildRoot, dependencyRoot, compiler,
-	)
-	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"PKG_CONFIG_PATH":   filepath.Join(dependencyRoot, "lib", "pkgconfig"),
-		"PKG_CONFIG_LIBDIR": filepath.Join(dependencyRoot, "lib", "pkgconfig"),
-	})
-	if err := runConfigure(ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
-		sourceRoot, buildEnvironment, stdout, stderr); err != nil {
-		return BuildResult{}, fmt.Errorf("configure FFmpeg media toolchain: %w", err)
-	}
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: makeTool, Args: []string{
-			"-j", fmt.Sprint(parallelism), options.Target.ExecutableName("ffprobe"), options.Target.ExecutableName("ffmpeg"),
-		},
-		Directory: sourceRoot, Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil {
-		return BuildResult{}, fmt.Errorf("build FFmpeg media tools: %w", err)
-	}
-	builtProbe := filepath.Join(sourceRoot, options.Target.ExecutableName("ffprobe"))
-	if info, statErr := os.Stat(builtProbe); statErr != nil || !info.Mode().IsRegular() {
-		return BuildResult{}, fmt.Errorf("FFmpeg build did not produce ffprobe")
-	}
-	builtFrameDecoder := filepath.Join(sourceRoot, options.Target.ExecutableName("ffmpeg"))
-	if info, statErr := os.Stat(builtFrameDecoder); statErr != nil || !info.Mode().IsRegular() {
-		return BuildResult{}, fmt.Errorf("FFmpeg build did not produce ffmpeg")
-	}
-	for _, current := range []struct{ name, path string }{
-		{"ffprobe", builtProbe}, {"ffmpeg", builtFrameDecoder},
-	} {
-		if err := verifyPackagedExecutableDynamicClosure(current.path); err != nil {
-			return BuildResult{}, fmt.Errorf("verify %s runtime closure: %w", current.name, err)
-		}
-	}
-	builtWhisper, recordedWhisperConfiguration, err := buildWhisperCLI(
-		ctx, whisperRoot, buildRoot, cmake, compiler, cxx, parallelism, options.Target, stdout, stderr,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	if err := verifyPackagedExecutableDynamicClosure(builtWhisper); err != nil {
-		return BuildResult{}, fmt.Errorf("verify whisper-cli runtime closure: %w", err)
-	}
+	buildRoot := products.buildRoot
+	sourceRoot := products.sourceRoot
+	dependencyRoot := products.dependencyRoot
+	harfBuzzRoot := products.harfBuzzRoot
+	libvpxRoot := products.libVPXRoot
+	opusRoot := products.opusRoot
+	whisperRoot := products.whisperRoot
+	nativeTextRoots := products.nativeTextRoots
+	builtProbe := products.probe
+	builtFrameDecoder := products.frameDecoder
+	builtWhisper := products.whisper
+	compilerVersion := products.compilerVersion
+	nativeTextRecipe := products.nativeText
+	recordedConfiguration := products.configuration
+	recordedLibVPXConfiguration := products.libVPXConfiguration
+	recordedOpusConfiguration := products.opusConfiguration
+	recordedWhisperConfiguration := products.whisperConfiguration
+
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
 		return BuildResult{}, err
@@ -276,7 +154,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 	rendererTool, rendererNotice, rendererRecord, err := buildAndStageRenderer(
-		ctx, repositoryRoot, buildRoot, dependencyRoot, nativeTextRoots["harfbuzz"], stageRoot,
+		ctx, repositoryRoot, buildRoot, dependencyRoot, harfBuzzRoot, stageRoot,
 		options.Target, archives, framePath, fontResource, stdout, stderr,
 	)
 	if err != nil {
