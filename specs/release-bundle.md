@@ -39,6 +39,7 @@ payload/app/
   resources/payload/sidecars/api/
     dist/sidecar/api-sidecar.exe
     dist/sidecar/media-tools.json          # API-local closed tool registry
+    dist/sidecar/whisper-tools.json        # API-local transcription closure
     dist/sidecar/product-resources.json    # authenticated optional-resource catalog
     dist/sidecar/media/<platform tools>    # pinned probe/decode/render/transcribe tools
     dist/sidecar/media/resources/          # small qualification-only resources
@@ -57,12 +58,22 @@ runtime codec dispatch. Optional host instructions cannot vary bytes beneath a
 single target/recipe identity; any optimized feature profile is a new verified
 closure with new conformance evidence.
 
-The first local transcription closure pins `whisper.cpp` 1.8.6, builds a static
-CPU-only `whisper-cli` at the public target's minimum CPU baseline, and binds it
-with the contained FFmpeg/FFprobe tools, MIT notice, normalized recipe, and a
-small source-contained test model. That test model exists only to qualify and
-replay engine behavior; the multilingual `small` production model remains an
-on-demand ProductResource and is never copied into the release payload.
+The local transcription closure pins `whisper.cpp` 1.8.6 and is built, versioned
+and qualified independently of the media toolchain. It binds `whisper-cli` with
+the MIT notice, a normalized recipe, and a small source-contained test model. It
+carries no FFmpeg: audio reaches the engine already normalized, and
+qualification uses a synthesized canonical 16 kHz mono S16 fixture rather than a
+decoded one. That test model exists only to qualify and replay engine behavior;
+the multilingual `small` production model remains an on-demand ProductResource
+and is never copied into the release payload.
+
+Its build fixes the public target's minimum CPU baseline and never tunes to the
+build host. Where a target offers an accelerated backend the closure uses it —
+mac-arm64 builds against Metal and Accelerate — and the backend is recorded in
+the manifest, the conformance suite identity and the executor version. Because
+suite identity includes the target and backend, two targets running different
+backends can never claim the same qualification. Every public target still ships
+a qualified engine; only the backend differs.
 
 The audio baseline builds libopus fixed-point with assembly, RTCD, and
 intrinsics disabled. FFmpeg retains the libopus float symbols only for static

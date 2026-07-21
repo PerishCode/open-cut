@@ -11,7 +11,6 @@ var releaseBaselineCapabilities = [...]string{
 	CapabilityRenderInputV1,
 	CapabilitySequencePreviewRendererV1,
 	CapabilitySequenceExportRendererV1,
-	CapabilityLocalTranscriptionV1,
 }
 
 // VerifyReleaseBaseline is the app-owned production artifact policy. Load must

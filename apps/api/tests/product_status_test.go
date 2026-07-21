@@ -13,6 +13,7 @@ import (
 	"github.com/PerishCode/open-cut/apps/api/service"
 	"github.com/PerishCode/open-cut/internal/mediatoolchain"
 	"github.com/PerishCode/open-cut/internal/productresource"
+	"github.com/PerishCode/open-cut/internal/whispertoolchain"
 	"github.com/PerishCode/open-cut/product/application"
 )
 
@@ -41,12 +42,13 @@ func TestProductStatusSeparatesAbsentInvalidAndUnqualifiedMediaTools(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			for index, feature := range snapshot.Features {
-				expected := test.reason
-				if index == 4 && test.err == nil {
-					expected = application.ProductFeatureNotInstalled
-				}
-				if feature.State != application.ProductFeatureUnavailable || feature.Reason != expected {
+			// Transcription reports the same reason as the rest: when the
+			// media closure cannot supply the normalizer, that is the first
+			// thing missing from its pipeline, and naming a later stage
+			// instead would point at the wrong repair.
+			for _, feature := range snapshot.Features {
+				if feature.State != application.ProductFeatureUnavailable ||
+					feature.Reason != test.reason {
 					t.Fatalf("feature=%+v", feature)
 				}
 			}
@@ -115,11 +117,19 @@ func TestProductStatusMapsOnlyClosedProductFeaturesFromVerifiedTools(t *testing.
 
 func TestProductStatusRequiresBothTranscriptionExecutorAndAuthenticatedModelDeclaration(t *testing.T) {
 	entry := resourceCatalogEntry(t, "https://catalog.invalid/whisper-small.bin", []byte("model"))
+	// Transcription now spans three closures: the media closure normalizes the
+	// audio, the whisper closure supplies the engine, the catalog declares the
+	// model. All three must be present for the feature to read available.
 	verified := mediatoolchain.Verified{Capabilities: map[string]mediatoolchain.Capability{
-		mediatoolchain.CapabilityLocalTranscriptionV1: {},
+		mediatoolchain.CapabilityProbeV1:    {},
+		mediatoolchain.CapabilityFrameRGBV1: {},
+	}}
+	whisper := whispertoolchain.Verified{Capabilities: map[string]whispertoolchain.Capability{
+		whispertoolchain.CapabilityLocalTranscriptionV1: {},
 	}}
 	status, err := service.NewProductStatusFromClosures(
-		verified, nil, productresource.Verified{Entries: []application.ProductResourceCatalogEntry{entry}}, nil,
+		verified, nil, whisper, nil,
+		productresource.Verified{Entries: []application.ProductResourceCatalogEntry{entry}}, nil,
 	)
 	if err != nil {
 		t.Fatal(err)

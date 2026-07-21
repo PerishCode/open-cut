@@ -64,6 +64,35 @@ describe("transcript media contracts", () => {
     }
   });
 
+  // Whisper tokenizes with leading spaces on word boundaries, so real token
+  // text is not trimmed. Every fixture here used a single already-trimmed token,
+  // which let a rule rejecting untrimmed strings coexist with the rule requiring
+  // tokens to concatenate back into the segment — a contradiction no real
+  // transcript could satisfy, and one the Creator transcript pane hit on the
+  // first genuine end-to-end recognition.
+  it("accepts lexical token whitespace that reconstructs the segment exactly", async () => {
+    const page = transcriptPage();
+    const segment = page.segments[0] as Record<string, unknown>;
+    segment.text = "Alpha Bravo. Spoken ideas.";
+    segment.tokens = ["Alpha", " Bravo.", " Sp", "oken", " ideas."].map((text, index) => ({
+      id: durableID(`019f841b-b0c6-7409-a429-a72923000${(index + 10).toString().padStart(3, "0")}`),
+      sourceRange: {
+        start: { value: String(index), scale: 1 },
+        duration: { value: "1", scale: 1 },
+      },
+      text,
+      confidenceBasisPoints: 9_000,
+    }));
+    (segment.sourceRange as Record<string, unknown>).duration = { value: "5", scale: 1 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(page)),
+    );
+    const read = await createContracts().media.read.transcript(durableID(ids.project), durableID(ids.asset));
+    expect(read.segments[0]?.tokens.map((token) => token.text)).toEqual(["Alpha", " Bravo.", " Sp", "oken", " ideas."]);
+    expect(read.segments[0]?.tokens.map((token) => token.text).join("")).toBe("Alpha Bravo. Spoken ideas.");
+  });
+
   it("keeps default selection Creator-only and compare-and-swap exact", async () => {
     vi.stubGlobal(
       "fetch",

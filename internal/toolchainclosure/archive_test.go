@@ -1,4 +1,4 @@
-package mediatoolchain
+package toolchainclosure
 
 import (
 	"archive/tar"
@@ -19,12 +19,12 @@ func TestPinnedArchiveTypesAndSafeXZExtraction(t *testing.T) {
 		"https://example.invalid/source.tar.xz": ".tar.xz",
 		"https://example.invalid/source.zip":    ".zip",
 	} {
-		actual, err := sourceArchiveSuffix(sourceURL)
+		actual, err := SourceArchiveSuffix(sourceURL)
 		if err != nil || actual != expected {
 			t.Fatalf("url=%s actual=%s err=%v", sourceURL, actual, err)
 		}
 	}
-	if _, err := sourceArchiveSuffix("https://example.invalid/source.tgz"); err == nil {
+	if _, err := SourceArchiveSuffix("https://example.invalid/source.tgz"); err == nil {
 		t.Fatal("unsupported source archive suffix was accepted")
 	}
 
@@ -35,7 +35,7 @@ func TestPinnedArchiveTypesAndSafeXZExtraction(t *testing.T) {
 		{name: "fixture/empty", content: []byte{}, mode: 0o644},
 	})
 	destination := t.TempDir()
-	root, err := extractSource(archive, destination, "fixture", "configure")
+	root, err := ExtractSource(archive, destination, "fixture", "configure")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestPinnedTarPreservesRegularFileModificationTimes(t *testing.T) {
 		{name: "fixture/configure", content: []byte("#!/bin/sh\n"), mode: 0o755, modified: modified},
 		{name: "fixture/configure.ac", content: []byte("configure input\n"), mode: 0o644, modified: modified},
 	})
-	root, err := extractSource(archive, t.TempDir(), "fixture", "configure")
+	root, err := ExtractSource(archive, t.TempDir(), "fixture", "configure")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestPinnedTarRejectsEscapingEntry(t *testing.T) {
 		{name: "fixture/configure", content: []byte("ok"), mode: 0o755},
 		{name: "../escape", content: []byte("no"), mode: 0o644},
 	})
-	if _, err := extractSource(archive, t.TempDir(), "fixture", "configure"); err == nil ||
+	if _, err := ExtractSource(archive, t.TempDir(), "fixture", "configure"); err == nil ||
 		!strings.Contains(err.Error(), "escaping entry") {
 		t.Fatalf("error=%v", err)
 	}
@@ -88,9 +88,9 @@ func TestPinnedTarIgnoresOnlyExactDeclaredLink(t *testing.T) {
 		{name: "fixture/alias", typeflag: tar.TypeSymlink, linkname: "configure", mode: 0o777},
 	})
 	destination := t.TempDir()
-	root, err := extractSourceIgnoringLinks(
+	root, err := ExtractSourceIgnoringLinks(
 		archive, destination, "fixture", "configure",
-		[]archiveIgnoredLink{{Member: "fixture/alias", Target: "configure"}},
+		[]ArchiveIgnoredLink{{Member: "fixture/alias", Target: "configure"}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -98,9 +98,9 @@ func TestPinnedTarIgnoresOnlyExactDeclaredLink(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(root, "alias")); !os.IsNotExist(err) {
 		t.Fatalf("ignored link was materialized: %v", err)
 	}
-	if _, err := extractSourceIgnoringLinks(
+	if _, err := ExtractSourceIgnoringLinks(
 		archive, t.TempDir(), "fixture", "configure",
-		[]archiveIgnoredLink{{Member: "fixture/alias", Target: "different"}},
+		[]ArchiveIgnoredLink{{Member: "fixture/alias", Target: "different"}},
 	); err == nil {
 		t.Fatal("mismatched ignored link contract was accepted")
 	}
@@ -132,7 +132,7 @@ func TestPinnedZipExtractsOnlyDeclaredMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	destination := t.TempDir()
-	if err := extractZipFiles(archive, destination, []archiveSelection{{
+	if err := ExtractZipFiles(archive, destination, []ArchiveSelection{{
 		Member: "fonts/Regular.ttf", Destination: "bundle/Regular.ttf",
 	}}); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestPinnedZipExtractsOnlyDeclaredMembers(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(destination, "ambient.txt")); !os.IsNotExist(err) {
 		t.Fatalf("ambient entry escaped selection: %v", err)
 	}
-	if err := extractZipFiles(archive, t.TempDir(), []archiveSelection{{
+	if err := ExtractZipFiles(archive, t.TempDir(), []ArchiveSelection{{
 		Member: "fonts/Regular.ttf", Destination: "../escape.ttf",
 	}}); err == nil {
 		t.Fatal("escaping zip destination was accepted")

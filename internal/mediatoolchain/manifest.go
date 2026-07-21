@@ -2,60 +2,56 @@ package mediatoolchain
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 
-	"github.com/PerishCode/open-cut/internal/mediaclosure"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
 const (
-	ManifestSchema                            = 4
-	ManifestName                              = "media-tools.json"
-	LicenseProfileLGPL                        = "lgpl-static+ftl+mit+bsd+ofl-v1"
-	ResourceKindFontBundle                    = "font-bundle"
-	ResourceKindTranscriptionConformanceModel = "transcription-conformance-model"
-	CapabilityProbeV1                         = "probe-v1"
-	CapabilityFrameRGBV1                      = "frame-rgb24-v1"
-	CapabilitySourceProxyV1                   = "source-proxy-webm-vp9-opus-v1"
-	CapabilityRenderInputV1                   = "render-input-matroska-ffv1-pcm-v1"
-	CapabilitySequencePreviewRendererV1       = "sequence-preview-renderer-v1"
-	CapabilitySequenceExportRendererV1        = "sequence-export-renderer-v1"
-	CapabilityLocalTranscriptionV1            = "local-transcription-v1"
-	ConformanceProbeV1                        = "probe-v1"
-	ConformanceFrameRGBV1                     = "frame-rgb24-v1"
-	ConformanceSourceProxyV1                  = "source-proxy-webm-vp9-opus-v1"
-	ConformanceRenderInputV1                  = "render-input-matroska-ffv1-pcm-v1"
-	ConformanceSequencePreviewV1              = "sequence-preview-renderer-v1"
-	ConformanceSequenceExportV1               = "sequence-export-renderer-v1"
-	ConformanceLocalTranscriptionV1           = "local-transcription-v1"
-	FFmpegSourceVersion                       = "8.1.2"
-	FFmpegSourceURL                           = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz"
-	FFmpegSignatureURL                        = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz.asc"
-	FFmpegSourceSHA256                        = "sha256:32faba5ef67340d54724941eae1425580791195312a4fd13bf6f820a2818bf22"
-	LibVPXSourceVersion                       = "1.16.0"
-	LibVPXSourceURL                           = "https://github.com/webmproject/libvpx/archive/v1.16.0/libvpx-1.16.0.tar.gz"
-	LibVPXSourceSHA256                        = "sha256:7a479a3c66b9f5d5542a4c6a1b7d3768a983b1e5c14c60a9396edc9b649e015c"
-	OpusSourceVersion                         = "1.6.1"
-	OpusSourceURL                             = "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz"
-	OpusSourceSHA256                          = "sha256:6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
-	maximumManifestBytes                      = 256 << 10
+	ManifestSchema                      = 5
+	ManifestName                        = "media-tools.json"
+	LicenseProfileLGPL                  = "lgpl-static+ftl+mit+bsd+ofl-v1"
+	ResourceKindFontBundle              = "font-bundle"
+	CapabilityProbeV1                   = "probe-v1"
+	CapabilityFrameRGBV1                = "frame-rgb24-v1"
+	CapabilitySourceProxyV1             = "source-proxy-webm-vp9-opus-v1"
+	CapabilityRenderInputV1             = "render-input-matroska-ffv1-pcm-v1"
+	CapabilitySequencePreviewRendererV1 = "sequence-preview-renderer-v1"
+	CapabilitySequenceExportRendererV1  = "sequence-export-renderer-v1"
+	ConformanceProbeV1                  = "probe-v1"
+	ConformanceFrameRGBV1               = "frame-rgb24-v1"
+	ConformanceSourceProxyV1            = "source-proxy-webm-vp9-opus-v1"
+	ConformanceRenderInputV1            = "render-input-matroska-ffv1-pcm-v1"
+	ConformanceSequencePreviewV1        = "sequence-preview-renderer-v1"
+	ConformanceSequenceExportV1         = "sequence-export-renderer-v1"
+	FFmpegSourceVersion                 = "8.1.2"
+	FFmpegSourceURL                     = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz"
+	FFmpegSignatureURL                  = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz.asc"
+	FFmpegSourceSHA256                  = "sha256:32faba5ef67340d54724941eae1425580791195312a4fd13bf6f820a2818bf22"
+	LibVPXSourceVersion                 = "1.16.0"
+	LibVPXSourceURL                     = "https://github.com/webmproject/libvpx/archive/v1.16.0/libvpx-1.16.0.tar.gz"
+	LibVPXSourceSHA256                  = "sha256:7a479a3c66b9f5d5542a4c6a1b7d3768a983b1e5c14c60a9396edc9b649e015c"
+	OpusSourceVersion                   = "1.6.1"
+	OpusSourceURL                       = "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz"
+	OpusSourceSHA256                    = "sha256:6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
+	maximumManifestBytes                = 256 << 10
 )
+
+// capabilityClosureDomain separates media capability identities from every
+// other toolchain closure the API owns.
+const capabilityClosureDomain = "open-cut/media-capability-closure/v1"
 
 var (
 	ErrUnavailable = errors.New("media toolchain is unavailable")
-	identifier     = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
+	identifier     = toolchainclosure.Identifier
 )
 
 type Manifest struct {
@@ -72,97 +68,35 @@ type Manifest struct {
 	Notices        []NoticeRecord     `json:"notices"`
 }
 
-type SourceRecord struct {
-	ID           string `json:"id"`
-	Version      string `json:"version"`
-	URL          string `json:"url"`
-	SignatureURL string `json:"signatureUrl,omitempty"`
-	SHA256       string `json:"sha256"`
-	License      string `json:"license"`
-}
+// The record and projection shapes are the shared closure mechanism; the media
+// toolchain owns its schema, identity gates and determinism contract, not the
+// machinery that proves declared bytes.
+type SourceRecord = toolchainclosure.SourceRecord
 
 type BuildRecord struct {
-	RecipeSHA256         string               `json:"recipeSha256"`
-	Compiler             string               `json:"compiler"`
-	Configuration        []string             `json:"configuration"`
-	WhisperConfiguration []string             `json:"whisperConfiguration"`
-	Renderer             *RendererBuildRecord `json:"renderer"`
+	RecipeSHA256  string               `json:"recipeSha256"`
+	Compiler      string               `json:"compiler"`
+	Configuration []string             `json:"configuration"`
+	Renderer      *RendererBuildRecord `json:"renderer"`
 }
 
-type ToolRecord struct {
-	ID       string `json:"id"`
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	ByteSize uint64 `json:"byteSize"`
-}
+type ToolRecord = toolchainclosure.ToolRecord
 
-type ResourceRecord struct {
-	ID      string               `json:"id"`
-	Kind    string               `json:"kind"`
-	Version string               `json:"version"`
-	Root    string               `json:"root"`
-	SHA256  string               `json:"sha256"`
-	Files   []ResourceFileRecord `json:"files"`
-}
+type ResourceRecord = toolchainclosure.ResourceRecord
 
-type ResourceFileRecord struct {
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	ByteSize uint64 `json:"byteSize"`
-}
+type ResourceFileRecord = toolchainclosure.ResourceFileRecord
 
-type CapabilityRecord struct {
-	ID                          string   `json:"id"`
-	EntryToolID                 string   `json:"entryToolId"`
-	ToolIDs                     []string `json:"toolIds"`
-	ResourceIDs                 []string `json:"resourceIds"`
-	NoticeIDs                   []string `json:"noticeIds"`
-	ConformanceProfile          string   `json:"conformanceProfile"`
-	ConformanceSuiteSHA256      string   `json:"conformanceSuiteSha256"`
-	ConformanceEvidenceNoticeID string   `json:"conformanceEvidenceNoticeId"`
-	ClosureSHA256               string   `json:"closureSha256"`
-}
+type CapabilityRecord = toolchainclosure.CapabilityRecord
 
-type NoticeRecord struct {
-	ID       string `json:"id"`
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	ByteSize uint64 `json:"byteSize"`
-}
+type NoticeRecord = toolchainclosure.NoticeRecord
 
-type Tool struct {
-	ID       string
-	Path     string
-	SHA256   string
-	ByteSize uint64
-}
+type Tool = toolchainclosure.Tool
 
-type ResourceFile struct {
-	Path     string
-	SHA256   string
-	ByteSize uint64
-}
+type ResourceFile = toolchainclosure.ResourceFile
 
-type Resource struct {
-	ID      string
-	Kind    string
-	Version string
-	Root    string
-	SHA256  string
-	Files   []ResourceFile
-}
+type Resource = toolchainclosure.Resource
 
-type Capability struct {
-	ID                     string
-	Entry                  Tool
-	Tools                  []Tool
-	Resources              []Resource
-	Notices                []NoticeRecord
-	ConformanceProfile     string
-	ConformanceSuiteSHA256 string
-	ConformanceEvidence    NoticeRecord
-	ClosureSHA256          string
-}
+type Capability = toolchainclosure.Capability
 
 type Verified struct {
 	Manifest     Manifest
@@ -188,90 +122,18 @@ func Load(root string, expected target.Target) (Verified, error) {
 	if err != nil {
 		return Verified{}, err
 	}
-	tools := make(map[string]Tool, len(manifest.Tools))
-	for _, record := range manifest.Tools {
-		filename, err := resolveContainedRegular(root, record.Path)
-		if err != nil {
-			return Verified{}, fmt.Errorf("validate media tool %s: %w", record.ID, err)
-		}
-		actualDigest, actualSize, err := digestFile(filename)
-		if err != nil || actualDigest != record.SHA256 || actualSize != record.ByteSize {
-			return Verified{}, fmt.Errorf("validate media tool %s: digest or size mismatch", record.ID)
-		}
-		if expected.Platform != target.Win {
-			toolInfo, statErr := os.Stat(filename)
-			if statErr != nil || toolInfo.Mode().Perm()&0o111 == 0 {
-				return Verified{}, fmt.Errorf("validate media tool %s: executable bit is unavailable", record.ID)
-			}
-		}
-		tools[record.ID] = Tool{ID: record.ID, Path: filename, SHA256: record.SHA256, ByteSize: record.ByteSize}
-	}
-	resources := make(map[string]Resource, len(manifest.Resources))
-	for _, record := range manifest.Resources {
-		resourceRoot, err := resolveContainedDirectory(root, record.Root)
-		if err != nil {
-			return Verified{}, fmt.Errorf("validate media resource %s: %w", record.ID, err)
-		}
-		files := make([]ResourceFile, 0, len(record.Files))
-		for _, declared := range record.Files {
-			relative := path.Join(record.Root, declared.Path)
-			filename, err := resolveContainedRegular(root, relative)
-			if err != nil {
-				return Verified{}, fmt.Errorf("validate media resource %s file %s: %w", record.ID, declared.Path, err)
-			}
-			actualDigest, actualSize, err := digestFile(filename)
-			if err != nil || actualDigest != declared.SHA256 || actualSize != declared.ByteSize {
-				return Verified{}, fmt.Errorf("validate media resource %s file %s: digest or size mismatch", record.ID, declared.Path)
-			}
-			files = append(files, ResourceFile{
-				Path: filename, SHA256: declared.SHA256, ByteSize: declared.ByteSize,
-			})
-		}
-		if err := verifyResourceTree(resourceRoot, record.Files); err != nil {
-			return Verified{}, fmt.Errorf("validate media resource %s: %w", record.ID, err)
-		}
-		resources[record.ID] = Resource{
-			ID: record.ID, Kind: record.Kind, Version: record.Version, Root: resourceRoot,
-			SHA256: record.SHA256, Files: files,
-		}
-	}
-	notices := make(map[string]NoticeRecord, len(manifest.Notices))
-	for _, notice := range manifest.Notices {
-		filename, err := resolveContainedRegular(root, notice.Path)
-		if err != nil {
-			return Verified{}, fmt.Errorf("validate media notice %s: %w", notice.ID, err)
-		}
-		actualDigest, actualSize, err := digestFile(filename)
-		if err != nil || actualDigest != notice.SHA256 || actualSize != notice.ByteSize {
-			return Verified{}, fmt.Errorf("validate media notice %s: digest or size mismatch", notice.ID)
-		}
-		notices[notice.ID] = notice
-	}
-	capabilities := make(map[string]Capability, len(manifest.Capabilities))
-	for _, record := range manifest.Capabilities {
-		capability := Capability{
-			ID: record.ID, Entry: tools[record.EntryToolID],
-			Tools:                  make([]Tool, 0, len(record.ToolIDs)),
-			Resources:              make([]Resource, 0, len(record.ResourceIDs)),
-			Notices:                make([]NoticeRecord, 0, len(record.NoticeIDs)),
-			ConformanceProfile:     record.ConformanceProfile,
-			ConformanceSuiteSHA256: record.ConformanceSuiteSHA256,
-			ConformanceEvidence:    notices[record.ConformanceEvidenceNoticeID],
-			ClosureSHA256:          record.ClosureSHA256,
-		}
-		for _, id := range record.ToolIDs {
-			capability.Tools = append(capability.Tools, tools[id])
-		}
-		for _, id := range record.ResourceIDs {
-			capability.Resources = append(capability.Resources, resources[id])
-		}
-		for _, id := range record.NoticeIDs {
-			capability.Notices = append(capability.Notices, notices[id])
-		}
-		capabilities[record.ID] = capability
+	contents, err := toolchainclosure.Verify(root, expected, "media toolchain", toolchainclosure.Declaration{
+		Tools:        manifest.Tools,
+		Resources:    manifest.Resources,
+		Notices:      manifest.Notices,
+		Capabilities: manifest.Capabilities,
+	})
+	if err != nil {
+		return Verified{}, err
 	}
 	return Verified{
-		Manifest: manifest, Root: root, Tools: tools, Resources: resources, Capabilities: capabilities,
+		Manifest: manifest, Root: root, Tools: contents.Tools,
+		Resources: contents.Resources, Capabilities: contents.Capabilities,
 	}, nil
 }
 
@@ -323,8 +185,6 @@ func validateManifest(manifest Manifest, expected target.Target) error {
 	if !validDigest(manifest.Build.RecipeSHA256) || strings.TrimSpace(manifest.Build.Compiler) == "" ||
 		len(manifest.Build.Compiler) > 4096 || !validLGPLConfiguration(manifest.Build.Configuration) ||
 		!validRecordedConfiguration(manifest.Build.Configuration) ||
-		!validWhisperConfiguration(manifest.Build.WhisperConfiguration, manifest.Target) ||
-		!validRecordedConfiguration(manifest.Build.WhisperConfiguration) ||
 		validateRendererBuildRecord(manifest.Build.Renderer, manifest.Target) != nil {
 		return fmt.Errorf("media toolchain build record is invalid")
 	}
@@ -347,7 +207,7 @@ func validateManifest(manifest Manifest, expected target.Target) error {
 	resources := make(map[string]ResourceRecord, len(manifest.Resources))
 	for _, resource := range manifest.Resources {
 		if !identifier.MatchString(resource.ID) ||
-			(resource.Kind != ResourceKindFontBundle && resource.Kind != ResourceKindTranscriptionConformanceModel) ||
+			resource.Kind != ResourceKindFontBundle ||
 			strings.TrimSpace(resource.Version) != resource.Version || resource.Version == "" ||
 			len(resource.Version) > 128 || !validRelative(resource.Root) || !validDigest(resource.SHA256) ||
 			len(resource.Files) == 0 || len(resource.Files) > 128 {
@@ -463,14 +323,6 @@ func validateCapabilityShape(capability CapabilityRecord, resources map[string]R
 			!slices.Contains(capability.NoticeIDs, RendererRelinkNoticeID) {
 			return fmt.Errorf("sequence preview capability closure is invalid")
 		}
-	case CapabilityLocalTranscriptionV1:
-		if capability.EntryToolID != "whisper-cli" ||
-			!slices.Equal(capability.ToolIDs, []string{"ffmpeg", "ffprobe", "whisper-cli"}) ||
-			len(capability.ResourceIDs) != 1 ||
-			resources[capability.ResourceIDs[0]].Kind != ResourceKindTranscriptionConformanceModel ||
-			!slices.Contains(capability.NoticeIDs, "whisper.cpp-license") {
-			return fmt.Errorf("local transcription capability closure is invalid")
-		}
 	default:
 		return fmt.Errorf("media toolchain capability is unsupported")
 	}
@@ -489,32 +341,17 @@ func capabilityConformanceProfile(id string) (string, bool) {
 		return ConformanceRenderInputV1, true
 	case CapabilitySequencePreviewRendererV1, CapabilitySequenceExportRendererV1:
 		return id, true
-	case CapabilityLocalTranscriptionV1:
-		return ConformanceLocalTranscriptionV1, true
 	default:
 		return "", false
 	}
 }
 
 func strictlySortedUnique(values []string) bool {
-	previous := ""
-	for _, value := range values {
-		if !identifier.MatchString(value) || value <= previous {
-			return false
-		}
-		previous = value
-	}
-	return true
+	return toolchainclosure.StrictlySortedUnique(values)
 }
 
 func resourceClosureDigest(record ResourceRecord) (string, error) {
-	files := make([]mediaclosure.File, len(record.Files))
-	for index, file := range record.Files {
-		files[index] = mediaclosure.File{Path: file.Path, SHA256: file.SHA256, ByteSize: file.ByteSize}
-	}
-	return mediaclosure.ResourceDigest(mediaclosure.Resource{
-		ID: record.ID, Kind: record.Kind, Version: record.Version, Root: record.Root, Files: files,
-	})
+	return toolchainclosure.ResourceClosureDigest(record)
 }
 
 func capabilityClosureDigest(
@@ -523,50 +360,9 @@ func capabilityClosureDigest(
 	resources map[string]ResourceRecord,
 	notices map[string]NoticeRecord,
 ) (string, error) {
-	type item struct {
-		ID       string `json:"id"`
-		SHA256   string `json:"sha256"`
-		ByteSize uint64 `json:"byteSize,omitempty"`
-	}
-	toolItems := make([]item, 0, len(record.ToolIDs))
-	for _, id := range record.ToolIDs {
-		value, exists := tools[id]
-		if !exists {
-			return "", fmt.Errorf("unknown tool %s", id)
-		}
-		toolItems = append(toolItems, item{ID: id, SHA256: value.SHA256, ByteSize: value.ByteSize})
-	}
-	resourceItems := make([]item, 0, len(record.ResourceIDs))
-	for _, id := range record.ResourceIDs {
-		value, exists := resources[id]
-		if !exists {
-			return "", fmt.Errorf("unknown resource %s", id)
-		}
-		resourceItems = append(resourceItems, item{ID: id, SHA256: value.SHA256})
-	}
-	noticeItems := make([]item, 0, len(record.NoticeIDs))
-	for _, id := range record.NoticeIDs {
-		value, exists := notices[id]
-		if !exists {
-			return "", fmt.Errorf("unknown notice %s", id)
-		}
-		noticeItems = append(noticeItems, item{ID: id, SHA256: value.SHA256, ByteSize: value.ByteSize})
-	}
-	return closureDigest("open-cut/media-capability-closure/v1", struct {
-		ID                          string `json:"id"`
-		EntryToolID                 string `json:"entryToolId"`
-		ConformanceProfile          string `json:"conformanceProfile"`
-		ConformanceSuiteSHA256      string `json:"conformanceSuiteSha256"`
-		ConformanceEvidenceNoticeID string `json:"conformanceEvidenceNoticeId"`
-		Tools                       []item `json:"tools"`
-		Resources                   []item `json:"resources"`
-		Notices                     []item `json:"notices"`
-	}{
-		ID: record.ID, EntryToolID: record.EntryToolID,
-		ConformanceProfile: record.ConformanceProfile, ConformanceSuiteSHA256: record.ConformanceSuiteSHA256,
-		ConformanceEvidenceNoticeID: record.ConformanceEvidenceNoticeID,
-		Tools:                       toolItems, Resources: resourceItems, Notices: noticeItems,
-	})
+	return toolchainclosure.CapabilityClosureDigest(
+		capabilityClosureDomain, record, tools, resources, notices,
+	)
 }
 
 func bindManifestClosureDigests(manifest *Manifest) error {
@@ -603,15 +399,7 @@ func bindManifestClosureDigests(manifest *Manifest) error {
 }
 
 func closureDigest(domain string, value any) (string, error) {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	digest := sha256.New()
-	_, _ = digest.Write([]byte(domain))
-	_, _ = digest.Write([]byte{0})
-	_, _ = digest.Write(encoded)
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
+	return toolchainclosure.ClosureDigest(domain, value)
 }
 
 func mediaSourceRecords() []SourceRecord {
@@ -629,7 +417,6 @@ func mediaSourceRecords() []SourceRecord {
 			SHA256: OpusSourceSHA256, License: "BSD-3-Clause",
 		},
 	}
-	result = append(result, whisperSourceRecord())
 	result = append(result, nativeTextSourceRecords()...)
 	return append(result, captionFontSourceRecords()...)
 }
@@ -673,128 +460,29 @@ func validRecordedConfiguration(configuration []string) bool {
 }
 
 func resolveContainedDirectory(root, relative string) (string, error) {
-	if !validRelative(relative) {
-		return "", fmt.Errorf("path is not a clean relative slash path")
-	}
-	candidate := filepath.Join(root, filepath.FromSlash(relative))
-	physical, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", err
-	}
-	if filepath.Clean(physical) != filepath.Clean(candidate) {
-		return "", fmt.Errorf("linked directories are forbidden")
-	}
-	contained, err := filepath.Rel(root, physical)
-	if err != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(contained) {
-		return "", fmt.Errorf("path escapes the API artifact root")
-	}
-	info, err := os.Lstat(physical)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("path is not a directory")
-	}
-	return physical, nil
+	return toolchainclosure.ResolveContainedDirectory(root, relative)
 }
 
 func verifyResourceTree(root string, declared []ResourceFileRecord) error {
-	want := make(map[string]struct{}, len(declared))
-	for _, file := range declared {
-		want[file.Path] = struct{}{}
-	}
-	seen := make(map[string]struct{}, len(declared))
-	err := filepath.WalkDir(root, func(filename string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if filename == root {
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("resource tree contains a linked entry")
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("resource tree contains a non-regular entry")
-		}
-		relative, err := filepath.Rel(root, filename)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
-		if _, exists := want[relative]; !exists {
-			return fmt.Errorf("resource tree contains undeclared file %s", relative)
-		}
-		seen[relative] = struct{}{}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if len(seen) != len(want) {
-		return fmt.Errorf("resource tree is missing a declared file")
-	}
-	return nil
+	return toolchainclosure.VerifyResourceTree(root, declared)
 }
 
 func resolveContainedRegular(root, relative string) (string, error) {
-	if !validRelative(relative) {
-		return "", fmt.Errorf("path is not a clean relative slash path")
-	}
-	candidate := filepath.Join(root, filepath.FromSlash(relative))
-	physical, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", err
-	}
-	if filepath.Clean(physical) != filepath.Clean(candidate) {
-		return "", fmt.Errorf("linked files are forbidden")
-	}
-	contained, err := filepath.Rel(root, physical)
-	if err != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) || filepath.IsAbs(contained) {
-		return "", fmt.Errorf("path escapes the API artifact root")
-	}
-	info, err := os.Lstat(physical)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("path is not a regular file")
-	}
-	return physical, nil
+	return toolchainclosure.ResolveContainedRegular(root, relative)
 }
 
 func digestFile(filename string) (string, uint64, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return "", 0, err
-	}
-	defer file.Close()
-	digest := sha256.New()
-	size, err := io.Copy(digest, file)
-	if err != nil || size <= 0 {
-		return "", 0, fmt.Errorf("digest media tool: %w", err)
-	}
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), uint64(size), nil
+	return toolchainclosure.DigestFile(filename)
 }
 
 func validRelative(value string) bool {
-	return value != "" && !strings.ContainsRune(value, '\\') && !path.IsAbs(value) &&
-		path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../")
+	return toolchainclosure.ValidRelative(value)
 }
 
 func validDigest(value string) bool {
-	if len(value) != 71 || !strings.HasPrefix(value, "sha256:") {
-		return false
-	}
-	_, err := hex.DecodeString(value[7:])
-	return err == nil && value == strings.ToLower(value)
+	return toolchainclosure.ValidDigest(value)
 }
 
 func cleanAbsolute(value string) bool {
-	if value == "" || !filepath.IsAbs(value) || filepath.Clean(value) != value {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return !strings.ContainsRune(value, '\x00')
-	}
-	return true
+	return toolchainclosure.CleanAbsolute(value)
 }

@@ -1,4 +1,4 @@
-package mediatoolchain
+package toolchainclosure
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 // fastRetries keeps the retry policy under test without paying its wall time.
 func fastRetries(t *testing.T) {
 	t.Helper()
-	previous := pinnedSourceRetryDelay
-	pinnedSourceRetryDelay = time.Millisecond
-	t.Cleanup(func() { pinnedSourceRetryDelay = previous })
+	previous := PinnedSourceRetryDelay
+	PinnedSourceRetryDelay = time.Millisecond
+	t.Cleanup(func() { PinnedSourceRetryDelay = previous })
 }
 
 func pinnedSource(t *testing.T, origin string, body []byte) SourceRecord {
@@ -45,7 +45,7 @@ func TestPinnedSourceDownloadRetriesTransientUpstreamAnswers(t *testing.T) {
 	defer server.Close()
 
 	archive := filepath.Join(t.TempDir(), "freetype.tar.gz")
-	if err := ensureSource(context.Background(), archive, pinnedSource(t, server.URL, body)); err != nil {
+	if err := EnsureSource(context.Background(), archive, pinnedSource(t, server.URL, body)); err != nil {
 		t.Fatalf("transient 503 was not retried: %v", err)
 	}
 	if got := attempts.Load(); got != 2 {
@@ -62,7 +62,7 @@ func TestPinnedSourceDownloadDoesNotRetryAMissingPin(t *testing.T) {
 	defer server.Close()
 
 	archive := filepath.Join(t.TempDir(), "freetype.tar.gz")
-	err := ensureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("unused")))
+	err := EnsureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("unused")))
 	if err == nil {
 		t.Fatal("a missing pin was accepted")
 	}
@@ -86,7 +86,7 @@ func TestPinnedSourceDownloadRejectsADigestMismatchWithoutRetrying(t *testing.T)
 	defer server.Close()
 
 	archive := filepath.Join(t.TempDir(), "freetype.tar.gz")
-	err := ensureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("pinned source bytes")))
+	err := EnsureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("pinned source bytes")))
 	if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
 		t.Fatalf("digest mismatch error = %v", err)
 	}
@@ -104,11 +104,11 @@ func TestPinnedSourceDownloadGivesUpAfterBoundedTransientFailures(t *testing.T) 
 	defer server.Close()
 
 	archive := filepath.Join(t.TempDir(), "freetype.tar.gz")
-	err := ensureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("unused")))
+	err := EnsureSource(context.Background(), archive, pinnedSource(t, server.URL, []byte("unused")))
 	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("HTTP %d", http.StatusBadGateway)) {
 		t.Fatalf("bounded retry error = %v", err)
 	}
-	if got := attempts.Load(); got != pinnedSourceAttempts {
-		t.Fatalf("attempts = %d, want %d", got, pinnedSourceAttempts)
+	if got := attempts.Load(); got != PinnedSourceAttempts {
+		t.Fatalf("attempts = %d, want %d", got, PinnedSourceAttempts)
 	}
 }

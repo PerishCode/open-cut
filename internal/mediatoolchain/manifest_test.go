@@ -249,9 +249,8 @@ func fixtureManifest(
 		Sources:        mediaSourceRecords(),
 		Build: BuildRecord{
 			RecipeSHA256: "sha256:" + strings.Repeat("a", 64), Compiler: "fixture-cc 1",
-			Configuration:        fixtureConfiguration(),
-			WhisperConfiguration: fixtureWhisperConfiguration(target.Host()),
-			Renderer:             fixtureRendererBuildRecord(),
+			Configuration: fixtureConfiguration(),
+			Renderer:      fixtureRendererBuildRecord(),
 		},
 		Tools: []ToolRecord{
 			{
@@ -345,14 +344,6 @@ func fixtureConfiguration() []string {
 		"--enable-swresample", "--cc=$cc", "--extra-cflags=-I$deps/include",
 		"--extra-ldflags=-L$deps/lib",
 	}
-}
-
-func fixtureWhisperConfiguration(buildTarget target.Target) []string {
-	configuration, err := whisperConfiguration(buildTarget, "$whisper", "$cc", "$cxx")
-	if err != nil {
-		panic(err)
-	}
-	return configuration
 }
 
 func TestBuildConfigurationNormalizationRemovesEphemeralPaths(t *testing.T) {

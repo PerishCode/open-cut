@@ -12,7 +12,6 @@ func digestRecipe(
 	buildTarget target.Target,
 	compiler string,
 	ffmpegConfiguration, libvpxConfiguration, opusConfiguration []string,
-	whisperConfiguration []string,
 	nativeText NativeTextBuildRecipe,
 	renderer RendererBuildRecord,
 ) (string, error) {
@@ -24,13 +23,12 @@ func digestRecipe(
 		FFmpegConfiguration   []string                      `json:"ffmpegConfiguration"`
 		LibVPXConfiguration   []string                      `json:"libvpxConfiguration"`
 		OpusConfiguration     []string                      `json:"opusConfiguration"`
-		WhisperConfiguration  []string                      `json:"whisperConfiguration"`
 		CaptionFontSelections []captionFontArchiveSelection `json:"captionFontSelections"`
 		NativeText            NativeTextBuildRecipe         `json:"nativeText"`
 		Renderer              RendererBuildRecord           `json:"renderer"`
 	}{
-		5, buildTarget, mediaSourceRecords(), compiler, ffmpegConfiguration,
-		libvpxConfiguration, opusConfiguration, whisperConfiguration,
+		6, buildTarget, mediaSourceRecords(), compiler, ffmpegConfiguration,
+		libvpxConfiguration, opusConfiguration,
 		captionFontSelections(), nativeText, renderer,
 	})
 	if err != nil {

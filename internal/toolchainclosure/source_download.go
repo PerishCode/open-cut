@@ -1,4 +1,4 @@
-package mediatoolchain
+package toolchainclosure
 
 import (
 	"context"
@@ -12,33 +12,33 @@ import (
 	"time"
 )
 
-// pinnedSourceAttempts bounds how often a pinned source download is retried.
+// PinnedSourceAttempts bounds how often a pinned source download is retried.
 // Every byte is verified against the pinned digest, so retrying a transient
 // transport failure cannot weaken the supply chain, and a cold toolchain build
 // costs half an hour - too much to discard because one upstream host answered
 // 503 once. Deterministic answers are never retried: a missing pin or a digest
 // mismatch is a real failure, and retrying would only hide it behind a longer
 // build.
-const pinnedSourceAttempts = 3
+const PinnedSourceAttempts = 3
 
-// pinnedSourceRetryDelay is the first backoff between download attempts.
+// PinnedSourceRetryDelay is the first backoff between download attempts.
 // Variable only so tests can exercise the retry policy without spending the
 // wall time it describes: a test that really waits is a test that makes the
 // suite it lives in too slow to run often.
-var pinnedSourceRetryDelay = 2 * time.Second
+var PinnedSourceRetryDelay = 2 * time.Second
 
-func ensureSource(ctx context.Context, archive string, source SourceRecord) error {
-	if digest, _, err := digestFile(archive); err == nil && digest == source.SHA256 {
+func EnsureSource(ctx context.Context, archive string, source SourceRecord) error {
+	if digest, _, err := DigestFile(archive); err == nil && digest == source.SHA256 {
 		return nil
 	}
-	delay := pinnedSourceRetryDelay
+	delay := PinnedSourceRetryDelay
 	for attempt := 1; ; attempt++ {
 		err := fetchSource(ctx, archive, source)
 		if err == nil {
 			return nil
 		}
 		var transient transientSourceError
-		if !errors.As(err, &transient) || attempt >= pinnedSourceAttempts {
+		if !errors.As(err, &transient) || attempt >= PinnedSourceAttempts {
 			return err
 		}
 		select {
@@ -117,7 +117,7 @@ func fetchSource(ctx context.Context, archive string, source SourceRecord) error
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	digest, _, err := digestFile(temporaryPath)
+	digest, _, err := DigestFile(temporaryPath)
 	if err != nil || digest != source.SHA256 {
 		return fmt.Errorf("pinned %s source digest mismatch", source.ID)
 	}

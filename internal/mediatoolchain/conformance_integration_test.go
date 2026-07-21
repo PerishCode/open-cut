@@ -35,27 +35,6 @@ func TestPinnedMediaToolsProduceClosedConformanceEvidence(t *testing.T) {
 	}
 }
 
-func TestPinnedWhisperProducesClosedTranscriptionEvidence(t *testing.T) {
-	whisper := os.Getenv("OPEN_CUT_TRANSCRIPTION_CONFORMANCE_WHISPER")
-	model := os.Getenv("OPEN_CUT_TRANSCRIPTION_CONFORMANCE_MODEL")
-	mediaRoot := os.Getenv("OPEN_CUT_MEDIA_TOOL_ROOT")
-	if whisper == "" || model == "" || mediaRoot == "" {
-		t.Skip("set transcription conformance whisper, model, and media-tool paths")
-	}
-	observations, err := qualifyLocalTranscriptionCapability(context.Background(), localTranscriptionConformanceInput{
-		WhisperPath: whisper,
-		FFmpegPath:  filepath.Join(mediaRoot, target.Host().ExecutableName("ffmpeg")),
-		FFprobePath: filepath.Join(mediaRoot, target.Host().ExecutableName("ffprobe")),
-		ModelPath:   model,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(observations) != 3 {
-		t.Fatalf("local transcription observations=%d", len(observations))
-	}
-}
-
 func TestPinnedRendererProducesClosedSemanticMatrixEvidence(t *testing.T) {
 	root := os.Getenv("OPEN_CUT_RENDERER_CONFORMANCE_ROOT")
 	if root == "" {

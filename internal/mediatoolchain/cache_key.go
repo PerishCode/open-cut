@@ -62,7 +62,17 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	// decide what the archives and the C toolchain are. Hashing the package
 	// over-approximates - an unrelated edit here invalidates too - but it can
 	// never under-approximate, and it changes rarely.
-	catalog, err := hashDirectory(filepath.Join(repositoryRoot, "internal", "mediatoolchain"))
+	//
+	// toolchainclosure is hashed with it because pinned-source acquisition and
+	// archive extraction live there. Leaving it out would under-approximate:
+	// a change to how archives are unpacked would not invalidate a cache whose
+	// contents that change produced. Note it deliberately does not include
+	// whispertoolchain - that closure now has its own identity, and a whisper
+	// change no longer has any business invalidating the media caches.
+	catalog, err := hashDirectories(
+		filepath.Join(repositoryRoot, "internal", "mediatoolchain"),
+		filepath.Join(repositoryRoot, "internal", "toolchainclosure"),
+	)
 	if err != nil {
 		return CacheKeys{}, fmt.Errorf("hash media catalog: %w", err)
 	}
@@ -105,6 +115,21 @@ func shortDigest(parts ...string) string {
 		digest.Write([]byte{0})
 	}
 	return hex.EncodeToString(digest.Sum(nil))[:32]
+}
+
+// hashDirectories digests several directories as one identity, in the order
+// given, so build logic split across packages still yields a single key.
+func hashDirectories(roots ...string) (string, error) {
+	digest := sha256.New()
+	for _, root := range roots {
+		value, err := hashDirectory(root)
+		if err != nil {
+			return "", err
+		}
+		_, _ = digest.Write([]byte(value))
+		_, _ = digest.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 // hashDirectory digests every regular file under a directory by relative path
