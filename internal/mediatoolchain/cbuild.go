@@ -19,25 +19,22 @@ import (
 // the renderer links against, and the configurations the manifest and recipe
 // digest record.
 type cbuildProducts struct {
-	buildRoot            string
-	sourceRoot           string
-	libVPXRoot           string
-	opusRoot             string
-	whisperRoot          string
-	nativeTextRoots      map[string]string
-	dependencyRoot       string
-	harfBuzzRoot         string
-	probe                string
-	frameDecoder         string
-	whisper              string
-	configuration        []string
-	libVPXConfiguration  []string
-	opusConfiguration    []string
-	whisperConfiguration []string
-	nativeText           NativeTextBuildRecipe
-	compilerVersion      string
-	parallelism          int
-	reused               bool
+	buildRoot           string
+	sourceRoot          string
+	libVPXRoot          string
+	opusRoot            string
+	nativeTextRoots     map[string]string
+	dependencyRoot      string
+	harfBuzzRoot        string
+	probe               string
+	frameDecoder        string
+	configuration       []string
+	libVPXConfiguration []string
+	opusConfiguration   []string
+	nativeText          NativeTextBuildRecipe
+	compilerVersion     string
+	parallelism         int
+	reused              bool
 }
 
 // ensureCBuildTree produces the C toolchain, or keeps the one already there.
@@ -87,7 +84,10 @@ func ensureCBuildTree(
 	if err != nil {
 		return cbuildProducts{}, err
 	}
-	buildLogic, err := hashDirectory(filepath.Join(repositoryRoot, "internal", "mediatoolchain"))
+	buildLogic, err := hashDirectories(
+		filepath.Join(repositoryRoot, "internal", "mediatoolchain"),
+		filepath.Join(repositoryRoot, "internal", "toolchainclosure"),
+	)
 	if err != nil {
 		return cbuildProducts{}, fmt.Errorf("hash media build logic: %w", err)
 	}
@@ -98,15 +98,13 @@ func ensureCBuildTree(
 	sourceRoot := filepath.Join(buildRoot, "ffmpeg-"+FFmpegSourceVersion)
 	dependencyRoot := filepath.Join(buildRoot, "dependencies")
 	harfBuzzRoot := filepath.Join(buildRoot, "harfbuzz-"+HarfBuzzSourceVersion)
-	whisperBinary, whisperErr := preservedWhisperBinary(buildRoot, buildTarget)
 	parallelism := min(max(runtime.NumCPU(), 1), 16)
 
-	if whisperErr == nil {
+	{
 		roots := cbuildRoots{
 			ffmpeg: sourceRoot, libVPX: filepath.Join(buildRoot, "libvpx-"+LibVPXSourceVersion),
 			opus: filepath.Join(buildRoot, "opus-"+OpusSourceVersion), harfBuzz: harfBuzzRoot,
-			dependency: dependencyRoot, whisperSource: preservedWhisperSourceRoot(buildRoot),
-			whisperBinary: whisperBinary, nativeText: preservedNativeTextRoots(buildRoot),
+			dependency: dependencyRoot, nativeText: preservedNativeTextRoots(buildRoot),
 		}
 		material := cbuildReuseMaterial(roots, buildTarget)
 		if reusable, reason := reusableCBuildTree(buildRoot, identity, material); reusable {
@@ -118,14 +116,12 @@ func ensureCBuildTree(
 					harfBuzzRoot:    harfBuzzRoot,
 					libVPXRoot:      filepath.Join(buildRoot, "libvpx-"+LibVPXSourceVersion),
 					opusRoot:        filepath.Join(buildRoot, "opus-"+OpusSourceVersion),
-					whisperRoot:     preservedWhisperSourceRoot(buildRoot),
 					nativeTextRoots: preservedNativeTextRoots(buildRoot),
 					probe:           filepath.Join(sourceRoot, buildTarget.ExecutableName("ffprobe")),
 					frameDecoder:    filepath.Join(sourceRoot, buildTarget.ExecutableName("ffmpeg")),
-					whisper:         whisperBinary,
 					configuration:   stamp.Configuration, libVPXConfiguration: stamp.LibVPXConfiguration,
-					opusConfiguration: stamp.OpusConfiguration, whisperConfiguration: stamp.WhisperConfiguration,
-					nativeText: stamp.NativeText, compilerVersion: stamp.CompilerVersion,
+					opusConfiguration: stamp.OpusConfiguration,
+					nativeText:        stamp.NativeText, compilerVersion: stamp.CompilerVersion,
 					parallelism: parallelism, reused: true,
 				}
 				if missing := preserved.incomplete(); missing != "" {
@@ -138,8 +134,6 @@ func ensureCBuildTree(
 		} else {
 			fmt.Fprintf(stderr, "media toolchain C build: %s\n", reason)
 		}
-	} else {
-		fmt.Fprintf(stderr, "media toolchain C build: %v\n", whisperErr)
 	}
 
 	if err := os.RemoveAll(buildRoot); err != nil {
@@ -163,10 +157,6 @@ func ensureCBuildTree(
 	opusRoot, err := extractSource(
 		archives["libopus"], buildRoot, "opus-"+OpusSourceVersion, "configure",
 	)
-	if err != nil {
-		return cbuildProducts{}, err
-	}
-	whisperRoot, err := extractWhisperSource(archives["whisper.cpp"], buildRoot)
 	if err != nil {
 		return cbuildProducts{}, err
 	}
@@ -238,20 +228,11 @@ func ensureCBuildTree(
 			return cbuildProducts{}, fmt.Errorf("verify %s runtime closure: %w", current.name, err)
 		}
 	}
-	builtWhisper, recordedWhisperConfiguration, err := buildWhisperCLI(
-		ctx, whisperRoot, buildRoot, cmake, compiler, cxx, parallelism, buildTarget, stdout, stderr,
-	)
-	if err != nil {
-		return cbuildProducts{}, err
-	}
-	if err := verifyPackagedExecutableDynamicClosure(builtWhisper); err != nil {
-		return cbuildProducts{}, fmt.Errorf("verify whisper-cli runtime closure: %w", err)
-	}
 	stamp := cbuildStamp{
 		Schema: cbuildStampSchema, Identity: identity,
 		Configuration: recordedConfiguration, LibVPXConfiguration: recordedLibVPXConfiguration,
-		OpusConfiguration: recordedOpusConfiguration, WhisperConfiguration: recordedWhisperConfiguration,
-		NativeText: nativeTextRecipe, CompilerVersion: compilerVersion,
+		OpusConfiguration: recordedOpusConfiguration,
+		NativeText:        nativeTextRecipe, CompilerVersion: compilerVersion,
 	}
 	if err := writeCBuildStamp(buildRoot, stamp); err != nil {
 		return cbuildProducts{}, fmt.Errorf("record C build stamp: %w", err)
@@ -259,12 +240,11 @@ func ensureCBuildTree(
 	return cbuildProducts{
 		buildRoot: buildRoot, sourceRoot: sourceRoot, dependencyRoot: dependencyRoot,
 		harfBuzzRoot: harfBuzzRoot, libVPXRoot: libvpxRoot, opusRoot: opusRoot,
-		whisperRoot: whisperRoot, nativeTextRoots: nativeTextRoots,
-		probe: builtProbe, frameDecoder: builtFrameDecoder,
-		whisper:       builtWhisper,
+		nativeTextRoots: nativeTextRoots,
+		probe:           builtProbe, frameDecoder: builtFrameDecoder,
 		configuration: recordedConfiguration, libVPXConfiguration: recordedLibVPXConfiguration,
-		opusConfiguration: recordedOpusConfiguration, whisperConfiguration: recordedWhisperConfiguration,
-		nativeText: nativeTextRecipe, compilerVersion: compilerVersion,
+		opusConfiguration: recordedOpusConfiguration,
+		nativeText:        nativeTextRecipe, compilerVersion: compilerVersion,
 		parallelism: parallelism,
 	}, nil
 }
@@ -277,8 +257,8 @@ func (products cbuildProducts) incomplete() string {
 	for name, value := range map[string]string{
 		"sourceRoot": products.sourceRoot, "dependencyRoot": products.dependencyRoot,
 		"harfBuzzRoot": products.harfBuzzRoot, "libVPXRoot": products.libVPXRoot,
-		"opusRoot": products.opusRoot, "whisperRoot": products.whisperRoot,
-		"probe": products.probe, "frameDecoder": products.frameDecoder, "whisper": products.whisper,
+		"opusRoot": products.opusRoot,
+		"probe":    products.probe, "frameDecoder": products.frameDecoder,
 		"compilerVersion": products.compilerVersion,
 	} {
 		if value == "" {
@@ -290,7 +270,7 @@ func (products cbuildProducts) incomplete() string {
 			return "nativeTextRoots[" + name + "]"
 		}
 	}
-	if len(products.configuration) == 0 || len(products.whisperConfiguration) == 0 {
+	if len(products.configuration) == 0 {
 		return "recorded build configuration"
 	}
 	return ""

@@ -590,3 +590,37 @@ func newTestWorkScheduler(
 	}
 	return scheduler
 }
+
+// newTestWorkSchedulerWithResources runs media executors alongside non-media
+// work in one scheduler, which is what the transcript pipeline needs: model
+// acquisition and transcription are separate job kinds that must settle in the
+// same queue.
+func newTestWorkSchedulerWithResources(
+	t *testing.T,
+	store *repository.SQLiteProjects,
+	executors []application.MediaJobExecutor,
+	additional []application.WorkJobExecutor,
+	resources []application.ProductResourceRegistration,
+	clock application.Clock,
+	leaseOwner string,
+) *application.WorkScheduler {
+	t.Helper()
+	workExecutors, err := application.NewMediaWorkExecutors(
+		store, executors, application.UUIDv7IdentityGenerator{}, clock,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workExecutors = append(workExecutors, additional...)
+	scheduler, err := application.NewWorkScheduler(
+		store, workExecutors, application.UUIDv7IdentityGenerator{}, clock,
+		application.WorkSchedulerSettings{
+			LeaseOwner: leaseOwner, LeaseDuration: 30 * time.Second,
+			PollInterval: 10 * time.Millisecond, Resources: resources,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scheduler
+}

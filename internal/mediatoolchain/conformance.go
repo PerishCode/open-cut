@@ -95,11 +95,6 @@ func VerifyCapabilities(ctx context.Context, verified Verified) error {
 			}
 		}
 	}
-	if _, exists := verified.Capabilities[CapabilityLocalTranscriptionV1]; exists {
-		if err := verifyLocalTranscriptionConformanceEvidence(ctx, verified, tools, resources); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

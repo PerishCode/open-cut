@@ -325,7 +325,13 @@ Original transcript output is immutable. Corrected wording, paper-edit prose,
 captions, and voice-over text belong to authored project state.
 
 Transcription executes locally. The first engine is a pinned source-built
-`whisper.cpp` executable inside the API sidecar artifact closure. The initial
+`whisper.cpp` executable in its own artifact closure, separate from the media
+toolchain. The two closures are qualified against different contracts: the media
+toolchain must reproduce byte-for-byte across machines, while transcription must
+only produce the same result twice on the same machine. Keeping them in one
+closure forced transcription to inherit a contract it never needed and left no
+way to state that a capability may legitimately use a different backend per
+target. The initial
 profile uses the multilingual Whisper `small` model, automatic language
 detection, original-language transcription, and no translation or speaker
 diarization. Engine version, target backend profile, and model identity are part
@@ -338,13 +344,22 @@ The active signed release's authenticated resource catalog fixes compatible
 model identity, origin, byte size, and SHA-256. The API does not accept an Agent,
 UI, environment, or settings override for those supply-chain fields.
 
-The sidecar registers the transcript executor only when the verified unified
-media catalog contains `local-transcription-v1` and the adjacent authenticated
+The sidecar registers the transcript executor only when the verified whisper
+catalog contains `local-transcription-v1` and the adjacent authenticated
 resource catalog contains the exact compatible multilingual-small entry. The
-engine, FFmpeg, FFprobe, recipe, target, conformance evidence, and test-model
-resource closure form the executor version; the production model entry/content
-digests form the immutable job binding. Neither registry becomes an Agent or
+engine, backend, recipe, target, conformance evidence, and test-model resource
+closure form the executor version; the production model entry/content digests
+form the immutable job binding. The media closure supplies the normalizer rather
+than the engine: transcription still reports unavailable when FFmpeg and FFprobe
+are missing, because arbitrary source audio is normalized to canonical 16 kHz
+mono S16 before whisper is invoked. No registry becomes an Agent or
 runtime-topology surface.
+
+The engine's acceleration backend is per target and part of recorded producer
+identity. Backends differ in the low-order digits of token confidence and in
+nothing else — transcript text and segment timings are unaffected — so a
+transcript produced by one backend stays exact evidence rather than becoming
+stale when the installation moves to another.
 
 A transcript artifact records engine version, model identity and digest,
 language parameters, and input audio fingerprint. Changing any of them produces

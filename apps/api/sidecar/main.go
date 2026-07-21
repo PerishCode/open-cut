@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -22,6 +21,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/mediatoolchain"
 	"github.com/PerishCode/open-cut/internal/productresource"
 	"github.com/PerishCode/open-cut/internal/renderengine"
+	"github.com/PerishCode/open-cut/internal/whispertoolchain"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
@@ -131,9 +131,10 @@ func run(args []string) error {
 	var expectedSequenceExportFont *domain.RenderFontResource
 	var sequenceFrameExecutorVersion string
 	verified, mediaToolsErr := mediatoolchain.LoadForExecutable(executable, target.Host())
+	whisperClosure, whisperErr := whispertoolchain.LoadForExecutable(executable, target.Host())
 	resourceCatalog, resourceCatalogErr := productresource.LoadForExecutable(executable)
 	productStatus, err := service.NewProductStatusFromClosures(
-		verified, mediaToolsErr, resourceCatalog, resourceCatalogErr,
+		verified, mediaToolsErr, whisperClosure, whisperErr, resourceCatalog, resourceCatalogErr,
 	)
 	if err != nil {
 		return err
@@ -207,18 +208,24 @@ func run(args []string) error {
 		sequenceFrameExecutorVersion = verified.Manifest.Version + "/" +
 			application.SequenceFrameSetProfile + "@" + frameCapability.ClosureSHA256 + "@" +
 			verified.Manifest.Build.RecipeSHA256
-		if transcriptCapability, exists := verified.Capabilities[mediatoolchain.CapabilityLocalTranscriptionV1]; exists && resourceCatalogErr == nil && transcriptCatalogCompatible(resourceCatalog) {
+		// The transcript executor spans two closures on purpose: the media
+		// closure supplies the normalizer, the whisper closure supplies the
+		// engine. Its version therefore names the whisper closure only, because
+		// that is what determines the transcription result.
+		transcriptCapability, transcriptCapable := whisperClosure.Capabilities[whispertoolchain.CapabilityLocalTranscriptionV1]
+		if transcriptCapable && whisperErr == nil && resourceCatalogErr == nil &&
+			transcriptCatalogCompatible(resourceCatalog) {
 			models, modelErr := service.NewTranscriptResourceAccess(
 				projects, dataDir, application.ClockFunc(time.Now),
 			)
 			if modelErr != nil {
 				return modelErr
 			}
-			transcriptVersion := verified.Manifest.Version + "/" + application.TranscriptProfile + "@" +
-				transcriptCapability.ClosureSHA256 + "@" + verified.Manifest.Build.RecipeSHA256
+			transcriptVersion := whisperClosure.Manifest.Version + "/" + application.TranscriptProfile + "@" +
+				transcriptCapability.ClosureSHA256 + "@" + whisperClosure.Manifest.Build.RecipeSHA256
 			transcript, transcriptErr := service.NewExternalMediaTranscriptExecutor(
 				sourceAccess, models, tool.Path, proxyTool.Path, transcriptCapability.Entry.Path,
-				transcriptVersion, verified.Manifest.Target.String(),
+				transcriptVersion, whisperClosure.Manifest.Target.String(),
 				filepath.Join(dataDir, "work", "transcript-attempts"), lifecycleProfile(launch.Mode),
 			)
 			if transcriptErr != nil {
@@ -534,114 +541,6 @@ func run(args []string) error {
 			}
 		}
 	}
-}
-
-func runMediaTools(mode string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	switch mode {
-	case "build":
-		repositoryRoot, err := sourceRepositoryRoot()
-		if err != nil {
-			return err
-		}
-		result, err := mediatoolchain.Build(ctx, mediatoolchain.BuildOptions{
-			RepositoryRoot: repositoryRoot, Target: target.Host(), Stdout: os.Stderr, Stderr: os.Stderr,
-		})
-		if err != nil {
-			return fmt.Errorf("build API media artifact closure: %w", err)
-		}
-		executable, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		executable, err = filepath.EvalSymlinks(executable)
-		if err != nil {
-			return err
-		}
-		if err := productresource.Write(filepath.Dir(executable), result.Version, productresource.DefaultResources()); err != nil {
-			return fmt.Errorf("build product resource catalog: %w", err)
-		}
-		return json.NewEncoder(os.Stdout).Encode(result)
-	case "check":
-		executable, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("resolve API executable: %w", err)
-		}
-		verified, err := mediatoolchain.LoadForExecutable(executable, target.Host())
-		if err != nil {
-			return fmt.Errorf("verify API media artifact closure: %w", err)
-		}
-		if err := mediatoolchain.VerifyReleaseBaseline(verified); err != nil {
-			return fmt.Errorf("verify API production media baseline: %w", err)
-		}
-		if err := mediatoolchain.VerifyCapabilities(ctx, verified); err != nil {
-			return fmt.Errorf("verify API media capabilities: %w", err)
-		}
-		if _, err := productresource.LoadForExecutable(executable); err != nil {
-			return fmt.Errorf("verify product resource catalog: %w", err)
-		}
-		probe := verified.Capabilities[mediatoolchain.CapabilityProbeV1].Entry
-		frameDecoder := verified.Capabilities[mediatoolchain.CapabilityFrameRGBV1].Entry
-		proxyEncoder := verified.Capabilities[mediatoolchain.CapabilitySourceProxyV1].Entry
-		renderInput := verified.Capabilities[mediatoolchain.CapabilityRenderInputV1].Entry
-		previewRenderer := verified.Capabilities[mediatoolchain.CapabilitySequencePreviewRendererV1].Entry
-		exportRenderer := verified.Capabilities[mediatoolchain.CapabilitySequenceExportRendererV1].Entry
-		transcriber := verified.Capabilities[mediatoolchain.CapabilityLocalTranscriptionV1].Entry
-		sourceDigests := make([]string, len(verified.Manifest.Sources))
-		for index, source := range verified.Manifest.Sources {
-			sourceDigests[index] = source.ID + "@" + source.SHA256
-		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{
-			"schema": 1, "target": verified.Manifest.Target.String(), "version": verified.Manifest.Version,
-			"probeSha256": probe.SHA256, "frameSha256": frameDecoder.SHA256,
-			"proxySha256": proxyEncoder.SHA256, "renderInputSha256": renderInput.SHA256,
-			"previewRendererSha256": previewRenderer.SHA256,
-			"exportRendererSha256":  exportRenderer.SHA256,
-			"transcriberSha256":     transcriber.SHA256,
-			"releaseProfile":        mediatoolchain.ReleaseBaselineProfile, "sourceSha256": sourceDigests,
-		})
-	default:
-		return fmt.Errorf("usage: api-sidecar media-tools <build|check>")
-	}
-}
-
-func sourceRepositoryRoot() (string, error) {
-	workingDirectory, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	workingDirectory, err = filepath.EvalSymlinks(workingDirectory)
-	if err != nil {
-		return "", err
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	executable, err = filepath.EvalSymlinks(executable)
-	if err != nil {
-		return "", err
-	}
-	for candidate := workingDirectory; ; candidate = filepath.Dir(candidate) {
-		if repositoryMarkers(candidate) && containedPath(candidate, executable) {
-			return candidate, nil
-		}
-		parent := filepath.Dir(candidate)
-		if parent == candidate {
-			break
-		}
-	}
-	return "", fmt.Errorf("API media build requires its source repository working tree")
-}
-
-func repositoryMarkers(root string) bool {
-	for _, name := range []string{"go.mod", "oc-control.json", "pnpm-workspace.yaml"} {
-		if info, err := os.Stat(filepath.Join(root, name)); err != nil || !info.Mode().IsRegular() {
-			return false
-		}
-	}
-	return true
 }
 
 func containedPath(root, candidate string) bool {

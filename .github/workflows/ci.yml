@@ -182,7 +182,15 @@ jobs:
         uses: actions/cache/restore@v4
         continue-on-error: true
         with:
-          path: .tmp/oc-control/media-toolchain/*/source
+          # The whisper closure keeps its own source tree. Only the archive is
+          # cached: a whisper cold build costs seconds, so there is nothing in
+          # its compiled tree worth storing - unlike the codec toolchain, whose
+          # tree exists precisely because rebuilding it costs minutes. Caching
+          # the archive only spares the pinned download, whose failure modes are
+          # upstream rather than local.
+          path: |
+            .tmp/oc-control/media-toolchain/*/source
+            .tmp/oc-control/whisper-toolchain/*/source
           key: ${{ steps.media_cache.outputs.source-key }}
           restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
       - name: Restore compiled media C tree
@@ -257,7 +265,9 @@ jobs:
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
-          path: .tmp/oc-control/media-toolchain/*/source
+          path: |
+            .tmp/oc-control/media-toolchain/*/source
+            .tmp/oc-control/whisper-toolchain/*/source
           key: ${{ steps.media_cache.outputs.source-key }}
       - name: Save compiled media C tree
         if: ${{ success() && github.event_name == 'push' && steps.media_cbuild_restore.outputs.cache-hit != 'true' }}
@@ -409,6 +419,26 @@ jobs:
             OPEN_CUT_ACCEPTANCE_PRODUCTION_MODEL=1 \
             OPEN_CUT_ACCEPTANCE_CDP_ENDPOINT=http://127.0.0.1:41011 \
             go test ./internal/businessacceptance -run '^TestInstalledCreatorToCLI$' -count=1 -v -timeout 40m
+      # The installed scenario above proves the Agent path. This proves the
+      # Creator path, which reaches the transcript through Contracts rather than
+      # the CLI and therefore exercises normalization the Agent surface never
+      # touches. It runs on mac because that is where the accelerated backend
+      # exists; it skips rather than fails when the pinned model is absent.
+      - name: Exercise the Creator transcription pipeline against the pinned model
+        if: matrix.platform == 'mac' && (github.event_name == 'schedule' || github.event_name == 'release' || inputs.production_model)
+        shell: bash
+        working-directory: apps/api
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          model="$(ls ../../.tmp/ci/transcription-model/*.partial 2>/dev/null | head -1 || true)"
+          if [ -z "$model" ]; then
+            echo "pinned transcription model unavailable; the Creator transcription test will skip"
+          else
+            model="$(cd "$(dirname "$model")" && pwd)/$(basename "$model")"
+          fi
+          OPEN_CUT_TRANSCRIPTION_MODEL="${model:-}" \
+            go test ./tests -run '^TestRealTranscriptCommandProducesTranscriptFromBothClosures$' -count=1 -v
       - name: Save pinned transcription model
         if: ${{ always() && matrix.platform == 'mac' && steps.transcription_model_restore.outcome == 'success' && steps.transcription_model_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

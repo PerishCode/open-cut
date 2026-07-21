@@ -79,11 +79,6 @@ func conformanceSuiteDigest(capabilityID string) string {
 			"raw-evaluation-digest-v1", "verified-media-facts-v1",
 			"same-build-target-byte-stable-v1",
 		},
-		CapabilityLocalTranscriptionV1: {
-			"ffmpeg-16khz-mono-s16-normalization-v1", "whisper-json-full-v1",
-			"fixed-thread-greedy-no-fallback-v1", "semantic-repeat-stable-v1",
-			"malformed-model-rejected-v1", fixtureDigest,
-		},
 	}
 	definition, exists := definitions[capabilityID]
 	if !exists {

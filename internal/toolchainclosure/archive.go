@@ -1,4 +1,4 @@
-package mediatoolchain
+package toolchainclosure
 
 import (
 	"archive/tar"
@@ -20,25 +20,25 @@ const (
 	maximumSourceExtractedBytes = int64(2 << 30)
 )
 
-type archiveSelection struct {
+type ArchiveSelection struct {
 	Member      string
 	Destination string
 }
 
-type archiveIgnoredLink struct {
+type ArchiveIgnoredLink struct {
 	Member string
 	Target string
 }
 
-func sourceArchivePath(root string, source SourceRecord) (string, error) {
-	suffix, err := sourceArchiveSuffix(source.URL)
+func SourceArchivePath(root string, source SourceRecord) (string, error) {
+	suffix, err := SourceArchiveSuffix(source.URL)
 	if err != nil {
 		return "", fmt.Errorf("pinned %s source archive type: %w", source.ID, err)
 	}
 	return filepath.Join(root, "source", source.ID+"-"+source.Version+suffix), nil
 }
 
-func sourceArchiveSuffix(sourceURL string) (string, error) {
+func SourceArchiveSuffix(sourceURL string) (string, error) {
 	for _, suffix := range []string{".tar.gz", ".tar.xz", ".zip"} {
 		if strings.HasSuffix(sourceURL, suffix) {
 			return suffix, nil
@@ -47,13 +47,13 @@ func sourceArchiveSuffix(sourceURL string) (string, error) {
 	return "", fmt.Errorf("unsupported archive suffix")
 }
 
-func extractSource(archive, destination, prefix, requiredFile string) (string, error) {
-	return extractSourceIgnoringLinks(archive, destination, prefix, requiredFile, nil)
+func ExtractSource(archive, destination, prefix, requiredFile string) (string, error) {
+	return ExtractSourceIgnoringLinks(archive, destination, prefix, requiredFile, nil)
 }
 
-func extractSourceIgnoringLinks(
+func ExtractSourceIgnoringLinks(
 	archive, destination, prefix, requiredFile string,
-	ignoredLinks []archiveIgnoredLink,
+	ignoredLinks []ArchiveIgnoredLink,
 ) (string, error) {
 	reader, closeReader, err := openTarArchive(archive)
 	if err != nil {
@@ -149,7 +149,7 @@ func extractSourceIgnoringLinks(
 	return root, nil
 }
 
-func extractZipFiles(archive, destination string, selections []archiveSelection) error {
+func ExtractZipFiles(archive, destination string, selections []ArchiveSelection) error {
 	if len(selections) == 0 || len(selections) > 128 {
 		return fmt.Errorf("pinned zip selection is invalid")
 	}

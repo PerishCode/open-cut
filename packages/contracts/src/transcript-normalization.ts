@@ -191,7 +191,7 @@ function normalizeToken(value: unknown, segmentRange: TimeRange): TranscriptToke
   return {
     id: durableID(token.id),
     sourceRange,
-    text: readString(token.text, 1, 512),
+    text: readTokenText(token.text),
     ...(confidenceBasisPoints === undefined ? {} : { confidenceBasisPoints }),
   };
 }
@@ -261,6 +261,16 @@ function canonicalLanguage(value: unknown): string {
 
 function readString(value: unknown, minimum: number, maximum: number): string {
   if (!isString(value, minimum, maximum) || value.trim() !== value) throw new Error("transcript text is invalid");
+  return value;
+}
+
+// Token text is lexical, not display text: whitespace inside it carries word
+// boundaries. Whisper emits leading spaces on most tokens, and the segment check
+// above requires the tokens to concatenate back into the segment exactly, so
+// trimming here would make the two rules contradict each other and reject every
+// real transcript. Only the surrounding segment text is required to be trimmed.
+function readTokenText(value: unknown): string {
+  if (!isString(value, 1, 512)) throw new Error("transcript token text is invalid");
   return value;
 }
 

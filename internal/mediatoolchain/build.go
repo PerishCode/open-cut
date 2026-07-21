@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	toolchainVersion = "ffmpeg-8.1.2-whisper-1.8.6-open-cut.15"
+	toolchainVersion = "ffmpeg-8.1.2-open-cut.16"
 )
 
 type BuildOptions struct {
@@ -28,23 +28,21 @@ type BuildOptions struct {
 }
 
 type BuildResult struct {
-	Schema            int      `json:"schema"`
-	Target            string   `json:"target"`
-	Version           string   `json:"version"`
-	Manifest          string   `json:"manifest"`
-	Probe             string   `json:"probe"`
-	ProbeSHA256       string   `json:"probeSha256"`
-	FrameDecoder      string   `json:"frameDecoder"`
-	FrameSHA256       string   `json:"frameSha256"`
-	ProxyEncoder      string   `json:"proxyEncoder"`
-	ProxySHA256       string   `json:"proxySha256"`
-	Renderer          string   `json:"renderer"`
-	RendererSHA256    string   `json:"rendererSha256"`
-	Transcriber       string   `json:"transcriber"`
-	TranscriberSHA256 string   `json:"transcriberSha256"`
-	SourceSHA256      []string `json:"sourceSha256"`
-	RecipeSHA256      string   `json:"recipeSha256"`
-	Reused            bool     `json:"reused"`
+	Schema         int      `json:"schema"`
+	Target         string   `json:"target"`
+	Version        string   `json:"version"`
+	Manifest       string   `json:"manifest"`
+	Probe          string   `json:"probe"`
+	ProbeSHA256    string   `json:"probeSha256"`
+	FrameDecoder   string   `json:"frameDecoder"`
+	FrameSHA256    string   `json:"frameSha256"`
+	ProxyEncoder   string   `json:"proxyEncoder"`
+	ProxySHA256    string   `json:"proxySha256"`
+	Renderer       string   `json:"renderer"`
+	RendererSHA256 string   `json:"rendererSha256"`
+	SourceSHA256   []string `json:"sourceSha256"`
+	RecipeSHA256   string   `json:"recipeSha256"`
+	Reused         bool     `json:"reused"`
 }
 
 func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
@@ -79,14 +77,12 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry
 		renderer := verified.Tools["open-cut-render"]
-		transcriber := verified.Tools["whisper-cli"]
 		return BuildResult{
 			Schema: 1, Target: options.Target.String(), Version: verified.Manifest.Version,
 			Manifest: filepath.Join(artifactRoot, ManifestName), Probe: probe.Path,
 			ProbeSHA256: probe.SHA256, FrameDecoder: decoder.Path, FrameSHA256: decoder.SHA256,
 			ProxyEncoder: proxy.Path, ProxySHA256: proxy.SHA256,
 			Renderer: renderer.Path, RendererSHA256: renderer.SHA256,
-			Transcriber: transcriber.Path, TranscriberSHA256: transcriber.SHA256,
 			SourceSHA256: sourceDigests(verified.Manifest.Sources),
 			RecipeSHA256: verified.Manifest.Build.RecipeSHA256, Reused: true,
 		}, nil
@@ -114,17 +110,14 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	harfBuzzRoot := products.harfBuzzRoot
 	libvpxRoot := products.libVPXRoot
 	opusRoot := products.opusRoot
-	whisperRoot := products.whisperRoot
 	nativeTextRoots := products.nativeTextRoots
 	builtProbe := products.probe
 	builtFrameDecoder := products.frameDecoder
-	builtWhisper := products.whisper
 	compilerVersion := products.compilerVersion
 	nativeTextRecipe := products.nativeText
 	recordedConfiguration := products.configuration
 	recordedLibVPXConfiguration := products.libVPXConfiguration
 	recordedOpusConfiguration := products.opusConfiguration
-	recordedWhisperConfiguration := products.whisperConfiguration
 
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
@@ -140,16 +133,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := copyRegularFile(builtFrameDecoder, framePath, 0o755); err != nil {
 		return BuildResult{}, err
 	}
-	whisperRelative := filepath.ToSlash(filepath.Join("media", options.Target.ExecutableName("whisper-cli")))
-	whisperPath := filepath.Join(stageRoot, filepath.FromSlash(whisperRelative))
-	if err := copyRegularFile(builtWhisper, whisperPath, 0o755); err != nil {
-		return BuildResult{}, err
-	}
 	fontResource, err := stageCaptionFontBundle(archives, stageRoot)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	whisperResource, err := stageWhisperConformanceModel(whisperRoot, stageRoot)
 	if err != nil {
 		return BuildResult{}, err
 	}
@@ -163,13 +147,8 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	baseNotices, err := stageNotices(
 		sourceRoot, libvpxRoot, opusRoot, stageRoot, compilerVersion,
 		recordedConfiguration, recordedLibVPXConfiguration, recordedOpusConfiguration,
-		recordedWhisperConfiguration,
 		nativeTextRecipe, rendererRecord, options.Target,
 	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-	whisperNotice, err := stageWhisperNotice(whisperRoot, stageRoot)
 	if err != nil {
 		return BuildResult{}, err
 	}
@@ -184,7 +163,6 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	notices := append(append([]NoticeRecord(nil), baseNotices...), fontNotices...)
 	notices = append(notices, nativeTextNotices...)
 	notices = append(notices, rendererNotice)
-	notices = append(notices, whisperNotice)
 	probeDigest, probeSize, err := digestFile(probePath)
 	if err != nil {
 		return BuildResult{}, err
@@ -193,14 +171,9 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err != nil {
 		return BuildResult{}, err
 	}
-	whisperDigest, whisperSize, err := digestFile(whisperPath)
-	if err != nil {
-		return BuildResult{}, err
-	}
 	recipeDigest, err := digestRecipe(
 		options.Target, compilerVersion,
 		recordedConfiguration, recordedLibVPXConfiguration, recordedOpusConfiguration,
-		recordedWhisperConfiguration,
 		nativeTextRecipe, rendererRecord,
 	)
 	if err != nil {
@@ -210,7 +183,6 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		{ID: "ffprobe", Path: probeRelative, SHA256: probeDigest, ByteSize: probeSize},
 		{ID: "ffmpeg", Path: frameRelative, SHA256: frameDigest, ByteSize: frameSize},
 		rendererTool,
-		{ID: "whisper-cli", Path: whisperRelative, SHA256: whisperDigest, ByteSize: whisperSize},
 	}
 	baseCapabilities := baseCapabilityRecords(baseNotices)
 	evidenceNotices, err := stageBaseConformanceEvidence(
@@ -234,28 +206,18 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		notices = append(notices, evidence)
 		rendererCapabilities = append(rendererCapabilities, capability)
 	}
-	transcriptionCapability := localTranscriptionCapabilityRecord(baseNotices, whisperNotice, whisperResource)
-	transcriptionEvidence, err := stageLocalTranscriptionConformanceEvidence(
-		ctx, options.Target, stageRoot, toolRecords, whisperResource, transcriptionCapability,
-	)
-	if err != nil {
-		return BuildResult{}, fmt.Errorf("qualify staged local transcription capability: %w", err)
-	}
-	notices = append(notices, transcriptionEvidence)
 	capabilityRecords := append(baseCapabilities, rendererCapabilities...)
-	capabilityRecords = append(capabilityRecords, transcriptionCapability)
 	manifest := Manifest{
 		Schema: ManifestSchema, Target: options.Target, ToolchainID: "ffmpeg", Version: toolchainVersion,
 		LicenseProfile: LicenseProfileLGPL,
 		Sources:        sources,
 		Build: BuildRecord{
 			RecipeSHA256: recipeDigest, Compiler: compilerVersion,
-			Configuration:        append([]string(nil), recordedConfiguration...),
-			WhisperConfiguration: append([]string(nil), recordedWhisperConfiguration...),
-			Renderer:             &rendererRecord,
+			Configuration: append([]string(nil), recordedConfiguration...),
+			Renderer:      &rendererRecord,
 		},
 		Tools:        toolRecords,
-		Resources:    []ResourceRecord{fontResource, whisperResource},
+		Resources:    []ResourceRecord{fontResource},
 		Capabilities: capabilityRecords,
 		Notices:      notices,
 	}
@@ -286,14 +248,12 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 	proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry
 	renderer := verified.Tools["open-cut-render"]
-	transcriber := verified.Tools["whisper-cli"]
 	return BuildResult{
 		Schema: 1, Target: options.Target.String(), Version: manifest.Version,
 		Manifest: filepath.Join(artifactRoot, ManifestName), Probe: probe.Path,
 		ProbeSHA256: probe.SHA256, FrameDecoder: decoder.Path, FrameSHA256: decoder.SHA256,
 		ProxyEncoder: proxy.Path, ProxySHA256: proxy.SHA256,
 		Renderer: renderer.Path, RendererSHA256: renderer.SHA256,
-		Transcriber: transcriber.Path, TranscriberSHA256: transcriber.SHA256,
 		SourceSHA256: sourceDigests(manifest.Sources), RecipeSHA256: manifest.Build.RecipeSHA256,
 	}, nil
 }
@@ -490,7 +450,7 @@ func stageBaseConformanceEvidence(
 
 func stageNotices(
 	ffmpegRoot, libvpxRoot, opusRoot, stageRoot, compiler string,
-	ffmpegConfiguration, libvpxConfiguration, opusConfiguration, whisperConfiguration []string,
+	ffmpegConfiguration, libvpxConfiguration, opusConfiguration []string,
 	nativeText NativeTextBuildRecipe,
 	renderer RendererBuildRecord,
 	buildTarget target.Target,
@@ -522,17 +482,15 @@ func stageNotices(
 		FFmpegConfiguration   []string                      `json:"ffmpegConfiguration"`
 		LibVPXConfiguration   []string                      `json:"libvpxConfiguration"`
 		OpusConfiguration     []string                      `json:"opusConfiguration"`
-		WhisperConfiguration  []string                      `json:"whisperConfiguration"`
 		CaptionFontSelections []captionFontArchiveSelection `json:"captionFontSelections"`
 		NativeText            NativeTextBuildRecipe         `json:"nativeText"`
 		Renderer              RendererBuildRecord           `json:"renderer"`
 	}{
-		Schema: 5, Target: buildTarget,
+		Schema: 6, Target: buildTarget,
 		Sources: mediaSourceRecords(), Compiler: compiler,
 		FFmpegConfiguration:   ffmpegConfiguration,
 		LibVPXConfiguration:   libvpxConfiguration,
 		OpusConfiguration:     opusConfiguration,
-		WhisperConfiguration:  whisperConfiguration,
 		CaptionFontSelections: captionFontSelections(),
 		NativeText:            nativeText,
 		Renderer:              renderer,

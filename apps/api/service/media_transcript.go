@@ -137,9 +137,16 @@ func (executor *ExternalMediaTranscriptExecutor) Execute(
 	stderr := &boundedBuffer{limit: 256 << 10}
 	err = lifecycle.Run(executionContext, lifecycle.ProcessSpec{
 		Executable: executor.whisper,
+		// No -ng: the engine uses whatever backend its closure was built with.
+		// Forcing CPU here would silently discard the acceleration the whisper
+		// closure was qualified against — on an Apple GPU that is the
+		// difference between transcribing slower than real time and an order of
+		// magnitude faster. Backends differ in the low-order digits of token
+		// confidence and in nothing else; text and timings are unaffected, and
+		// which backend produced a transcript is recorded in its binding.
 		Args: []string{
 			"-m", model, "-f", wavPath, "-l", "auto", "-ojf", "-of", resultPrefix,
-			"-np", "-t", "1", "-p", "1", "-ng", "-nf", "-sow",
+			"-np", "-t", "1", "-p", "1", "-nf", "-sow",
 		},
 		Directory: attemptRoot, Env: executorEnvironment(), Stdout: io.Discard, Stderr: stderr,
 		Profile: executor.profile, Presentation: lifecycle.PresentationHeadless,

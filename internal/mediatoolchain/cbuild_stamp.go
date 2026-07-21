@@ -12,13 +12,13 @@ import (
 
 // cbuildStampName records what the preserved C build tree was produced from.
 // The tree holds the static libraries and headers the renderer links against,
-// plus the FFmpeg and Whisper executables. None of it depends on a single line
+// plus the FFmpeg executables. None of it depends on a single line
 // of the renderer's own Go source, yet a renderer edit used to discard all of
 // it: the build removed the tree unconditionally and spent six minutes
 // recompiling byte-for-byte identical libraries.
 const cbuildStampName = "c-build.stamp.json"
 
-const cbuildStampSchema = 1
+const cbuildStampSchema = 2
 
 // cbuildStamp is deliberately small and exact. It is a reuse hint, never an
 // authority: a stamp that matches only permits skipping work whose outputs are
@@ -31,12 +31,11 @@ type cbuildStamp struct {
 	// digest need them afterwards. Reuse skips the compiling, so they are
 	// carried here rather than recomputed - there is nothing left to recompute
 	// them from.
-	Configuration        []string              `json:"configuration"`
-	LibVPXConfiguration  []string              `json:"libVpxConfiguration"`
-	OpusConfiguration    []string              `json:"opusConfiguration"`
-	WhisperConfiguration []string              `json:"whisperConfiguration"`
-	NativeText           NativeTextBuildRecipe `json:"nativeText"`
-	CompilerVersion      string                `json:"compilerVersion"`
+	Configuration       []string              `json:"configuration"`
+	LibVPXConfiguration []string              `json:"libVpxConfiguration"`
+	OpusConfiguration   []string              `json:"opusConfiguration"`
+	NativeText          NativeTextBuildRecipe `json:"nativeText"`
+	CompilerVersion     string                `json:"compilerVersion"`
 }
 
 // cbuildIdentity is the part a reuse decision compares. Everything in it is
@@ -109,12 +108,10 @@ func cbuildReuseMaterial(roots cbuildRoots, buildTarget target.Target) []string 
 	material := []string{
 		filepath.Join(roots.ffmpeg, buildTarget.ExecutableName("ffprobe")),
 		filepath.Join(roots.ffmpeg, buildTarget.ExecutableName("ffmpeg")),
-		roots.whisperBinary,
 		filepath.Join(roots.dependency, "lib", "libfreetype.a"),
 		filepath.Join(roots.dependency, "lib", "libfribidi.a"),
 		filepath.Join(roots.dependency, "lib", "libharfbuzz.a"),
 		filepath.Join(roots.harfBuzz, "src", "hb.h"),
-		filepath.Join(roots.whisperSource, whisperConformanceModelSource),
 	}
 	// Licence and notice files are staged into the published closure, so a tree
 	// that cannot supply them cannot be reused either.
@@ -124,7 +121,6 @@ func cbuildReuseMaterial(roots cbuildRoots, buildTarget target.Target) []string 
 		filepath.Join(roots.libVPX, "LICENSE"),
 		filepath.Join(roots.libVPX, "PATENTS"),
 		filepath.Join(roots.opus, "COPYING"),
-		filepath.Join(roots.whisperSource, "LICENSE"),
 		filepath.Join(roots.nativeText["freetype"], "LICENSE.TXT"),
 		filepath.Join(roots.nativeText["fribidi"], "COPYING"),
 		filepath.Join(roots.harfBuzz, "COPYING"),
@@ -136,14 +132,12 @@ func cbuildReuseMaterial(roots cbuildRoots, buildTarget target.Target) []string 
 
 // cbuildRoots names the directories a preserved tree is addressed through.
 type cbuildRoots struct {
-	ffmpeg        string
-	libVPX        string
-	opus          string
-	harfBuzz      string
-	dependency    string
-	whisperSource string
-	whisperBinary string
-	nativeText    map[string]string
+	ffmpeg     string
+	libVPX     string
+	opus       string
+	harfBuzz   string
+	dependency string
+	nativeText map[string]string
 }
 
 func readCBuildStamp(buildRoot string) (cbuildStamp, error) {
@@ -156,36 +150,6 @@ func readCBuildStamp(buildRoot string) (cbuildStamp, error) {
 		return cbuildStamp{}, err
 	}
 	return stamp, nil
-}
-
-// preservedWhisperBinary resolves the whisper executable a previous build left
-// behind. CMake places it in one of two layouts, and an ambiguous tree is
-// treated as no tree at all rather than guessed at.
-func preservedWhisperBinary(buildRoot string, buildTarget target.Target) (string, error) {
-	whisperBuildRoot := filepath.Join(buildRoot, "whisper")
-	name := buildTarget.ExecutableName("whisper-cli")
-	found := ""
-	for _, candidate := range []string{
-		filepath.Join(whisperBuildRoot, "bin", name),
-		filepath.Join(whisperBuildRoot, "bin", "Release", name),
-	} {
-		info, err := os.Lstat(candidate)
-		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
-			continue
-		}
-		if found != "" {
-			return "", fmt.Errorf("preserved whisper build is ambiguous")
-		}
-		found = candidate
-	}
-	if found == "" {
-		return "", fmt.Errorf("no preserved whisper build")
-	}
-	return found, nil
-}
-
-func preservedWhisperSourceRoot(buildRoot string) string {
-	return filepath.Join(buildRoot, "whisper.cpp-"+WhisperSourceVersion)
 }
 
 func preservedNativeTextRoots(buildRoot string) map[string]string {
