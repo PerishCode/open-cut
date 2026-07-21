@@ -3,6 +3,7 @@ package mediatoolchain
 import (
 	"context"
 	"fmt"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"io"
 	"os"
 	"path/filepath"
@@ -78,8 +79,8 @@ func runRendererHelperSmoke(
 	}
 	executionContext, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	var diagnostic rendererBoundedBuffer
-	diagnostic.limit = 64 << 10
+	var diagnostic toolchainclosure.BoundedBuffer
+	diagnostic.Limit = 64 << 10
 	if err := lifecycle.Run(executionContext, lifecycle.ProcessSpec{
 		Executable: executable, Args: []string{"--execution", executionPath}, Directory: attemptRoot,
 		Env: []string{"LANG=C"}, Stdin: nil, Stdout: io.Discard, Stderr: &diagnostic,
@@ -87,7 +88,7 @@ func runRendererHelperSmoke(
 		ContainProcessTree: true, TerminationGrace: 5 * time.Second,
 	}); err != nil {
 		detail := strings.TrimSpace(diagnostic.String())
-		if diagnostic.exceeded {
+		if diagnostic.Exceeded {
 			detail += " [diagnostic truncated]"
 		}
 		if detail == "" {

@@ -1,4 +1,4 @@
-package mediatoolchain
+package cbuild
 
 import (
 	"context"
@@ -24,7 +24,7 @@ type NativeTextBuildRecipe struct {
 	HarfBuzz []string `json:"harfBuzz"`
 }
 
-func nativeTextSourceRecords() []SourceRecord {
+func NativeTextSourceRecords() []SourceRecord {
 	return []SourceRecord{
 		{
 			ID: "freetype", Version: FreeTypeSourceVersion,
@@ -47,7 +47,7 @@ func nativeTextSourceRecords() []SourceRecord {
 	}
 }
 
-func stageNativeTextNotices(roots map[string]string, stageRoot string) ([]NoticeRecord, error) {
+func StageNativeTextNotices(roots map[string]string, stageRoot string) ([]NoticeRecord, error) {
 	definitions := []struct{ id, source, relative string }{
 		{"freetype-license", filepath.Join(roots["freetype"], "LICENSE.TXT"), "licenses/media/FREETYPE-LICENSE.txt"},
 		{"freetype-ftl", filepath.Join(roots["freetype"], "docs", "FTL.TXT"), "licenses/media/FREETYPE-FTL.txt"},
@@ -115,7 +115,7 @@ func buildStaticNativeTextDependencies(
 	if err != nil {
 		return NativeTextBuildRecipe{}, err
 	}
-	friBidi, err := buildFriBidi(
+	friBidi, err := BuildFriBidi(
 		ctx, roots["fribidi"], prefix, compiler, shell, makeTool, parallelism, stdout, stderr,
 	)
 	if err != nil {
@@ -165,7 +165,7 @@ func buildFreeType(
 	return configuration, nil
 }
 
-func buildFriBidi(
+func BuildFriBidi(
 	ctx context.Context,
 	sourceRoot, prefix, compiler, shell, makeTool string,
 	parallelism int,

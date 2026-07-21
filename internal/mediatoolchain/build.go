@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
-	"github.com/PerishCode/open-cut/utils/environment"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -51,7 +51,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 	repositoryRoot, err = filepath.EvalSymlinks(repositoryRoot)
-	if err != nil || !repositoryMarker(repositoryRoot) {
+	if err != nil || !cbuild.RepositoryMarker(repositoryRoot) {
 		return BuildResult{}, fmt.Errorf("media toolchain build requires an open-cut repository root")
 	}
 	if options.Target.Validate() != nil || options.Target != target.Host() {
@@ -100,24 +100,27 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		}
 		archives[source.ID] = archive
 	}
-	products, err := ensureCBuildTree(ctx, repositoryRoot, workspace, archives, options.Target, stdout, stderr)
+	products, err := cbuild.EnsureTree(ctx, cbuild.Options{
+		RepositoryRoot: repositoryRoot, Workspace: workspace, Archives: archives,
+		Target: options.Target, ToolchainVersion: toolchainVersion, Stdout: stdout, Stderr: stderr,
+	})
 	if err != nil {
 		return BuildResult{}, err
 	}
-	buildRoot := products.buildRoot
-	sourceRoot := products.sourceRoot
-	dependencyRoot := products.dependencyRoot
-	harfBuzzRoot := products.harfBuzzRoot
-	libvpxRoot := products.libVPXRoot
-	opusRoot := products.opusRoot
-	nativeTextRoots := products.nativeTextRoots
-	builtProbe := products.probe
-	builtFrameDecoder := products.frameDecoder
-	compilerVersion := products.compilerVersion
-	nativeTextRecipe := products.nativeText
-	recordedConfiguration := products.configuration
-	recordedLibVPXConfiguration := products.libVPXConfiguration
-	recordedOpusConfiguration := products.opusConfiguration
+	buildRoot := products.BuildRoot
+	sourceRoot := products.SourceRoot
+	dependencyRoot := products.DependencyRoot
+	harfBuzzRoot := products.HarfBuzzRoot
+	libvpxRoot := products.LibVPXRoot
+	opusRoot := products.OpusRoot
+	nativeTextRoots := products.NativeTextRoots
+	builtProbe := products.Probe
+	builtFrameDecoder := products.FrameDecoder
+	compilerVersion := products.CompilerVersion
+	nativeTextRecipe := products.NativeText
+	recordedConfiguration := products.Configuration
+	recordedLibVPXConfiguration := products.LibVPXConfiguration
+	recordedOpusConfiguration := products.OpusConfiguration
 
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
@@ -156,7 +159,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err != nil {
 		return BuildResult{}, err
 	}
-	nativeTextNotices, err := stageNativeTextNotices(nativeTextRoots, stageRoot)
+	nativeTextNotices, err := cbuild.StageNativeTextNotices(nativeTextRoots, stageRoot)
 	if err != nil {
 		return BuildResult{}, err
 	}
@@ -258,116 +261,6 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	}, nil
 }
 
-func normalizeBuildConfiguration(
-	configuration []string,
-	buildRoot string,
-	dependencyRoot string,
-	compiler string,
-) []string {
-	result := make([]string, len(configuration))
-	replacements := []struct{ actual, token string }{
-		{dependencyRoot, "$deps"},
-		{shellBuildPath(dependencyRoot), "$deps"},
-		{buildRoot, "$build"},
-		{shellBuildPath(buildRoot), "$build"},
-		{compiler, "$cc"},
-		{shellBuildPath(compiler), "$cc"},
-	}
-	for index, value := range configuration {
-		for _, replacement := range replacements {
-			value = strings.ReplaceAll(value, replacement.actual, replacement.token)
-		}
-		result[index] = value
-	}
-	return result
-}
-
-func buildLibVPX(
-	ctx context.Context,
-	sourceRoot, prefix, compiler, shell, makeTool string,
-	parallelism int,
-	buildTarget target.Target,
-	stdout, stderr io.Writer,
-) ([]string, error) {
-	configuration, err := libVPXConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix), buildTarget)
-	if err != nil {
-		return nil, err
-	}
-	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{"CC": shellBuildPath(compiler)})
-	if err := runConfigure(
-		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
-		sourceRoot, buildEnvironment, stdout, stderr,
-	); err != nil {
-		return nil, fmt.Errorf("configure pinned libvpx: %w", err)
-	}
-	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {
-		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-			Executable: makeTool, Args: arguments, Directory: sourceRoot,
-			Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-			Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-		}); err != nil {
-			return nil, fmt.Errorf("build pinned libvpx: %w", err)
-		}
-	}
-	return configuration, nil
-}
-
-func libVPXTarget(buildTarget target.Target) (string, error) {
-	switch buildTarget {
-	case target.Target{Platform: target.Mac, Arch: target.ARM64}:
-		return "arm64-darwin23-gcc", nil
-	case target.Target{Platform: target.Mac, Arch: target.X64}:
-		return "x86_64-darwin17-gcc", nil
-	case target.Target{Platform: target.Linux, Arch: target.ARM64}:
-		return "arm64-linux-gcc", nil
-	case target.Target{Platform: target.Linux, Arch: target.X64}:
-		return "x86_64-linux-gcc", nil
-	case target.Target{Platform: target.Win, Arch: target.ARM64}:
-		return "arm64-win64-gcc", nil
-	case target.Target{Platform: target.Win, Arch: target.X64}:
-		return "x86_64-win64-gcc", nil
-	default:
-		return "", fmt.Errorf("libvpx target is unsupported")
-	}
-}
-
-func buildOpus(
-	ctx context.Context,
-	sourceRoot, prefix, compiler, shell, makeTool string,
-	parallelism int,
-	stdout, stderr io.Writer,
-) ([]string, error) {
-	configuration := opusConfiguration(shellBuildPath(sourceRoot), shellBuildPath(prefix))
-	buildEnvironment := environment.Merge(os.Environ(), nil, map[string]string{
-		"CC":     shellBuildPath(compiler),
-		"CFLAGS": "-O2 -ffile-prefix-map=" + shellBuildPath(sourceRoot) + "=.",
-	})
-	if err := runConfigure(
-		ctx, shell, filepath.Join(sourceRoot, "configure"), configuration,
-		sourceRoot, buildEnvironment, stdout, stderr,
-	); err != nil {
-		return nil, fmt.Errorf("configure pinned libopus: %w", err)
-	}
-	for _, arguments := range [][]string{{"-j", fmt.Sprint(parallelism)}, {"install"}} {
-		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-			Executable: makeTool, Args: arguments, Directory: sourceRoot,
-			Env: buildEnvironment, Stdout: stdout, Stderr: stderr,
-			Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-		}); err != nil {
-			return nil, fmt.Errorf("build pinned libopus: %w", err)
-		}
-	}
-	return configuration, nil
-}
-
-func opusConfiguration(sourceRoot, prefix string) []string {
-	return []string{
-		"--prefix=" + prefix, "--disable-shared", "--enable-static", "--disable-doc",
-		"--disable-extra-programs", "--enable-fixed-point", "--disable-asm", "--disable-rtcd", "--disable-intrinsics",
-		"--disable-dependency-tracking",
-	}
-}
-
 func sourceDigests(sources []SourceRecord) []string {
 	result := make([]string, len(sources))
 	for index, source := range sources {
@@ -451,7 +344,7 @@ func stageBaseConformanceEvidence(
 func stageNotices(
 	ffmpegRoot, libvpxRoot, opusRoot, stageRoot, compiler string,
 	ffmpegConfiguration, libvpxConfiguration, opusConfiguration []string,
-	nativeText NativeTextBuildRecipe,
+	nativeText cbuild.NativeTextBuildRecipe,
 	renderer RendererBuildRecord,
 	buildTarget target.Target,
 ) ([]NoticeRecord, error) {
@@ -483,7 +376,7 @@ func stageNotices(
 		LibVPXConfiguration   []string                      `json:"libvpxConfiguration"`
 		OpusConfiguration     []string                      `json:"opusConfiguration"`
 		CaptionFontSelections []captionFontArchiveSelection `json:"captionFontSelections"`
-		NativeText            NativeTextBuildRecipe         `json:"nativeText"`
+		NativeText            cbuild.NativeTextBuildRecipe  `json:"nativeText"`
 		Renderer              RendererBuildRecord           `json:"renderer"`
 	}{
 		Schema: 6, Target: buildTarget,
@@ -544,40 +437,7 @@ func publishStage(stageRoot, artifactRoot string, manifest Manifest) error {
 }
 
 func copyRegularFile(source, destination string, mode os.FileMode) error {
-	input, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer input.Close()
-	info, err := input.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("media toolchain source file is not regular")
-	}
-	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(destination), ".media-stage-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(mode); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := io.Copy(temporary, input); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporaryPath, destination)
+	return toolchainclosure.CopyRegularFile(source, destination, mode)
 }
 
 // inspectReuse decides whether the built closure beside the API executable can

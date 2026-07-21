@@ -2,6 +2,7 @@ package mediatoolchain
 
 import (
 	"context"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,9 @@ func fingerprintRepositoryRoot(t *testing.T) string {
 // dependencies that view must include.
 func TestRendererFingerprintCoversItsTransitiveDependencies(t *testing.T) {
 	root := fingerprintRepositoryRoot(t)
-	entries, err := rendererFingerprintInputs(context.Background(), root)
+	entries, err := toolchainclosure.FingerprintInputs(
+		context.Background(), root, RendererBuildTag, RendererBuildPackage,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

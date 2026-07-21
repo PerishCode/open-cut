@@ -1,4 +1,4 @@
-package mediatoolchain
+package cbuild
 
 import (
 	"encoding/json"
@@ -34,7 +34,7 @@ type cbuildStamp struct {
 	Configuration       []string              `json:"configuration"`
 	LibVPXConfiguration []string              `json:"libVpxConfiguration"`
 	OpusConfiguration   []string              `json:"opusConfiguration"`
-	NativeText          NativeTextBuildRecipe `json:"nativeText"`
+	NativeText          NativeTextBuildRecipe `json:"NativeText"`
 	CompilerVersion     string                `json:"compilerVersion"`
 }
 
@@ -121,8 +121,8 @@ func cbuildReuseMaterial(roots cbuildRoots, buildTarget target.Target) []string 
 		filepath.Join(roots.libVPX, "LICENSE"),
 		filepath.Join(roots.libVPX, "PATENTS"),
 		filepath.Join(roots.opus, "COPYING"),
-		filepath.Join(roots.nativeText["freetype"], "LICENSE.TXT"),
-		filepath.Join(roots.nativeText["fribidi"], "COPYING"),
+		filepath.Join(roots.NativeText["freetype"], "LICENSE.TXT"),
+		filepath.Join(roots.NativeText["fribidi"], "COPYING"),
 		filepath.Join(roots.harfBuzz, "COPYING"),
 	} {
 		material = append(material, notice)
@@ -137,7 +137,7 @@ type cbuildRoots struct {
 	opus       string
 	harfBuzz   string
 	dependency string
-	nativeText map[string]string
+	NativeText map[string]string
 }
 
 func readCBuildStamp(buildRoot string) (cbuildStamp, error) {

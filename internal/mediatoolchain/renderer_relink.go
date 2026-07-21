@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/PerishCode/open-cut/utils/environment"
@@ -44,32 +46,6 @@ type RendererSourceFile struct {
 	Path     string `json:"path"`
 	SHA256   string `json:"sha256"`
 	ByteSize uint64 `json:"byteSize"`
-}
-
-type rendererGoPackage struct {
-	Dir        string
-	ImportPath string
-	Standard   bool
-	GoFiles    []string
-	CgoFiles   []string
-	CFiles     []string
-	CXXFiles   []string
-	HFiles     []string
-	SFiles     []string
-	EmbedFiles []string
-	Module     *rendererGoModule
-}
-
-type rendererGoModule struct {
-	Path      string
-	Version   string
-	Dir       string
-	GoMod     string
-	GoVersion string
-	Sum       string
-	GoModSum  string
-	Main      bool
-	Replace   *rendererGoModule
 }
 
 func buildRendererRelinkKit(
@@ -167,7 +143,7 @@ func rendererSourceGraph(
 	ctx context.Context,
 	repositoryRoot, dependencyRoot, harfBuzzRoot string,
 	stdout, stderr io.Writer,
-) ([]rendererGoPackage, []rendererGoModule, error) {
+) ([]toolchainclosure.GoPackage, []toolchainclosure.GoModule, error) {
 	goTool, err := tool.Resolve("go")
 	if err != nil {
 		return nil, nil, err
@@ -177,8 +153,8 @@ func rendererSourceGraph(
 		"-I" + filepath.Join(dependencyRoot, "include", "fribidi"),
 		"-I" + filepath.Join(harfBuzzRoot, "src"),
 	}
-	var output rendererBoundedBuffer
-	output.limit = maximumRendererListBytes
+	var output toolchainclosure.BoundedBuffer
+	output.Limit = maximumRendererListBytes
 	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 		Executable: goTool,
 		Args: []string{
@@ -188,14 +164,14 @@ func rendererSourceGraph(
 		Env:       rendererBuildEnvironment(cflags, rendererNativeLinkFlags(dependencyRoot, target.Host())),
 		Stdout:    &output, Stderr: stderr, Profile: lifecycle.ProfileDevelopment,
 		Presentation: lifecycle.PresentationHeadless,
-	}); err != nil || output.exceeded {
+	}); err != nil || output.Exceeded {
 		return nil, nil, fmt.Errorf("inspect renderer source graph: %w", err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
-	packages := make([]rendererGoPackage, 0)
-	moduleByPath := make(map[string]rendererGoModule)
+	packages := make([]toolchainclosure.GoPackage, 0)
+	moduleByPath := make(map[string]toolchainclosure.GoModule)
 	for {
-		var current rendererGoPackage
+		var current toolchainclosure.GoPackage
 		err := decoder.Decode(&current)
 		if err == io.EOF {
 			break
@@ -217,17 +193,17 @@ func rendererSourceGraph(
 	if len(packages) == 0 {
 		return nil, nil, fmt.Errorf("renderer source graph is empty")
 	}
-	slices.SortFunc(packages, func(left, right rendererGoPackage) int {
+	slices.SortFunc(packages, func(left, right toolchainclosure.GoPackage) int {
 		return strings.Compare(left.ImportPath, right.ImportPath)
 	})
-	modules := make([]rendererGoModule, 0, len(moduleByPath))
+	modules := make([]toolchainclosure.GoModule, 0, len(moduleByPath))
 	for _, current := range moduleByPath {
 		if current.Path == "" || current.Version == "" || current.Sum == "" || current.GoModSum == "" {
 			return nil, nil, fmt.Errorf("renderer module closure is incomplete")
 		}
 		modules = append(modules, current)
 	}
-	slices.SortFunc(modules, func(left, right rendererGoModule) int {
+	slices.SortFunc(modules, func(left, right toolchainclosure.GoModule) int {
 		return strings.Compare(left.Path, right.Path)
 	})
 	_ = stdout
@@ -236,8 +212,8 @@ func rendererSourceGraph(
 
 func stageRendererModuleSource(
 	repositoryRoot, destination string,
-	packages []rendererGoPackage,
-	modules []rendererGoModule,
+	packages []toolchainclosure.GoPackage,
+	modules []toolchainclosure.GoModule,
 ) error {
 	seen := make(map[string]struct{})
 	for _, current := range packages {
@@ -284,7 +260,7 @@ func stageRendererModuleSource(
 	return atomicfile.Write(filepath.Join(destination, "go.sum"), []byte(goSum.String()), 0o600)
 }
 
-func rendererPackageFiles(current rendererGoPackage) []string {
+func rendererPackageFiles(current toolchainclosure.GoPackage) []string {
 	result := make([]string, 0, len(current.GoFiles)+len(current.CgoFiles)+len(current.CFiles)+
 		len(current.CXXFiles)+len(current.HFiles)+len(current.SFiles)+len(current.EmbedFiles))
 	for _, source := range [][]string{
@@ -323,10 +299,10 @@ func stageRendererNativeInputs(dependencyRoot, harfBuzzRoot, destination string)
 }
 
 func stageRendererNativeSources(archives map[string]string, destination string) error {
-	if len(archives) != len(nativeTextSourceRecords()) {
+	if len(archives) != len(cbuild.NativeTextSourceRecords()) {
 		return fmt.Errorf("renderer corresponding-source set is invalid")
 	}
-	for _, source := range nativeTextSourceRecords() {
+	for _, source := range cbuild.NativeTextSourceRecords() {
 		archive, exists := archives[source.ID]
 		if !exists {
 			return fmt.Errorf("renderer corresponding source %s is unavailable", source.ID)
@@ -486,25 +462,4 @@ func digestRendererKitFile(filename string) (string, uint64, error) {
 		return "", 0, fmt.Errorf("digest renderer kit file: %w", err)
 	}
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), uint64(written), nil
-}
-
-type rendererBoundedBuffer struct {
-	bytes.Buffer
-	limit    int
-	exceeded bool
-}
-
-func (buffer *rendererBoundedBuffer) Write(value []byte) (int, error) {
-	if buffer.exceeded {
-		return len(value), nil
-	}
-	remaining := buffer.limit - buffer.Len()
-	if len(value) > remaining {
-		buffer.exceeded = true
-		if remaining > 0 {
-			_, _ = buffer.Buffer.Write(value[:remaining])
-		}
-		return len(value), nil
-	}
-	return buffer.Buffer.Write(value)
 }

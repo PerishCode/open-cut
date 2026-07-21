@@ -1,4 +1,4 @@
-package mediatoolchain
+package cbuild
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestNativeTextSourcesArePinned(t *testing.T) {
-	sources := nativeTextSourceRecords()
+	sources := NativeTextSourceRecords()
 	if len(sources) != 3 || sources[0].ID != "freetype" || sources[1].ID != "fribidi" ||
 		sources[2].ID != "harfbuzz" {
 		t.Fatalf("sources=%+v", sources)
@@ -30,7 +30,7 @@ func TestPinnedNativeTextArchivesBuildStaticClosure(t *testing.T) {
 		t.Skip("OPEN_CUT_RENDERER_ASSET_ROOT is not configured")
 	}
 	archives := make(map[string]string, 3)
-	for _, source := range nativeTextSourceRecords() {
+	for _, source := range NativeTextSourceRecords() {
 		filename := filepath.Join(assetRoot, filepath.Base(source.URL))
 		if digest, _, err := digestFile(filename); err != nil || digest != source.SHA256 {
 			t.Fatalf("source=%s digest=%s err=%v", source.ID, digest, err)

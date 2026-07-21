@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/target"
 )
@@ -32,16 +33,6 @@ const (
 	ConformanceRenderInputV1            = "render-input-matroska-ffv1-pcm-v1"
 	ConformanceSequencePreviewV1        = "sequence-preview-renderer-v1"
 	ConformanceSequenceExportV1         = "sequence-export-renderer-v1"
-	FFmpegSourceVersion                 = "8.1.2"
-	FFmpegSourceURL                     = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz"
-	FFmpegSignatureURL                  = "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.gz.asc"
-	FFmpegSourceSHA256                  = "sha256:32faba5ef67340d54724941eae1425580791195312a4fd13bf6f820a2818bf22"
-	LibVPXSourceVersion                 = "1.16.0"
-	LibVPXSourceURL                     = "https://github.com/webmproject/libvpx/archive/v1.16.0/libvpx-1.16.0.tar.gz"
-	LibVPXSourceSHA256                  = "sha256:7a479a3c66b9f5d5542a4c6a1b7d3768a983b1e5c14c60a9396edc9b649e015c"
-	OpusSourceVersion                   = "1.6.1"
-	OpusSourceURL                       = "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz"
-	OpusSourceSHA256                    = "sha256:6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
 	maximumManifestBytes                = 256 << 10
 )
 
@@ -183,7 +174,7 @@ func validateManifest(manifest Manifest, expected target.Target) error {
 		return fmt.Errorf("media toolchain source record is invalid")
 	}
 	if !validDigest(manifest.Build.RecipeSHA256) || strings.TrimSpace(manifest.Build.Compiler) == "" ||
-		len(manifest.Build.Compiler) > 4096 || !validLGPLConfiguration(manifest.Build.Configuration) ||
+		len(manifest.Build.Compiler) > 4096 || !cbuild.ValidLGPLConfiguration(manifest.Build.Configuration) ||
 		!validRecordedConfiguration(manifest.Build.Configuration) ||
 		validateRendererBuildRecord(manifest.Build.Renderer, manifest.Target) != nil {
 		return fmt.Errorf("media toolchain build record is invalid")
@@ -403,50 +394,8 @@ func closureDigest(domain string, value any) (string, error) {
 }
 
 func mediaSourceRecords() []SourceRecord {
-	result := []SourceRecord{
-		{
-			ID: "ffmpeg", Version: FFmpegSourceVersion, URL: FFmpegSourceURL,
-			SignatureURL: FFmpegSignatureURL, SHA256: FFmpegSourceSHA256, License: "LGPL-2.1-or-later",
-		},
-		{
-			ID: "libvpx", Version: LibVPXSourceVersion, URL: LibVPXSourceURL,
-			SHA256: LibVPXSourceSHA256, License: "BSD-3-Clause",
-		},
-		{
-			ID: "libopus", Version: OpusSourceVersion, URL: OpusSourceURL,
-			SHA256: OpusSourceSHA256, License: "BSD-3-Clause",
-		},
-	}
-	result = append(result, nativeTextSourceRecords()...)
+	result := append(cbuild.SourceRecords(), cbuild.NativeTextSourceRecords()...)
 	return append(result, captionFontSourceRecords()...)
-}
-
-func validLGPLConfiguration(configuration []string) bool {
-	if len(configuration) == 0 || len(configuration) > 256 ||
-		!slices.Contains(configuration, "--disable-gpl") ||
-		!slices.Contains(configuration, "--disable-nonfree") ||
-		!slices.Contains(configuration, "--disable-version3") ||
-		!slices.Contains(configuration, "--disable-network") ||
-		!slices.Contains(configuration, "--disable-protocols") ||
-		!slices.Contains(configuration, "--enable-protocol=file,pipe,fd") ||
-		!slices.Contains(configuration, "--disable-demuxer=hls,concat,image2") ||
-		!slices.Contains(configuration, "--enable-libvpx") ||
-		!slices.Contains(configuration, "--enable-libopus") ||
-		!slices.Contains(configuration, "--pkg-config-flags=--static") ||
-		!slices.Contains(configuration, "--enable-encoder=rawvideo,pcm_s16le,ffv1,libvpx_vp9,libopus") ||
-		!slices.Contains(configuration, "--enable-muxer=rawvideo,pcm_s16le,wav,webm,matroska") ||
-		!slices.Contains(configuration, "--enable-filter=select,scale,format,transpose,setsar,setparams,setpts,asetpts,aresample,colorspace,pan,aformat") ||
-		!slices.Contains(configuration, "--enable-swresample") {
-		return false
-	}
-	for _, value := range configuration {
-		lower := strings.ToLower(value)
-		if value == "" || len(value) > 1024 || lower == "--enable-gpl" || lower == "--enable-nonfree" ||
-			strings.Contains(lower, "libx264") || strings.Contains(lower, "libx265") {
-			return false
-		}
-	}
-	return true
 }
 
 func validRecordedConfiguration(configuration []string) bool {
