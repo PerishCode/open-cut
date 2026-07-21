@@ -157,6 +157,9 @@ jobs:
         with:
           msystem: MINGW64
           path-type: inherit
+          # The package set is fixed, so installing it from scratch on every run
+          # spends most of a minute on the critical path for nothing.
+          cache: true
           install: >-
             make
             mingw-w64-x86_64-cmake

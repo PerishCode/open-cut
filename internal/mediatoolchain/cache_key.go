@@ -5,12 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
 )
@@ -117,56 +114,6 @@ func shortDigest(parts ...string) string {
 	return hex.EncodeToString(digest.Sum(nil))[:32]
 }
 
-// hashDirectories digests several directories as one identity, in the order
-// given, so build logic split across packages still yields a single key.
 func hashDirectories(roots ...string) (string, error) {
-	digest := sha256.New()
-	for _, root := range roots {
-		value, err := hashDirectory(root)
-		if err != nil {
-			return "", err
-		}
-		_, _ = digest.Write([]byte(value))
-		_, _ = digest.Write([]byte{0})
-	}
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
-}
-
-// hashDirectory digests every regular file under a directory by relative path
-// and content.
-func hashDirectory(root string) (string, error) {
-	entries := make([]string, 0, 128)
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
-		}
-		relativePath, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		digest := sha256.New()
-		if _, err := io.Copy(digest, file); err != nil {
-			return err
-		}
-		entries = append(entries, filepath.ToSlash(relativePath)+"\x00"+hex.EncodeToString(digest.Sum(nil)))
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if len(entries) == 0 {
-		return "", fmt.Errorf("directory %s has no files", root)
-	}
-	sort.Strings(entries)
-	overall := sha256.New()
-	overall.Write([]byte(strings.Join(entries, "\n")))
-	return hex.EncodeToString(overall.Sum(nil)), nil
+	return toolchainclosure.HashDirectories(roots...)
 }
