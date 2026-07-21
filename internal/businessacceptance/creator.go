@@ -128,16 +128,59 @@ func (creator Creator) openTab(ctx context.Context, label string) error {
 	return creator.evaluateBoolean(ctx, tabExpression(label, true))
 }
 
+// wait polls a renderer predicate until it holds. When it never does, the
+// deadline alone says nothing about why: the same timeout covers a control that
+// never rendered, one that rendered disabled, a pane that never mounted, and a
+// renderer that was throwing on every evaluation. So the last evaluation error
+// is kept, and on failure the surface describes itself.
 func (creator Creator) wait(ctx context.Context, expression string) error {
-	return poll(ctx, 100*time.Millisecond, func() (bool, error) {
-		value, err := creator.evaluate(ctx, expression)
-		if err != nil {
+	var lastErr error
+	err := poll(ctx, 100*time.Millisecond, func() (bool, error) {
+		value, evaluateErr := creator.evaluate(ctx, expression)
+		if evaluateErr != nil {
+			lastErr = evaluateErr
 			return false, nil
 		}
+		lastErr = nil
 		ready, _ := value.(bool)
 		return ready, nil
 	})
+	if err == nil {
+		return nil
+	}
+	if lastErr != nil {
+		return fmt.Errorf("%w (last renderer error: %v; %s)", err, lastErr, creator.describeSurface(ctx))
+	}
+	return fmt.Errorf("%w (%s)", err, creator.describeSurface(ctx))
 }
+
+// describeSurface reports what the renderer was actually showing, bounded so a
+// large document cannot flood a build log. It is best effort by design: a
+// failure to describe must never replace the failure being described.
+func (creator Creator) describeSurface(ctx context.Context) string {
+	value, err := creator.evaluate(ctx, surfaceDescriptionExpression)
+	if err != nil {
+		return fmt.Sprintf("surface is undescribable: %v", err)
+	}
+	description, _ := value.(string)
+	if description == "" {
+		return "surface described nothing"
+	}
+	return description
+}
+
+// surfaceDescriptionExpression lists the interactive controls and the visible
+// status text, which together answer the question a bare timeout leaves open:
+// was the control missing, disabled, or on another pane?
+const surfaceDescriptionExpression = `(() => {
+  const tabs = [...document.querySelectorAll('[role="tab"]')]
+    .map((node) => (node.getAttribute('aria-selected') === 'true' ? '*' : '') + (node.textContent?.trim() ?? ''));
+  const buttons = [...document.querySelectorAll('button:not([role="tab"])')]
+    .slice(0, 24)
+    .map((node) => (node.disabled ? '-' : '') + (node.textContent?.trim() ?? ''));
+  const text = (document.body?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 600);
+  return 'tabs [' + tabs.join(' | ') + '] buttons [' + buttons.join(' | ') + '] text: ' + text;
+})()`
 
 func (creator Creator) evaluateBoolean(ctx context.Context, expression string) error {
 	value, err := creator.evaluate(ctx, expression)
