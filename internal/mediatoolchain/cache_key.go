@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
@@ -51,27 +52,28 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	if err != nil {
 		return CacheKeys{}, err
 	}
-	if !repositoryMarker(repositoryRoot) {
+	if !cbuild.RepositoryMarker(repositoryRoot) {
 		return CacheKeys{}, fmt.Errorf("media cache key requires an open-cut repository root")
 	}
 
 	// The catalog and the build recipe both live in this package, and both
-	// decide what the archives and the C toolchain are. Hashing the package
-	// over-approximates - an unrelated edit here invalidates too - but it can
-	// never under-approximate, and it changes rarely.
+	// decide what the archives and the C toolchain are.
 	//
-	// toolchainclosure is hashed with it because pinned-source acquisition and
-	// archive extraction live there. Leaving it out would under-approximate:
-	// a change to how archives are unpacked would not invalidate a cache whose
-	// contents that change produced. Note it deliberately does not include
-	// whispertoolchain - that closure now has its own identity, and a whisper
-	// change no longer has any business invalidating the media caches.
-	catalog, err := hashDirectories(
-		filepath.Join(repositoryRoot, "internal", "mediatoolchain"),
-		filepath.Join(repositoryRoot, "internal", "toolchainclosure"),
-	)
+	// Each scope is keyed by the closure that can actually change it, asked of
+	// the compiler rather than kept by hand. The source archives depend on the
+	// pinned catalog; the compiled C tree depends on the code that turns that
+	// catalog into a toolchain. Hashing the whole package for both was safe but
+	// blunt: an edit to manifest assembly or conformance evidence, which the C
+	// compiler never sees, invalidated a cache worth many minutes. It also cost
+	// an upload every push, because an exact-key miss re-saves the tree even
+	// when the prefix fallback restored a usable one.
+	cbuildLogic, err := cbuild.SourceClosureFingerprint(ctx, repositoryRoot)
 	if err != nil {
-		return CacheKeys{}, fmt.Errorf("hash media catalog: %w", err)
+		return CacheKeys{}, err
+	}
+	catalog, err := cbuild.CatalogFingerprint(ctx, repositoryRoot)
+	if err != nil {
+		return CacheKeys{}, err
 	}
 	renderer, err := RendererSourceFingerprint(ctx, repositoryRoot)
 	if err != nil {
@@ -81,7 +83,7 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	if err != nil {
 		return CacheKeys{}, err
 	}
-	goVersion, err := rendererGoVersion(ctx, goTool)
+	goVersion, err := toolchainclosure.GoToolVersion(ctx, goTool)
 	if err != nil {
 		return CacheKeys{}, err
 	}
@@ -97,10 +99,10 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 		SourcePrefix:  sourcePrefix,
 		SourceKey:     sourcePrefix + shortDigest(toolchainVersion, catalog),
 		CBuildPrefix:  cbuildPrefix,
-		CBuildKey:     cbuildPrefix + shortDigest(toolchainVersion, catalog, options.Environment),
+		CBuildKey:     cbuildPrefix + shortDigest(toolchainVersion, cbuildLogic, options.Environment),
 		ClosurePrefix: closurePrefix,
 		ClosureKey: closurePrefix + shortDigest(
-			toolchainVersion, catalog, renderer, goVersion, options.Environment,
+			toolchainVersion, cbuildLogic, renderer, goVersion, options.Environment,
 		),
 	}, nil
 }

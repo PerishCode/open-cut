@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"io"
 	"os"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/internal/renderengine"
 	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
@@ -69,7 +71,7 @@ func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 			return fmt.Errorf("renderer relink input %s is invalid", input.ID)
 		}
 	}
-	for _, source := range nativeTextSourceRecords() {
+	for _, source := range cbuild.NativeTextSourceRecords() {
 		suffix, err := sourceArchiveSuffix(source.URL)
 		if err != nil {
 			return err
@@ -85,7 +87,7 @@ func VerifyRendererRelink(ctx context.Context, verified Verified) error {
 	if err != nil {
 		return err
 	}
-	goVersion, err := rendererGoVersion(ctx, goTool)
+	goVersion, err := toolchainclosure.GoToolVersion(ctx, goTool)
 	if err != nil || goVersion != record.GoVersion {
 		return fmt.Errorf("renderer relink Go toolchain is unavailable")
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -12,7 +13,7 @@ func digestRecipe(
 	buildTarget target.Target,
 	compiler string,
 	ffmpegConfiguration, libvpxConfiguration, opusConfiguration []string,
-	nativeText NativeTextBuildRecipe,
+	nativeText cbuild.NativeTextBuildRecipe,
 	renderer RendererBuildRecord,
 ) (string, error) {
 	encoded, err := json.Marshal(struct {
@@ -24,7 +25,7 @@ func digestRecipe(
 		LibVPXConfiguration   []string                      `json:"libvpxConfiguration"`
 		OpusConfiguration     []string                      `json:"opusConfiguration"`
 		CaptionFontSelections []captionFontArchiveSelection `json:"captionFontSelections"`
-		NativeText            NativeTextBuildRecipe         `json:"nativeText"`
+		NativeText            cbuild.NativeTextBuildRecipe  `json:"nativeText"`
 		Renderer              RendererBuildRecord           `json:"renderer"`
 	}{
 		6, buildTarget, mediaSourceRecords(), compiler, ffmpegConfiguration,

@@ -1,4 +1,4 @@
-package mediatoolchain
+package cbuild
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func shellBuildPathForOS(goos, value string) string {
 	return normalized
 }
 
-func repositoryMarker(root string) bool {
+func RepositoryMarker(root string) bool {
 	for _, name := range []string{"go.mod", "oc-control.json", "pnpm-workspace.yaml"} {
 		if info, err := os.Stat(filepath.Join(root, name)); err != nil || !info.Mode().IsRegular() {
 			return false

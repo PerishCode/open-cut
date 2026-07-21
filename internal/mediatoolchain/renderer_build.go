@@ -1,11 +1,7 @@
 package mediatoolchain
 
 import (
-	"bytes"
 	"context"
-	"debug/elf"
-	"debug/macho"
-	"debug/pe"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/environment"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -56,7 +53,7 @@ func buildRendererHelper(
 	if err != nil {
 		return RendererHelperBuild{}, err
 	}
-	goVersion, err := rendererGoVersion(ctx, goTool)
+	goVersion, err := toolchainclosure.GoToolVersion(ctx, goTool)
 	if err != nil {
 		return RendererHelperBuild{}, err
 	}
@@ -149,17 +146,6 @@ func rendererNativeLinkFlags(dependencyRoot string, buildTarget target.Target) [
 	return flags
 }
 
-func rendererGoVersion(ctx context.Context, executable string) (string, error) {
-	var stdout, stderr bytes.Buffer
-	if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
-		Executable: executable, Args: []string{"version"}, Stdout: &stdout, Stderr: &stderr,
-		Profile: lifecycle.ProfileDevelopment, Presentation: lifecycle.PresentationHeadless,
-	}); err != nil || stdout.Len() == 0 || stdout.Len() > 16<<10 || stderr.Len() > 16<<10 {
-		return "", fmt.Errorf("inspect renderer Go toolchain")
-	}
-	return strings.TrimSpace(stdout.String()), nil
-}
-
 func rendererLinkInputs(dependencyRoot string) ([]RendererLinkInput, error) {
 	definitions := []struct{ id, filename string }{
 		{"freetype", "libfreetype.a"}, {"fribidi", "libfribidi.a"}, {"harfbuzz", "libharfbuzz.a"},
@@ -195,46 +181,5 @@ func normalizeRendererBuildValues(values []string, replacements map[string]strin
 }
 
 func verifyPackagedExecutableDynamicClosure(filename string) error {
-	libraries, err := rendererImportedLibraries(filename)
-	if err != nil {
-		return fmt.Errorf("inspect executable dynamic closure: %w", err)
-	}
-	for _, library := range libraries {
-		if reason := forbiddenPackagedDynamicLibrary(library); reason != "" {
-			return fmt.Errorf("packaged executable dynamically links %s %s", reason, library)
-		}
-	}
-	return nil
-}
-
-func forbiddenPackagedDynamicLibrary(library string) string {
-	lower := strings.ToLower(filepath.Base(filepath.ToSlash(library)))
-	if strings.Contains(lower, "harfbuzz") || strings.Contains(lower, "fribidi") ||
-		strings.Contains(lower, "freetype") {
-		return "pinned native text library"
-	}
-	for _, prefix := range []string{
-		"libgcc_", "libstdc++-", "libwinpthread-", "libssp-", "libgomp-", "libquadmath-",
-	} {
-		if strings.HasPrefix(lower, prefix) && strings.HasSuffix(lower, ".dll") {
-			return "unshipped MinGW runtime library"
-		}
-	}
-	return ""
-}
-
-func rendererImportedLibraries(filename string) ([]string, error) {
-	if current, err := macho.Open(filename); err == nil {
-		defer current.Close()
-		return current.ImportedLibraries()
-	}
-	if current, err := elf.Open(filename); err == nil {
-		defer current.Close()
-		return current.ImportedLibraries()
-	}
-	if current, err := pe.Open(filename); err == nil {
-		defer current.Close()
-		return current.ImportedLibraries()
-	}
-	return nil, fmt.Errorf("renderer executable format is unsupported")
+	return toolchainclosure.VerifyPackagedExecutableDynamicClosure(filename)
 }

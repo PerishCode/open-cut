@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
@@ -38,11 +39,11 @@ func qualifyModifiedRendererRelink(
 		}
 	}
 	archive := filepath.Join(
-		nativeRoot, "source", "fribidi-"+FriBidiSourceVersion+".tar.xz",
+		nativeRoot, "source", "fribidi-"+cbuild.FriBidiSourceVersion+".tar.xz",
 	)
 	modifiedSource, err := extractSource(
 		archive, filepath.Join(qualificationRoot, "source"),
-		"fribidi-"+FriBidiSourceVersion, "configure",
+		"fribidi-"+cbuild.FriBidiSourceVersion, "configure",
 	)
 	if err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err
@@ -73,7 +74,7 @@ func qualifyModifiedRendererRelink(
 	if parallelism > 16 {
 		parallelism = 16
 	}
-	if _, err := buildFriBidi(
+	if _, err := cbuild.BuildFriBidi(
 		ctx, modifiedSource, modifiedNative, compiler, shell, makeTool, parallelism, stdout, stderr,
 	); err != nil {
 		return "", 0, "", RendererSmokeObservation{}, err

@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -38,8 +39,8 @@ func buildAndStageRenderer(
 	if err != nil {
 		return ToolRecord{}, NoticeRecord{}, RendererBuildRecord{}, err
 	}
-	nativeArchives := make(map[string]string, len(nativeTextSourceRecords()))
-	for _, source := range nativeTextSourceRecords() {
+	nativeArchives := make(map[string]string, len(cbuild.NativeTextSourceRecords()))
+	for _, source := range cbuild.NativeTextSourceRecords() {
 		archive, exists := archives[source.ID]
 		if !exists {
 			return ToolRecord{}, NoticeRecord{}, RendererBuildRecord{}, fmt.Errorf(

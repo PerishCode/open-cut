@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -52,16 +53,6 @@ func TestWindowsRendererLinksToolchainRuntimeStatically(t *testing.T) {
 	if !reflect.DeepEqual(flags, []string{`-LC:\native/lib`, "-static"}) {
 		t.Fatalf("flags=%v", flags)
 	}
-	for _, library := range []string{
-		"libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll",
-	} {
-		if reason := forbiddenPackagedDynamicLibrary(library); reason != "unshipped MinGW runtime library" {
-			t.Fatalf("library=%s reason=%q", library, reason)
-		}
-	}
-	if reason := forbiddenPackagedDynamicLibrary("KERNEL32.dll"); reason != "" {
-		t.Fatalf("system library reason=%q", reason)
-	}
 }
 
 func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
@@ -83,7 +74,7 @@ func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
 	result, err := buildRendererHelper(
 		context.Background(), repositoryRoot, buildRoot,
 		filepath.Join(buildRoot, "dependencies"),
-		filepath.Join(buildRoot, "harfbuzz-"+HarfBuzzSourceVersion),
+		filepath.Join(buildRoot, "harfbuzz-"+cbuild.HarfBuzzSourceVersion),
 		target.Host(), io.Discard, io.Discard,
 	)
 	if err != nil || result.Path == "" || result.ByteSize == 0 || len(result.LinkInputs) != 3 ||
@@ -118,8 +109,8 @@ func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
 		ID: ffmpegRecord.ID, Path: filepath.Join(stageRoot, filepath.FromSlash(ffmpegRecord.Path)),
 		SHA256: ffmpegRecord.SHA256, ByteSize: ffmpegRecord.ByteSize,
 	}
-	archives := make(map[string]string, len(nativeTextSourceRecords()))
-	for _, source := range nativeTextSourceRecords() {
+	archives := make(map[string]string, len(cbuild.NativeTextSourceRecords()))
+	for _, source := range cbuild.NativeTextSourceRecords() {
 		archive, err := sourceArchivePath(workspace, source)
 		if err != nil {
 			t.Fatal(err)
@@ -129,7 +120,7 @@ func TestPinnedRendererHelperBuildIsReproducibleAndStatic(t *testing.T) {
 	kit, err := buildRendererRelinkKit(
 		context.Background(), repositoryRoot, buildRoot,
 		filepath.Join(buildRoot, "dependencies"),
-		filepath.Join(buildRoot, "harfbuzz-"+HarfBuzzSourceVersion),
+		filepath.Join(buildRoot, "harfbuzz-"+cbuild.HarfBuzzSourceVersion),
 		target.Host(), result, archives, RendererSmokeInput{
 			FFmpegPath: ffmpeg.Path, FFmpegSHA256: ffmpeg.SHA256,
 			FontRoot: font.Root, Font: fontRecord,
