@@ -294,3 +294,5 @@ func clampUint8(value int64, minimum, maximum uint8) uint8 {
 
 // Measurement probe: a renderer-only change, to observe whether the delivery
 // lanes now relink against the preserved C tree instead of recompiling it.
+// Second measurement probe: the cbuild cache is populated now, so this
+// renderer-only change should relink instead of recompiling the C toolchain.
