@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/PerishCode/open-cut/apps/api/service"
@@ -185,4 +188,59 @@ func downloaderProductResourceEntry(
 		t.Fatal(err)
 	}
 	return entry
+}
+
+// A CI cache restores the downloader's staging directory rather than the
+// published resource, so the reuse it depends on is this one: a full-size
+// staged file is re-verified against the pinned digest and served without
+// touching the network. Nothing about the cache is trusted - a restored file
+// that does not match costs a download, which the sibling digest-mismatch test
+// already pins.
+func TestProductResourceDownloaderReusesAVerifiedFullStageWithoutTheNetwork(t *testing.T) {
+	content := []byte("authenticated whisper model fixture")
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		writer.Header().Set("Content-Length", domain.NewInt64(int64(len(content))).String())
+		_, _ = writer.Write(content)
+	}))
+	defer server.Close()
+	entry := downloaderProductResourceEntry(t, server.URL+"/model.bin", content)
+	root := t.TempDir()
+	// A restored cache carries both files the downloader stages. The metadata
+	// is not decoration: without it the partial is discarded and re-fetched,
+	// which is exactly the failure this test exists to catch.
+	key := strings.TrimPrefix(entry.EntryDigest.String(), "sha256:")
+	if err := os.WriteFile(filepath.Join(root, key+".partial"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"schema": 1, "entryDigest": entry.EntryDigest.String(), "origin": entry.Origin,
+		"byteSize": entry.ByteSize.String(), "sha256": entry.SHA256.String(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, key+".json"), metadata, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	downloader, downloaderErr := service.NewProductResourceDownloader(server.Client(), root)
+	if downloaderErr != nil {
+		t.Fatal(downloaderErr)
+	}
+	download, err := downloader.Download(context.Background(), application.ProductResourceJobClaim{
+		InstallationID: "installation-test", Entry: entry,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if download.ByteSize != entry.ByteSize || download.SHA256 != entry.SHA256 {
+		t.Fatalf("download=%+v", download)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("a verified full stage still made %d request(s)", got)
+	}
+	if err := download.Workspace.Release(); err != nil {
+		t.Fatal(err)
+	}
 }
