@@ -22,6 +22,7 @@ const unavailableDocument = encodeURIComponent(`<!doctype html>
 
 export type ElectronApp = {
   activateWeb(webRuntimeUrl: string, apiRuntimeUrl: string, uiSession: string): Promise<void>;
+  renewUISession(apiRuntimeUrl: string, uiSession: string): void;
   unavailable(): Promise<void>;
   show(): void;
   close(): void;
@@ -120,6 +121,14 @@ export async function startElectronApp(): Promise<ElectronApp> {
         webProtocol.setUISession(undefined);
         throw error;
       }
+    },
+    renewUISession(nextAPIRuntimeUrl, uiSession) {
+      if (!activeUISession || apiRuntimeUrl !== nextAPIRuntimeUrl) {
+        throw new Error("UI session renewal does not match the active API lease");
+      }
+      deliveryReceipts.rebind(activeUISession, uiSession);
+      activeUISession = uiSession;
+      webProtocol.setUISession(uiSession);
     },
     unavailable() {
       cancelStartupPlaceholder();

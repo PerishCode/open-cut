@@ -3,11 +3,15 @@ package controlcli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/PerishCode/open-cut/internal/harness"
+	"github.com/PerishCode/open-cut/internal/timingreport"
 )
 
 func TestReleaseDisplayVersion(t *testing.T) {
@@ -20,9 +24,29 @@ func TestReleaseDisplayVersion(t *testing.T) {
 
 func TestHarnessCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), []string{"harness", "broker", "--workspace", filepath.Join(t.TempDir(), "case")}, &stdout, &stderr)
+	workspace := filepath.Join(t.TempDir(), "case")
+	code := Run(context.Background(), []string{"harness", "broker", "--workspace", workspace}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%q output=%q", code, stderr.String(), stdout.String())
+	}
+	data, err := os.ReadFile(filepath.Join(workspace, "reports", "report.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report harness.Report
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.Passed || len(report.Checks) == 0 || report.Checks[0].DurationMS < 0 {
+		t.Fatalf("report=%+v", report)
+	}
+	timing, err := timingreport.Read(filepath.Join(workspace, "reports", "timing.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timing.Operation != "harness:broker-registration-ready" || timing.Outcome != timingreport.OutcomeSucceeded ||
+		len(timing.Phases) != len(report.Checks) {
+		t.Fatalf("timing=%+v", timing)
 	}
 }
 
@@ -31,6 +55,68 @@ func TestProtocolRejectsUnknownMode(t *testing.T) {
 	code := Run(context.Background(), []string{"protocol", "unknown"}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestTimingSummaryRendersReports(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pack.json")
+	if err := timingreport.Write(path, timingreport.Report{
+		Schema: timingreport.Schema, Operation: "pack", Outcome: timingreport.OutcomeSucceeded,
+		DurationMS: 42, Attributes: map[string]string{"target": "mac-arm64"},
+		Phases: []timingreport.Phase{{Name: "workspace-build", Outcome: timingreport.OutcomeSucceeded, DurationMS: 40}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"timing", "summary", "--report", path}, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "pack · mac-arm64") || !strings.Contains(stdout.String(), "workspace-build") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestTimingCompareRendersPhaseDelta(t *testing.T) {
+	root := t.TempDir()
+	baselinePath, candidatePath := filepath.Join(root, "baseline.json"), filepath.Join(root, "candidate.json")
+	for path, duration := range map[string]int64{baselinePath: 100, candidatePath: 75} {
+		if err := timingreport.Write(path, timingreport.Report{
+			Schema: timingreport.Schema, Operation: "pack", Outcome: timingreport.OutcomeSucceeded,
+			DurationMS: duration, Attributes: map[string]string{"target": "mac-arm64"},
+			Phases: []timingreport.Phase{{Name: "workspace-build", Outcome: timingreport.OutcomeSucceeded, DurationMS: duration}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{
+		"timing", "compare", "--baseline", baselinePath, "--candidate", candidatePath,
+	}, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Timing comparison · pack · mac-arm64") ||
+		!strings.Contains(stdout.String(), "-25ms") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestTimingCacheReportClassifiesExactFallbackAndMiss(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.json")
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{
+		"timing", "cache-report", "--output", path, "--target", "mac-arm64",
+		"--attribute", "event=pull_request",
+		"--cache", "source,source-a,source-a,true",
+		"--cache", "c-build,cbuild-b,cbuild-a,false",
+		"--cache", "closure,closure-b,,false",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	report, err := timingreport.Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Attributes["event"] != "pull_request" || len(report.Decisions) != 3 ||
+		report.Decisions[0].Value != "exact" || report.Decisions[1].Value != "fallback" ||
+		report.Decisions[2].Value != "miss" {
+		t.Fatalf("report=%+v", report)
 	}
 }
 

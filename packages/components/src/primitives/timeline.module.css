@@ -1,0 +1,239 @@
+.timelineSurface {
+  overflow: hidden;
+  border: 1px solid var(--oc-hairline-strong);
+  background: rgb(0 0 0 / 12%);
+}
+
+.timelineToolbar {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--oc-hairline-strong);
+  background: var(--oc-surface-header);
+  gap: 9px;
+}
+
+.timelineTimecode,
+.timelineToolbarMeta,
+.timelineZoomLabel {
+  font-family: var(--oc-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.timelineTimecode {
+  color: var(--oc-accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timelineToolbarMeta,
+.timelineZoomLabel {
+  color: var(--oc-ink-faint);
+  font-size: 10px;
+}
+
+.timelineToolbarSpacer {
+  flex: 1;
+}
+
+.timelineToolButton {
+  display: grid;
+  width: 25px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink-strong);
+  cursor: pointer;
+  font: 16px / 1 var(--oc-font-sans);
+  place-items: center;
+}
+
+.timelineToolButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.timelineViewport {
+  overflow: auto;
+  max-height: 190px;
+}
+
+.timelineStage {
+  min-width: 680px;
+}
+
+.timelineRulerRow,
+.timelineTrackRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.timelineRulerRow {
+  height: 28px;
+}
+
+.timelineTrackRow {
+  min-height: 44px;
+}
+
+.timelineCorner,
+.timelineTrackLabel {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  padding: 0 9px;
+  border-right: 1px solid var(--oc-hairline-strong);
+  border-bottom: 1px solid var(--oc-hairline);
+  background: var(--oc-surface-header);
+  color: var(--oc-ink-faint);
+  font-family: var(--oc-font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  gap: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineTrackKind {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  border: 1px solid var(--oc-hairline-input);
+  color: var(--oc-ink-mid);
+  font-size: 9px;
+  place-items: center;
+}
+
+.timelineRulerLane,
+.timelineLane {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--oc-hairline);
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(16.666% - 1px),
+    var(--oc-hairline) 16.666%
+  );
+}
+
+.timelineRulerLane {
+  display: block;
+  padding: 0;
+  color: inherit;
+  cursor: crosshair;
+}
+
+.timelineLane {
+  min-height: 44px;
+}
+
+.timelineLaneHit {
+  position: absolute;
+  z-index: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: crosshair;
+  inset: 0;
+}
+
+.timelineRulerLane:focus-visible,
+.timelineLaneHit:focus-visible {
+  outline: 1px solid var(--oc-accent-border-focus);
+  outline-offset: -2px;
+}
+
+.timelineTick {
+  position: absolute;
+  top: 7px;
+  translate: -50% 0;
+  color: var(--oc-ink-faint);
+  font-family: var(--oc-font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timelineItem {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  bottom: 5px;
+  display: flex;
+  overflow: hidden;
+  min-width: 38px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border: 1px solid var(--oc-hairline-input);
+  color: var(--oc-ink-strong);
+  cursor: pointer;
+  font: 600 10px / 1 var(--oc-font-sans);
+  gap: 6px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineItemVideo {
+  background: color-mix(in srgb, var(--oc-accent) 20%, var(--oc-surface));
+}
+
+.timelineItemAudio {
+  background: color-mix(in srgb, #70b7ff 22%, var(--oc-surface));
+}
+
+.timelineItemCaption {
+  background: color-mix(in srgb, #f4d35e 24%, var(--oc-surface));
+}
+
+.timelineItem:hover,
+.timelineItem:focus-visible,
+.timelineItemSelected {
+  z-index: 3;
+  border-color: var(--oc-accent-border-focus-strong);
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--oc-accent-border-focus),
+    0 4px 18px rgb(0 0 0 / 20%);
+}
+
+.timelineItemBadge {
+  padding: 3px 4px;
+  background: rgb(0 0 0 / 24%);
+  color: var(--oc-ink-mid);
+  font: 700 8px / 1 var(--oc-font-mono);
+  letter-spacing: 0.05em;
+}
+
+.timelinePlayhead {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--oc-accent);
+  box-shadow: 0 0 0 1px rgb(181 255 88 / 12%);
+  pointer-events: none;
+}
+
+.timelineRulerLane .timelinePlayhead::before {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid var(--oc-accent);
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+  content: "";
+}

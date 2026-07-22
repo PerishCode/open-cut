@@ -19,7 +19,7 @@ describe("Creator Agent bridge contract", () => {
       vi.fn(async () =>
         jsonResponse({
           adapterId: "codex-cli-v1",
-          promptVersion: "open-cut-agent-v1",
+          promptVersion: "open-cut-agent-v2",
           state: "available",
           version: "codex-cli 0.144.4",
           executable: "/must/not/escape",
@@ -29,7 +29,7 @@ describe("Creator Agent bridge contract", () => {
     const availability = await createAgentBridgePort().availability();
     expect(availability).toEqual({
       adapterId: "codex-cli-v1",
-      promptVersion: "open-cut-agent-v1",
+      promptVersion: "open-cut-agent-v2",
       state: "available",
       version: "codex-cli 0.144.4",
     });

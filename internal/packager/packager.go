@@ -15,6 +15,7 @@ import (
 	"github.com/PerishCode/open-cut/internal/bundle"
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/runtimetopology"
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/internal/workspace"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
@@ -30,6 +31,7 @@ type Options struct {
 	Target         target.Target
 	Output         string
 	Launcher       string
+	TimingReport   string
 	KeepWork       bool
 	Stdout         io.Writer
 	Stderr         io.Writer
@@ -50,6 +52,26 @@ type Result struct {
 }
 
 func Pack(ctx context.Context, options Options) (result Result, resultErr error) {
+	recorder := timingreport.New("pack", map[string]string{
+		"target": options.Target.String(), "version": options.Version,
+	})
+	workRoot := ""
+	succeeded := false
+	defer func() {
+		if succeeded && !options.KeepWork && workRoot != "" {
+			finish := recorder.Begin("cleanup-workspace")
+			err := os.RemoveAll(workRoot)
+			finish(err)
+			if resultErr == nil && err != nil {
+				resultErr = err
+			}
+		}
+		if options.TimingReport != "" {
+			if err := timingreport.Write(options.TimingReport, recorder.Finish(resultErr)); resultErr == nil && err != nil {
+				resultErr = fmt.Errorf("write pack timing report: %w", err)
+			}
+		}
+	}()
 	repositoryRoot, err := filepath.Abs(options.RepositoryRoot)
 	if err != nil {
 		return Result{}, err
@@ -89,18 +111,10 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err != nil {
 		return Result{}, err
 	}
-	workRoot := filepath.Join(repositoryRoot, ".tmp", "oc-control", "pack", transaction)
+	workRoot = filepath.Join(repositoryRoot, ".tmp", "oc-control", "pack", transaction)
 	if err := os.MkdirAll(workRoot, 0o700); err != nil {
 		return Result{}, err
 	}
-	succeeded := false
-	defer func() {
-		if succeeded && !options.KeepWork {
-			if err := os.RemoveAll(workRoot); resultErr == nil && err != nil {
-				resultErr = err
-			}
-		}
-	}()
 	stdout, stderr := options.Stdout, options.Stderr
 	if stdout == nil {
 		stdout = io.Discard
@@ -108,24 +122,35 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	if err := run(
+	finish := recorder.Begin("workspace-build")
+	err = run(
 		ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
 		"pnpm", "-r", "--if-present", "run", "build",
-	); err != nil {
+	)
+	finish(err)
+	if err != nil {
 		return Result{}, fmt.Errorf("build workspace: %w", err)
 	}
+	finish = recorder.Begin("discover-runtime-topology")
 	topology, err := workspace.DiscoverTopology(repositoryRoot, controlConfig)
+	finish(err)
 	if err != nil {
 		return Result{}, err
 	}
 
 	deployedApp := filepath.Join(workRoot, "electron-app")
-	if err := deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
+	finish = recorder.Begin("deploy-electron-app")
+	err = deploy(ctx, repositoryRoot, payloadPackage.Name, deployedApp, packagingPolicy.HoistedDependencyLayout, stdout, stderr)
+	finish(err)
+	if err != nil {
 		return Result{}, err
 	}
 	for _, sidecar := range topology.Sidecars {
 		if sidecar.App == controlConfig.PayloadWorkspace {
-			if err := runArtifactChecks(ctx, deployedApp, sidecar.ArtifactChecks, stdout, stderr); err != nil {
+			finish = recorder.Begin("check-artifacts:" + sidecar.App)
+			err = runArtifactChecks(ctx, deployedApp, sidecar.ArtifactChecks, stdout, stderr)
+			finish(err)
+			if err != nil {
 				return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
 			}
 			break
@@ -141,10 +166,16 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 			return Result{}, err
 		}
 		destination := filepath.Join(resourcesRoot, "sidecars", sidecar.App)
-		if err := deploy(ctx, repositoryRoot, manifest.Name, destination, packagingPolicy.HoistedDependencyLayout, stdout, stderr); err != nil {
+		finish = recorder.Begin("deploy-sidecar:" + sidecar.App)
+		err = deploy(ctx, repositoryRoot, manifest.Name, destination, packagingPolicy.HoistedDependencyLayout, stdout, stderr)
+		finish(err)
+		if err != nil {
 			return Result{}, err
 		}
-		if err := runArtifactChecks(ctx, destination, sidecar.ArtifactChecks, stdout, stderr); err != nil {
+		finish = recorder.Begin("check-artifacts:" + sidecar.App)
+		err = runArtifactChecks(ctx, destination, sidecar.ArtifactChecks, stdout, stderr)
+		finish(err)
+		if err != nil {
 			return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
 		}
 	}
@@ -153,33 +184,51 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		payloadPackage.ProductName, payloadPackage.DevDependencies["electron"], deployedApp, electronOutput, resourcesRoot,
 	)
 	configPath := filepath.Join(workRoot, "electron-builder.json")
-	if err := atomicfile.WriteJSON(configPath, builderConfig, 0o600); err != nil {
+	finish = recorder.Begin("build-electron-pack")
+	if err = atomicfile.WriteJSON(configPath, builderConfig, 0o600); err != nil {
+		finish(err)
 		return Result{}, err
 	}
-	if err := lifecycle.BuildElectronPack(
+	err = lifecycle.BuildElectronPack(
 		ctx, options.Target, repositoryRoot, payloadPackage.Name, configPath, stdout, stderr,
-	); err != nil {
+	)
+	finish(err)
+	if err != nil {
 		return Result{}, fmt.Errorf("build Electron full pack: %w", err)
 	}
+	finish = recorder.Begin("locate-electron-pack")
 	packRoot, packEntry, err := lifecycle.LocateElectronPack(electronOutput, payloadPackage.ProductName, options.Target)
+	finish(err)
 	if err != nil {
 		return Result{}, err
 	}
-	if err := lifecycle.FinalizeElectronPack(ctx, packRoot, options.Target, stdout, stderr); err != nil {
+	finish = recorder.Begin("finalize-electron-pack")
+	err = lifecycle.FinalizeElectronPack(ctx, packRoot, options.Target, stdout, stderr)
+	finish(err)
+	if err != nil {
 		return Result{}, err
 	}
 
 	releaseTree := filepath.Join(workRoot, "release-tree")
 	launcherArtifact := options.Launcher
 	if launcherArtifact == "" {
+		recorder.Decide("launcher", "built", "")
 		launcherArtifact = filepath.Join(workRoot, options.Target.ExecutableName("launcher"))
 		goEnvironment := options.Target.GoBuildEnvironment(os.Environ())
-		if err := run(ctx, repositoryRoot, stdout, stderr, goEnvironment, "go", "build", "-o", launcherArtifact, "./cmd/launcher"); err != nil {
+		finish = recorder.Begin("build-launcher")
+		err = run(ctx, repositoryRoot, stdout, stderr, goEnvironment, "go", "build", "-o", launcherArtifact, "./cmd/launcher")
+		finish(err)
+		if err != nil {
 			return Result{}, fmt.Errorf("build launcher: %w", err)
 		}
+	} else {
+		recorder.Decide("launcher", "prebuilt", "")
 	}
 	launcherName := filepath.Base(launcherArtifact)
-	if err := copyFile(launcherArtifact, filepath.Join(releaseTree, "launcher", launcherName), 0o755); err != nil {
+	finish = recorder.Begin("stage-launcher")
+	err = copyFile(launcherArtifact, filepath.Join(releaseTree, "launcher", launcherName), 0o755)
+	finish(err)
+	if err != nil {
 		return Result{}, err
 	}
 	cliEntry, err := release.CLIEntry(options.Target)
@@ -187,32 +236,45 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		return Result{}, err
 	}
 	cliArtifact := filepath.Join(workRoot, options.Target.ExecutableName(release.CLIBaseName))
-	if err := run(
+	finish = recorder.Begin("build-product-cli")
+	err = run(
 		ctx, repositoryRoot, stdout, stderr, options.Target.GoBuildEnvironment(os.Environ()),
 		"go", "build", "-trimpath", "-o", cliArtifact, "./cmd/cli",
-	); err != nil {
+	)
+	finish(err)
+	if err != nil {
 		return Result{}, fmt.Errorf("build product CLI: %w", err)
 	}
-	if err := copyFile(cliArtifact, filepath.Join(releaseTree, filepath.FromSlash(cliEntry)), 0o755); err != nil {
+	finish = recorder.Begin("stage-product-cli")
+	err = copyFile(cliArtifact, filepath.Join(releaseTree, filepath.FromSlash(cliEntry)), 0o755)
+	finish(err)
+	if err != nil {
 		return Result{}, err
 	}
-	if err := copyTree(
+	finish = recorder.Begin("stage-electron-payload")
+	err = copyTree(
 		packRoot,
 		filepath.Join(releaseTree, "payload", "app"),
 		packagingPolicy.MaterializeLinks,
 		repositoryRoot,
-	); err != nil {
+	)
+	finish(err)
+	if err != nil {
 		return Result{}, fmt.Errorf("stage Electron full pack: %w", err)
 	}
+	finish = recorder.Begin("write-release-metadata")
 	runtimeTopology, err := packagedRuntimeTopology(packRoot, packEntry, options.Target, topology)
 	if err != nil {
+		finish(err)
 		return Result{}, err
 	}
 	topologyEntry := filepath.Join("payload", "runtime-topology.json")
 	if err := runtimetopology.Write(filepath.Join(releaseTree, topologyEntry), runtimeTopology); err != nil {
+		finish(err)
 		return Result{}, err
 	}
 	if _, err := runtimetopology.Resolve(filepath.Join(releaseTree, topologyEntry)); err != nil {
+		finish(err)
 		return Result{}, fmt.Errorf("validate staged runtime topology: %w", err)
 	}
 	manifest := release.Manifest{
@@ -223,15 +285,24 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 		MinimumBootstrapProtocol: "bootstrap.v1", PublishedAt: time.Now().UTC(),
 	}
 	if err := atomicfile.WriteJSON(filepath.Join(releaseTree, "manifest.json"), manifest, 0o600); err != nil {
+		finish(err)
 		return Result{}, err
 	}
-	if err := bundle.Pack(releaseTree, output); err != nil {
-		return Result{}, err
-	}
-	digest, size, err := bundle.SHA256(output)
+	finish(nil)
+	finish = recorder.Begin("archive-release-bundle")
+	err = bundle.Pack(releaseTree, output)
+	finish(err)
 	if err != nil {
 		return Result{}, err
 	}
+	finish = recorder.Begin("digest-release-bundle")
+	digest, size, err := bundle.SHA256(output)
+	finish(err)
+	if err != nil {
+		return Result{}, err
+	}
+	recorder.Attribute("bundle", output)
+	recorder.Attribute("bundleBytes", fmt.Sprint(size))
 	succeeded = true
 	result = Result{
 		Schema: 1, Version: version.String(), Target: options.Target.String(), Bundle: output, SHA256: digest, Size: size,

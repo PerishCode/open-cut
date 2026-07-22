@@ -5,6 +5,7 @@ import type { ClipState } from './clipState';
 import type { LinkGroupState } from './linkGroupState';
 import type { NarrativeNodeState } from './narrativeNodeState';
 import type { NormalizedEditOperationType } from './normalizedEditOperationType';
+import type { ProjectVersionRestoreRef } from './projectVersionRestoreRef';
 import type { TranscriptCorrectionState } from './transcriptCorrectionState';
 
 export interface NormalizedEditOperation {
@@ -14,6 +15,7 @@ export interface NormalizedEditOperation {
   clip?: ClipState;
   linkGroup?: LinkGroupState;
   narrativeNode?: NarrativeNodeState;
+  projectVersion?: ProjectVersionRestoreRef;
   transcriptCorrection?: TranscriptCorrectionState;
   type: NormalizedEditOperationType;
 }

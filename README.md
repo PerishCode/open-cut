@@ -32,6 +32,7 @@ The business baseline is split across
 [`job-scheduler.md`](./specs/job-scheduler.md),
 [`project-lifecycle.md`](./specs/project-lifecycle.md),
 [`editing-interaction.md`](./specs/editing-interaction.md),
+[`project-versions.md`](./specs/project-versions.md),
 [`playback.md`](./specs/playback.md),
 [`workspace-ui.md`](./specs/workspace-ui.md) and
 [`business-harness.md`](./specs/business-harness.md). These sit above the
@@ -104,6 +105,47 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   aggregates READY, publishes endpoints, broadcasts lifecycle control, and exits
   the runtime tree cleanly without a GUI.
 
+### UI development loop
+
+Keep exploratory UI work out of the default dev data by giving the cell an
+isolated base directory. The path must end in the canonical `dev/default` cell
+suffix, and every companion command must use the same value:
+
+```sh
+oc-control dev --base-dir .tmp/oc-control/ui-audit/dev/default
+```
+
+From another terminal, inspect the live Electron renderer without discovering
+its transient CDP port by hand:
+
+```sh
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --screenshot .tmp/ui-audit.png
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --eval 'document.body?.innerText'
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --set-file .tmp/fixture.webm
+```
+
+`--set-file` accepts only a non-empty regular file, reports the exact attached
+byte size, and targets the first enabled file input. It is a generic renderer
+actuator; it does not import media through an internal API or learn product
+semantics.
+
+When a reproducible local media fixture is needed, record the running renderer
+through the contained media toolchain. On macOS, optional narration gives the
+transcription path known words without adding a checked-in binary fixture:
+
+```sh
+oc-control dev record --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --output .tmp/ui-audit.webm --duration 8 \
+  --speech 'A clear local workflow keeps creative work moving.'
+```
+
+Use `Ctrl-C` to end the owning `dev` command. `oc-control clean --scope quick`
+removes stopped ad-hoc dev and harness data while preserving the expensive
+media-toolchain cache; it refuses directories belonging to a live cell.
+
 ## Local delivery loop
 
 Every public target is named `<platform>-<arch>`, using only `mac|win|linux` and
@@ -149,6 +191,39 @@ API with a separate absorbed business grant; it never joins runtime topology or
 inherits lifecycle authority from the API.
 The public CI builds and verifies native `mac-arm64`, `win-x64`, and `linux-x64`
 full packs; macOS additionally runs the install/offline-relaunch/uninstall loop.
+
+### Delivery timing reports
+
+Use a structured timing report when comparing delivery changes instead of
+inferring performance from the duration of one compound shell step:
+
+```sh
+oc-control pack mac --arch arm64 --version 0.1.0-beta.1 \
+  --output "$bundle" \
+  --timing-report .tmp/oc-control/timing/mac-arm64/pack.json
+
+oc-control timing summary \
+  --report .tmp/oc-control/timing/mac-arm64/media-toolchain.json \
+  --report .tmp/oc-control/timing/mac-arm64/whisper-toolchain.json \
+  --report .tmp/oc-control/timing/mac-arm64/pack.json
+
+oc-control timing compare \
+  --baseline .tmp/timing-baseline/pack.json \
+  --candidate .tmp/oc-control/timing/mac-arm64/pack.json
+```
+
+The API sidecar build automatically writes media and transcription reports
+under `.tmp/oc-control/timing/<target>/`. Harness commands write both their
+normal report and `reports/timing.json` below the selected workspace. Reports
+are written on failure as well as success and record reuse decisions separately
+from phase duration.
+
+Each native CI lane publishes these JSON reports in a separate lightweight
+`open-cut-timing-<target>` artifact and renders them in the job summary. Its
+cache report distinguishes an exact key hit, a
+restore-prefix fallback, and a miss; the media reports independently show
+whether the restored closure and compiled C tree were actually reused. Compare
+the same target and cache cohort before attributing a duration change to code.
 
 Generated workspace cleanup is deliberately repository-scoped:
 

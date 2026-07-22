@@ -1,28 +1,21 @@
 import { Button, Stack, Status, Text } from "@open-cut/components";
-import { type CreatorEditCommit, type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
+import { type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type AsyncResult = unknown;
 type HistoryState =
   | Readonly<{ status: "loading" }>
   | Readonly<{ status: "ready"; page: CreatorHistoryPage; loadingOlder: boolean }>
   | Readonly<{ status: "unavailable"; error: Error }>;
 
 export function CreatorHistory({
-  onCommitted,
   projectId,
   refreshEpoch,
-  sequenceId,
 }: Readonly<{
-  onCommitted(receipt: CreatorEditCommit): Promise<AsyncResult>;
   projectId: DurableID;
   refreshEpoch: number;
-  sequenceId: DurableID;
 }>) {
   const contracts = useContracts();
   const [state, setState] = useState<HistoryState>({ status: "loading" });
-  const [undoing, setUndoing] = useState(false);
-  const [undoError, setUndoError] = useState<Error>();
   const loadGeneration = useRef(0);
 
   const load = useCallback(
@@ -73,30 +66,9 @@ export function CreatorHistory({
     }
   }, [contracts.editing.history, projectId, state]);
 
-  const latest = state.status === "ready" ? state.page.transactions[0] : undefined;
-  const undoLatest = useCallback(async () => {
-    if (!latest || undoing) return;
-    setUndoing(true);
-    setUndoError(undefined);
-    try {
-      const receipt = await contracts.editing.write.undo({
-        projectId,
-        sequenceId,
-        transactionId: latest.id,
-        requestId: `ui:creator-history-undo:${crypto.randomUUID()}`,
-        intent: latest.undoesTransactionId ? "Redo latest undone creative change" : "Undo latest creative change",
-      });
-      await onCommitted(receipt);
-    } catch (value) {
-      setUndoError(asError(value));
-    } finally {
-      setUndoing(false);
-    }
-  }, [contracts.editing.write, latest, onCommitted, projectId, sequenceId, undoing]);
-
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">WORKSPACE HISTORY · DURABLE GLOBAL ORDER</Text>
+      <Text tone="eyebrow">TRANSACTION LOG · TECHNICAL DETAIL</Text>
       {state.status === "loading" ? <Text>Loading recent creative transactions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">
@@ -104,16 +76,6 @@ export function CreatorHistory({
           <Button onPress={() => void load()}>Retry history</Button>
         </Stack>
       ) : null}
-      {latest ? (
-        <Button disabled={undoing} onPress={() => void undoLatest()}>
-          {undoing
-            ? "Committing history transaction…"
-            : latest.undoesTransactionId
-              ? "Redo previous change"
-              : "Undo latest change"}
-        </Button>
-      ) : null}
-      {undoError ? <Status state="unavailable">History action failed · {undoError.message}</Status> : null}
       {state.status === "ready"
         ? state.page.transactions.map((transaction, index) => (
             <Stack key={transaction.id} spacing="compact">

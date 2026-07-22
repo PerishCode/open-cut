@@ -33,6 +33,7 @@ func NewRouter(
 		health, productStatus, productResources, projects, reads, activity, runs, edits, editReads,
 		media, assetReads, sourceAccess, mediaLeases, sequencePreviewLeases, sequenceFrames,
 		sequenceExports, sequenceExportDelivery, nil, authorizer,
+		nil,
 	)
 }
 
@@ -56,6 +57,7 @@ func NewRouterWithAgentBridge(
 	sequenceExportDelivery *service.SequenceExportDeliveryService,
 	agentBridge *service.AgentBridgeService,
 	authorizer service.Authorizer,
+	projectVersions *application.ProjectVersions,
 ) (*http.ServeMux, huma.API) {
 	mux := http.NewServeMux()
 	config := huma.DefaultConfig("Open Cut API", "1.0.0")
@@ -83,6 +85,7 @@ func NewRouterWithAgentBridge(
 	RegisterCreatorCaptionGesturePreview(api, editReads, authorizer)
 	RegisterCreatorClipPlacementPreview(api, editReads, authorizer)
 	RegisterCreatorEditHistory(api, editReads, authorizer)
+	RegisterProjectVersions(api, projectVersions, authorizer)
 	RegisterMedia(api, media, assetReads, sourceAccess, runs, authorizer)
 	RegisterSequenceFrames(api, sequenceFrames, runs, authorizer)
 	RegisterSequenceExports(api, sequenceExports, runs, authorizer)

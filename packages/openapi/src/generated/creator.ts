@@ -1,5 +1,7 @@
 import type {
   CaptionDerivationPreview,
+  CreateProjectVersionInput,
+  CreateProjectVersionResult,
   CreatorCaptionDerivationPreviewInput,
   CreatorCaptionGesturePreview,
   CreatorCaptionGesturePreviewInput,
@@ -9,7 +11,11 @@ import type {
   CreatorTimelineGesturePreviewResult,
   CreatorTransactionHistoryPage,
   ErrorModel,
-  ListCreatorEditTransactionsParams
+  ListCreatorEditTransactionsParams,
+  ListProjectVersionsParams,
+  ProjectVersionPage,
+  RestoreProjectVersionInput,
+  RestoreProjectVersionResult
 } from './model';
 
 
@@ -284,4 +290,164 @@ export const previewCreatorTimelineGesture = async (projectId: string,
 
   const data: previewCreatorTimelineGestureResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as previewCreatorTimelineGestureResponse
+}
+
+
+export type listProjectVersionsResponse200 = {
+  data: ProjectVersionPage
+  status: 200
+}
+
+export type listProjectVersionsResponseDefault = {
+  data: ErrorModel
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type listProjectVersionsResponseSuccess = (listProjectVersionsResponse200) & {
+  headers: Headers;
+};
+export type listProjectVersionsResponseError = (listProjectVersionsResponseDefault) & {
+  headers: Headers;
+};
+
+export type listProjectVersionsResponse = (listProjectVersionsResponseSuccess | listProjectVersionsResponseError)
+
+export const getListProjectVersionsUrl = (projectId: string,
+    params?: ListProjectVersionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/projects/${projectId}/versions?${stringifiedParams}` : `/api/v1/projects/${projectId}/versions`
+}
+
+/**
+ * @summary List lightweight project recovery checkpoints
+ */
+export const listProjectVersions = async (projectId: string,
+    params?: ListProjectVersionsParams, options?: RequestInit): Promise<listProjectVersionsResponse> => {
+
+  const res = await fetch(getListProjectVersionsUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listProjectVersionsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listProjectVersionsResponse
+}
+
+
+export type createProjectVersionResponse200 = {
+  data: CreateProjectVersionResult
+  status: 200
+}
+
+export type createProjectVersionResponseDefault = {
+  data: ErrorModel
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type createProjectVersionResponseSuccess = (createProjectVersionResponse200) & {
+  headers: Headers;
+};
+export type createProjectVersionResponseError = (createProjectVersionResponseDefault) & {
+  headers: Headers;
+};
+
+export type createProjectVersionResponse = (createProjectVersionResponseSuccess | createProjectVersionResponseError)
+
+export const getCreateProjectVersionUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/v1/projects/${projectId}/versions`
+}
+
+/**
+ * @summary Save a named lightweight project recovery checkpoint
+ */
+export const createProjectVersion = async (projectId: string,
+    createProjectVersionInput: CreateProjectVersionInput, options?: RequestInit): Promise<createProjectVersionResponse> => {
+
+  const res = await fetch(getCreateProjectVersionUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createProjectVersionInput)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createProjectVersionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createProjectVersionResponse
+}
+
+
+export type restoreProjectVersionResponse200 = {
+  data: RestoreProjectVersionResult
+  status: 200
+}
+
+export type restoreProjectVersionResponseDefault = {
+  data: ErrorModel
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type restoreProjectVersionResponseSuccess = (restoreProjectVersionResponse200) & {
+  headers: Headers;
+};
+export type restoreProjectVersionResponseError = (restoreProjectVersionResponseDefault) & {
+  headers: Headers;
+};
+
+export type restoreProjectVersionResponse = (restoreProjectVersionResponseSuccess | restoreProjectVersionResponseError)
+
+export const getRestoreProjectVersionUrl = (projectId: string,
+    versionId: string,) => {
+
+
+
+
+  return `/api/v1/projects/${projectId}/versions/${versionId}/restore`
+}
+
+/**
+ * @summary Atomically restore a project checkpoint as a new creative revision
+ */
+export const restoreProjectVersion = async (projectId: string,
+    versionId: string,
+    restoreProjectVersionInput: RestoreProjectVersionInput, options?: RequestInit): Promise<restoreProjectVersionResponse> => {
+
+  const res = await fetch(getRestoreProjectVersionUrl(projectId,versionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restoreProjectVersionInput)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: restoreProjectVersionResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as restoreProjectVersionResponse
 }

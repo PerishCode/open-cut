@@ -189,7 +189,7 @@ func projectOverviewFromGenesis(genesis domain.ProjectGenesis, cursor domain.Cur
 }
 
 func (projects *Projects) newGenesisIDs(ctx context.Context, at time.Time) (domain.GenesisIDs, error) {
-	values := make([]string, 10)
+	values := make([]string, 11)
 	for index := range values {
 		value, err := projects.identities.NewID(ctx, at)
 		if err != nil {
@@ -201,44 +201,48 @@ func (projects *Projects) newGenesisIDs(ctx context.Context, at time.Time) (doma
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	document, err := domain.ParseNarrativeDocumentID(values[1])
+	version, err := domain.ParseProjectVersionID(values[1])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	root, err := domain.ParseNarrativeNodeID(values[2])
+	document, err := domain.ParseNarrativeDocumentID(values[2])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	sequence, err := domain.ParseSequenceID(values[3])
+	root, err := domain.ParseNarrativeNodeID(values[3])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	video, err := domain.ParseTrackID(values[4])
+	sequence, err := domain.ParseSequenceID(values[4])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	audio, err := domain.ParseTrackID(values[5])
+	video, err := domain.ParseTrackID(values[5])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	caption, err := domain.ParseTrackID(values[6])
+	audio, err := domain.ParseTrackID(values[6])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	proposal, err := domain.ParseProposalID(values[7])
+	caption, err := domain.ParseTrackID(values[7])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	transaction, err := domain.ParseTransactionID(values[8])
+	proposal, err := domain.ParseProposalID(values[8])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
-	activityEvent, err := domain.ParseActivityEventID(values[9])
+	transaction, err := domain.ParseTransactionID(values[9])
+	if err != nil {
+		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
+	}
+	activityEvent, err := domain.ParseActivityEventID(values[10])
 	if err != nil {
 		return domain.GenesisIDs{}, fmt.Errorf("%w: %v", ErrIdentityGeneration, err)
 	}
 	return domain.GenesisIDs{
-		Project: project, NarrativeDocument: document, RootSection: root,
+		Project: project, ProjectVersion: version, NarrativeDocument: document, RootSection: root,
 		MainSequence: sequence, VideoTrack: video, AudioTrack: audio, CaptionTrack: caption,
 		Proposal: proposal, Transaction: transaction, ActivityEvent: activityEvent,
 	}, nil

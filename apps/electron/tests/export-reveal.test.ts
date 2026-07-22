@@ -93,6 +93,21 @@ describe("Export reveal", () => {
     receipts.clear();
     assert.equal(receipts.resolve(tokens[32] ?? "", "oc_ui_one", 2), undefined);
   });
+
+  it("preserves a receipt across a controlled UI session renewal", () => {
+    const receipts = new DeliveryReceiptStore();
+    const token = receipts.create({
+      uiSession: "oc_ui_old",
+      destinationPath: "/opaque/to-web",
+      displayName: "story.webm",
+      targetIdentity: "identity",
+    });
+
+    receipts.rebind("oc_ui_old", "oc_ui_new");
+
+    assert.equal(receipts.resolve(token, "oc_ui_old"), undefined);
+    assert.ok(receipts.resolve(token, "oc_ui_new"));
+  });
 });
 
 function revealRequest(deliveryReceipt: string): Request {

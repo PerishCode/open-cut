@@ -300,18 +300,20 @@ func loadProjectGenesis(ctx context.Context, tx *sql.Tx, projectID string) (doma
 		return domain.ProjectGenesis{}, err
 	}
 	var requestID, actorKind, actorID, proposalID, proposalDigest, transactionID, activityEventID, createdAt string
+	var versionID string
 	var committedRevision uint64
 	if err := tx.QueryRowContext(ctx, `
 SELECT
   r.request_id, r.actor_kind, r.actor_id, p.id, p.digest, t.id, t.project_revision,
-  r.project_activity_event_id, t.committed_at
+  r.project_activity_event_id, t.committed_at,
+  (SELECT id FROM project_versions WHERE project_id = r.project_id AND source = 'genesis' LIMIT 1)
 FROM request_identities r
 JOIN edit_proposals p ON p.id = r.proposal_id
 JOIN edit_transactions t ON t.id = r.transaction_id
 WHERE r.project_id = ? AND t.project_revision = 1
 `, projectID).Scan(
 		&requestID, &actorKind, &actorID, &proposalID, &proposalDigest, &transactionID,
-		&committedRevision, &activityEventID, &createdAt,
+		&committedRevision, &activityEventID, &createdAt, &versionID,
 	); err != nil {
 		return domain.ProjectGenesis{}, err
 	}
@@ -343,6 +345,10 @@ WHERE r.project_id = ? AND t.project_revision = 1
 	if err != nil {
 		return domain.ProjectGenesis{}, err
 	}
+	version, err := domain.ParseProjectVersionID(versionID)
+	if err != nil {
+		return domain.ProjectGenesis{}, err
+	}
 	committedAt, err := time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
 		return domain.ProjectGenesis{}, err
@@ -350,7 +356,8 @@ WHERE r.project_id = ? AND t.project_revision = 1
 	return domain.ProjectGenesis{
 		Project: project,
 		Record: domain.GenesisRecord{
-			ProposalID: proposal, TransactionID: transaction, RequestID: request,
+			ProjectVersionID: version,
+			ProposalID:       proposal, TransactionID: transaction, RequestID: request,
 			Actor: domain.CreatorActor(creator), CommittedProjectRevision: revision,
 			ProposalDigest: digest, ActivityEventID: activity, CreatedAt: committedAt.UTC(),
 		},

@@ -121,23 +121,10 @@ export function SourcePreviewSurface({
   const preparation = snapshot.preparation;
   const lease = preparation?.lease;
   const range = controller.selectedRange();
+  const canUseFullSource = controller.hasFiniteSelectedCoverage();
   return (
     <Stack spacing="compact">
-      <Text>
-        {asset.displayName} · Asset r{asset.revision} · {asset.acceptedFingerprint?.slice(0, 19) ?? "no fingerprint"}…
-      </Text>
-      <StreamSelection
-        label="VIDEO STREAM"
-        onChange={onVideoStreamChange}
-        selected={videoStreamId}
-        streams={videoStreams}
-      />
-      <StreamSelection
-        label="AUDIO STREAM"
-        onChange={onAudioStreamChange}
-        selected={audioStreamId}
-        streams={audioStreams}
-      />
+      <Text>{asset.displayName}</Text>
       {!videoStreamId && !audioStreamId ? <Text>Select at least one explicit SourceStream.</Text> : null}
       {snapshot.status === "preparing" ? (
         <Text>
@@ -173,7 +160,10 @@ export function SourcePreviewSurface({
           <Button onPress={() => run(() => controller.step("next"))}>Next source boundary</Button>
           <Button onPress={() => run(() => controller.captureIn())}>Mark In at settled position</Button>
           <Button onPress={() => run(() => controller.captureOut())}>Mark Out after displayed boundary</Button>
-          <Button onPress={() => run(() => controller.useFullSelectedSource())}>Use full selected source</Button>
+          <Button disabled={!canUseFullSource} onPress={() => run(() => controller.useFullSelectedSource())}>
+            Use full selected source
+          </Button>
+          {!canUseFullSource ? <Text>Full range unavailable; mark In and Out explicitly.</Text> : null}
           <Button onPress={() => controller.clearMarks()}>Clear source marks</Button>
           <Text>
             In {formatExact(snapshot.marks.in)} · Out {formatExact(snapshot.marks.out)}
@@ -182,6 +172,9 @@ export function SourcePreviewSurface({
           <Text tone="eyebrow">NORMALIZED SOURCE PROXY · {lease.byteLength} BYTES</Text>
         </>
       ) : null}
+      <Text tone="eyebrow">SOURCE TRACKS</Text>
+      <StreamSelection label="VIDEO" onChange={onVideoStreamChange} selected={videoStreamId} streams={videoStreams} />
+      <StreamSelection label="AUDIO" onChange={onAudioStreamChange} selected={audioStreamId} streams={audioStreams} />
       {actionError ? <Text>{actionError.message}</Text> : null}
     </Stack>
   );

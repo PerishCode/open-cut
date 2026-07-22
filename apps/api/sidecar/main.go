@@ -429,6 +429,12 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	projectVersions, err := application.NewProjectVersions(
+		projects, application.UUIDv7IdentityGenerator{}, application.ClockFunc(time.Now),
+	)
+	if err != nil {
+		return err
+	}
 	agentBridge, adapterState, err := localAgentBridge(
 		ctx, dataDir, lifecycleProfile(launch.Mode), agentBridges, projects,
 	)
@@ -480,6 +486,7 @@ func run(args []string) error {
 		sequenceExportDelivery,
 		agentBridge,
 		authorizer,
+		projectVersions,
 	)
 	session, err := sidecarclient.DialSession(ctx, launch.Control, launch.Token, sidecarclient.Registration{
 		Channel: launch.Channel, Namespace: launch.Namespace, App: launch.App,

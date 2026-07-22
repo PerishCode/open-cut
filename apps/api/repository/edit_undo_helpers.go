@@ -196,6 +196,8 @@ func normalizedOperationIdentity(
 	operation domain.NormalizedEditOperation,
 ) (domain.EditEntityKind, string, error) {
 	switch operation.Type {
+	case domain.NormalizedRestoreProjectVersion:
+		return "", "", application.ErrEditInvalid
 	case domain.NormalizedPutNarrativeNode:
 		if operation.NarrativeNode == nil || operation.NarrativeNode.ID().IsZero() {
 			return "", "", application.ErrEditInvalid
@@ -282,6 +284,10 @@ func cloneNormalizedOperation(operation domain.NormalizedEditOperation) domain.N
 	if operation.LinkGroup != nil {
 		copyValue := *operation.LinkGroup
 		result.LinkGroup = &copyValue
+	}
+	if operation.ProjectVersion != nil {
+		copyValue := *operation.ProjectVersion
+		result.ProjectVersion = &copyValue
 	}
 	return result
 }

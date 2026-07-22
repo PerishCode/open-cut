@@ -7,10 +7,31 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/internal/workspace"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/target"
 )
+
+func TestPackWritesFailureTimingReportBeforeWorkspaceBuild(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "reports", "pack.json")
+	_, err := Pack(context.Background(), Options{
+		RepositoryRoot: t.TempDir(),
+		Version:        "0.1.0-test.1",
+		Target:         target.Host(),
+		TimingReport:   reportPath,
+	})
+	if err == nil {
+		t.Fatal("pack unexpectedly succeeded outside an open-cut workspace")
+	}
+	report, readErr := timingreport.Read(reportPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if report.Operation != "pack" || report.Outcome != timingreport.OutcomeFailed || report.Error == "" {
+		t.Fatalf("report=%+v", report)
+	}
+}
 
 func TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand(t *testing.T) {
 	if os.Getenv("OPEN_CUT_ARTIFACT_CHECK_HELPER") == "1" {

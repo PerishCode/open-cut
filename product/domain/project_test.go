@@ -87,19 +87,21 @@ func testGenesisIDs(t *testing.T) GenesisIDs {
 		"018f0000-0000-7000-8000-000000000008",
 		"018f0000-0000-7000-8000-000000000009",
 		"018f0000-0000-7000-8000-00000000000a",
+		"018f0000-0000-7000-8000-00000000000c",
 	}
 	project, _ := ParseProjectID(values[0])
-	document, _ := ParseNarrativeDocumentID(values[1])
-	root, _ := ParseNarrativeNodeID(values[2])
-	sequence, _ := ParseSequenceID(values[3])
-	video, _ := ParseTrackID(values[4])
-	audio, _ := ParseTrackID(values[5])
-	caption, _ := ParseTrackID(values[6])
-	proposal, _ := ParseProposalID(values[7])
-	transaction, _ := ParseTransactionID(values[8])
-	activityEvent, _ := ParseActivityEventID(values[9])
+	version, _ := ParseProjectVersionID(values[1])
+	document, _ := ParseNarrativeDocumentID(values[2])
+	root, _ := ParseNarrativeNodeID(values[3])
+	sequence, _ := ParseSequenceID(values[4])
+	video, _ := ParseTrackID(values[5])
+	audio, _ := ParseTrackID(values[6])
+	caption, _ := ParseTrackID(values[7])
+	proposal, _ := ParseProposalID(values[8])
+	transaction, _ := ParseTransactionID(values[9])
+	activityEvent, _ := ParseActivityEventID(values[10])
 	return GenesisIDs{
-		Project: project, NarrativeDocument: document, RootSection: root,
+		Project: project, ProjectVersion: version, NarrativeDocument: document, RootSection: root,
 		MainSequence: sequence, VideoTrack: video, AudioTrack: audio, CaptionTrack: caption,
 		Proposal: proposal, Transaction: transaction, ActivityEvent: activityEvent,
 	}

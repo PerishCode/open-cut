@@ -133,6 +133,14 @@ jobs:
             arch: x64
             control: ./oc-control
     runs-on: ${{ matrix.runner }}
+    env:
+      CONTROL: ${{ matrix.control }}
+      PLATFORM: ${{ matrix.platform }}
+      ARCH: ${{ matrix.arch }}
+      TARGET: ${{ matrix.target }}
+      VERSION: 0.1.0-ci.1
+      BUNDLE: dist/open-cut-0.1.0-ci.1-${{ matrix.target }}.release-bundle.tar.zst
+      TIMING_ROOT: .tmp/oc-control/timing/${{ matrix.target }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -182,6 +190,7 @@ jobs:
         run: bash .github/scripts/media-cache-keys.sh
       - name: Restore pinned media source archives
         if: github.event_name != 'release' && github.event_name != 'schedule'
+        id: media_source_restore
         uses: actions/cache/restore@v4
         continue-on-error: true
         with:
@@ -225,44 +234,61 @@ jobs:
           path: apps/api/dist/sidecar
           key: ${{ steps.media_cache.outputs.closure-key }}
           restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
-      - name: Pack, publish, and verify native full pack
+      - name: Check delivery toolchain
+        shell: bash
+        run: |
+          "$CONTROL" doctor
+      - name: Generate development release key
+        shell: bash
+        run: |
+          "$CONTROL" release keygen --output .tmp/ci/key.json --id ci
+      - name: Pack native bundle
         if: matrix.platform != 'win'
         shell: bash
-        env:
-          CONTROL: ${{ matrix.control }}
-          PLATFORM: ${{ matrix.platform }}
-          ARCH: ${{ matrix.arch }}
-          TARGET: ${{ matrix.target }}
-          VERSION: 0.1.0-ci.1
         run: |
           set -euo pipefail
-          bundle="dist/open-cut-${VERSION}-${TARGET}.release-bundle.tar.zst"
-          "$CONTROL" doctor
-          "$CONTROL" release keygen --output .tmp/ci/key.json --id ci
-          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$bundle"
-          "$CONTROL" release create --bundle "$bundle" --origin .tmp/ci/origin --key .tmp/ci/key.json
-          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$bundle"
-          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --origin .tmp/ci/origin --channel ci --key .tmp/ci/key.json
-          "$CONTROL" harness full-pack --bundle "$bundle" --workspace .tmp/ci/full-pack
-      - name: Pack, publish, and verify native full pack on Windows
+          mkdir -p "$TIMING_ROOT"
+          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$BUNDLE" --timing-report "$TIMING_ROOT/pack.json"
+      - name: Pack native bundle on Windows
         if: matrix.platform == 'win'
         shell: msys2 {0}
-        env:
-          CONTROL: ${{ matrix.control }}
-          PLATFORM: ${{ matrix.platform }}
-          ARCH: ${{ matrix.arch }}
-          TARGET: ${{ matrix.target }}
-          VERSION: 0.1.0-ci.1
         run: |
           set -euo pipefail
-          bundle="dist/open-cut-${VERSION}-${TARGET}.release-bundle.tar.zst"
-          "$CONTROL" doctor
-          "$CONTROL" release keygen --output .tmp/ci/key.json --id ci
-          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$bundle"
-          "$CONTROL" release create --bundle "$bundle" --origin .tmp/ci/origin --key .tmp/ci/key.json
-          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$bundle"
+          mkdir -p "$TIMING_ROOT"
+          "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$BUNDLE" --timing-report "$TIMING_ROOT/pack.json"
+      - name: Publish release bundle
+        shell: bash
+        run: |
+          "$CONTROL" release create --bundle "$BUNDLE" --origin .tmp/ci/origin --key .tmp/ci/key.json
+      - name: Verify release bundle
+        shell: bash
+        run: |
+          "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --bundle "$BUNDLE"
+      - name: Verify published origin
+        shell: bash
+        run: |
           "$CONTROL" verify "$PLATFORM" --arch "$ARCH" --origin .tmp/ci/origin --channel ci --key .tmp/ci/key.json
-          "$CONTROL" harness full-pack --bundle "$bundle" --workspace .tmp/ci/full-pack
+      - name: Exercise full-pack harness
+        shell: bash
+        run: |
+          "$CONTROL" harness full-pack --bundle "$BUNDLE" --workspace .tmp/ci/full-pack
+      - name: Record cache restore cohorts
+        if: always() && github.event_name != 'release' && github.event_name != 'schedule'
+        shell: bash
+        continue-on-error: true
+        run: |
+          "$CONTROL" timing cache-report \
+            --output "$TIMING_ROOT/cache-restore.json" \
+            --target "$TARGET" \
+            --attribute "event=${{ github.event_name }}" \
+            --attribute "runner-image=${{ runner.os }}/${{ runner.arch }}" \
+            --attribute "commit=${{ github.sha }}" \
+            --attribute "media-sources-restore-outcome=${{ steps.media_source_restore.outcome }}" \
+            --attribute "media-c-build-restore-outcome=${{ steps.media_cbuild_restore.outcome }}" \
+            --attribute "media-closure-restore-outcome=${{ steps.media_closure_restore.outcome }}" \
+            --cache "media-sources,${{ steps.media_source_restore.outputs.cache-primary-key }},${{ steps.media_source_restore.outputs.cache-matched-key }},${{ steps.media_source_restore.outputs.cache-hit }}" \
+            --cache "media-c-build,${{ steps.media_cbuild_restore.outputs.cache-primary-key }},${{ steps.media_cbuild_restore.outputs.cache-matched-key }},${{ steps.media_cbuild_restore.outputs.cache-hit }}" \
+            --cache "media-closure,${{ steps.media_closure_restore.outputs.cache-primary-key }},${{ steps.media_closure_restore.outputs.cache-matched-key }},${{ steps.media_closure_restore.outputs.cache-hit }}"
       - name: Save pinned media source archives
         if: ${{ success() && github.event_name == 'push' }}
         uses: actions/cache/save@v4
@@ -449,6 +475,43 @@ jobs:
         with:
           path: .tmp/ci/transcription-model
           key: transcription-model-v1-1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b
+      - name: Summarize delivery timings
+        if: always()
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          reports=()
+          for report in \
+            "$TIMING_ROOT/cache-restore.json" \
+            "$TIMING_ROOT/media-toolchain.json" \
+            "$TIMING_ROOT/whisper-toolchain.json" \
+            "$TIMING_ROOT/pack.json" \
+            .tmp/ci/full-pack/reports/timing.json
+          do
+            if [ -f "$report" ]; then
+              reports+=(--report "$report")
+            fi
+          done
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "No delivery timing reports were produced for $TARGET." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Delivery timings · $TARGET"
+            echo
+            "$CONTROL" timing summary "${reports[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload delivery timing reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-cut-timing-${{ matrix.target }}
+          path: |
+            .tmp/ci/full-pack/reports/report.json
+            .tmp/ci/full-pack/reports/timing.json
+            .tmp/oc-control/timing/${{ matrix.target }}/*.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         if: always()
         with:

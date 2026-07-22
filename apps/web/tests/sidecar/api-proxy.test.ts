@@ -70,8 +70,9 @@ describe("Web sidecar API proxy", () => {
   });
 
   it("binds a development browser cookie to a hidden upstream UI session", async () => {
+    let expectedUISession = "oc_ui_hidden";
     const api = await listen((request, response) => {
-      expect(request.headers["x-open-cut-ui-session"]).toBe("oc_ui_hidden");
+      expect(request.headers["x-open-cut-ui-session"]).toBe(expectedUISession);
       expect(request.headers.cookie).toBeUndefined();
       expect(request.headers["x-open-cut-cli-signature"]).toBeUndefined();
       response.end("authorized");
@@ -83,6 +84,9 @@ describe("Web sidecar API proxy", () => {
       browserBinding: "browser-binding",
       expiresAt: Date.now() + 60_000,
     });
+    expect(proxy.browserCookie()).toBe(
+      `${developmentSessionCookie}=browser-binding; Path=/; HttpOnly; SameSite=Strict`,
+    );
     const web = await listen((request, response) => {
       if (!proxy.handle(request, response)) response.writeHead(404).end();
     });
@@ -97,6 +101,17 @@ describe("Web sidecar API proxy", () => {
     });
     expect(accepted.status).toBe(200);
     await expect(accepted.text()).resolves.toBe("authorized");
+
+    expectedUISession = "oc_ui_renewed";
+    proxy.setUISession({
+      apiSession: expectedUISession,
+      browserBinding: "browser-binding",
+      expiresAt: Date.now() + 60_000,
+    });
+    const renewed = await fetch(`${web}/api/v1/projects`, {
+      headers: { cookie: `${developmentSessionCookie}=browser-binding` },
+    });
+    expect(renewed.status).toBe(200);
   });
 
   it("preserves session-bound media range requests and responses", async () => {

@@ -14,7 +14,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/sse"
 )
 
-const activityPollInterval = 250 * time.Millisecond
+const (
+	activityPollInterval      = 250 * time.Millisecond
+	activityKeepAliveInterval = time.Minute
+)
 
 type activityListInput = command.ActivityListInput
 
@@ -25,6 +28,10 @@ type activityListOutput struct {
 type activityStreamInput struct {
 	ProjectID string `query:"projectId" format:"uuid" pattern:"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"`
 	After     string `query:"after" format:"uint64-decimal" pattern:"^(0|[1-9][0-9]*)$"`
+}
+
+type activityStreamReady struct {
+	After string `json:"after" format:"uint64-decimal" pattern:"^(0|[1-9][0-9]*)$"`
 }
 
 func RegisterActivity(
@@ -67,7 +74,7 @@ func RegisterActivity(
 		Tags:        []string{"activity"},
 		Middlewares: requireAuthority(api, authorizer),
 		Extensions:  map[string]any{"x-open-cut-surface": "creator"},
-	}, map[string]any{"activity": &application.ActivityEvent{}}, func(
+	}, map[string]any{"activity": &application.ActivityEvent{}, "ready": &activityStreamReady{}}, func(
 		ctx context.Context,
 		input *activityStreamInput,
 		send sse.Sender,
@@ -80,6 +87,14 @@ func RegisterActivity(
 		if err != nil {
 			return
 		}
+		// Flush an authenticated transport frame even when no durable activity is
+		// currently available. This settles the streaming HTTP response before a
+		// short-lived UI authority rotates; durable activity still begins strictly
+		// after the requested cursor and remains the only reconciliation truth.
+		if err := send(sse.Message{Data: activityStreamReady{After: after.String()}, Retry: 1000}); err != nil {
+			return
+		}
+		lastTransportFrame := time.Now()
 		for {
 			page, err := reads.List(ctx, application.ListActivityInput{
 				ProjectID: projectID, After: after, Limit: 500,
@@ -94,6 +109,7 @@ func RegisterActivity(
 				if err := send(sse.Message{Data: event, Retry: 1000}); err != nil {
 					return
 				}
+				lastTransportFrame = time.Now()
 				after = event.Cursor
 			}
 			if page.HasMore {
@@ -101,6 +117,15 @@ func RegisterActivity(
 			}
 			if page.Cursor.Value() > after.Value() {
 				after = page.Cursor
+			}
+			// Keep the authenticated streaming response alive across intermediaries
+			// with finite body-idle timeouts. The Contracts adapter ignores `ready`
+			// events, so this never advances or synthesizes durable activity.
+			if time.Since(lastTransportFrame) >= activityKeepAliveInterval {
+				if err := send(sse.Message{Data: activityStreamReady{After: after.String()}, Retry: 1000}); err != nil {
+					return
+				}
+				lastTransportFrame = time.Now()
 			}
 			timer := time.NewTimer(activityPollInterval)
 			select {

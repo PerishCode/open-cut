@@ -32,9 +32,12 @@ type childProcess struct {
 
 func RunSidecars(ctx context.Context, workspaceRoot, repositoryRoot string) Report {
 	started := time.Now()
+	lastCheck := started
 	report := Report{Schema: 1, Scenario: "web-api-sidecar-entries"}
 	check := func(name string, err error) bool {
-		entry := Check{Name: name, Passed: err == nil}
+		observed := time.Now()
+		entry := Check{Name: name, Passed: err == nil, DurationMS: observed.Sub(lastCheck).Milliseconds()}
+		lastCheck = observed
 		if err != nil {
 			entry.Detail = err.Error()
 		}

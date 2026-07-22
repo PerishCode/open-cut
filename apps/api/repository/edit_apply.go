@@ -209,8 +209,12 @@ INSERT INTO edit_transactions (
 		}
 	}
 	leafChanges := normalizedOperationEntityKeys(transaction.Operations)
+	restoresVersion := proposalRestoresProjectVersion(transaction.Operations)
 	for _, change := range transaction.Changes {
 		if _, leaf := leafChanges[string(change.Kind)+"\x00"+change.ID]; leaf {
+			continue
+		}
+		if restoresVersion && change.Kind != domain.EntityNarrativeDocument && change.Kind != domain.EntitySequence {
 			continue
 		}
 		switch change.Kind {
@@ -231,4 +235,8 @@ INSERT INTO edit_transactions (
 		return application.ErrEditConflict
 	}
 	return nil
+}
+
+func proposalRestoresProjectVersion(operations []domain.NormalizedEditOperation) bool {
+	return len(operations) == 1 && operations[0].Type == domain.NormalizedRestoreProjectVersion
 }

@@ -20,6 +20,7 @@ import {
 import { createSequenceExportPort, type SequenceExportPort } from "./exports.js";
 import { createMediaPorts, type MediaPorts } from "./media.js";
 import { createProductStatusPort, type ProductStatusPort } from "./product.js";
+import { createProjectVersionPort, type ProjectVersionPort } from "./project-versions.js";
 import { createProductResourcePort, type ProductResourcePort } from "./resources.js";
 import { readServerEvents } from "./sse.js";
 
@@ -146,6 +147,7 @@ type ProjectEvents = {
 export type ProjectPorts = Readonly<{
   read: ProjectReadPort;
   write: ProjectWritePort;
+  versions: ProjectVersionPort;
 }>;
 
 export type Contracts = Readonly<{
@@ -258,7 +260,7 @@ export function createContracts(): Contracts {
     agent,
     product: createProductStatusPort(),
     resources: createProductResourcePort(),
-    projects: { read, write },
+    projects: { read, write, versions: createProjectVersionPort() },
     editing: createEditingPorts(),
     media,
     exports,

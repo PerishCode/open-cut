@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@open-cut/components";
+import { Button, ResourceCard, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -41,24 +41,49 @@ export function AssetSummary({
   selected: boolean;
 }) {
   const pending = asset.jobs.filter((job) => job.state === "queued" || job.state === "running").length;
-  const blocked = asset.jobs.filter((job) => job.state === "blocked").length;
+  const failed = asset.jobs.filter((job) => job.state === "failed").length;
+  const previewable = Boolean(
+    previewAvailable &&
+      asset.acceptedFingerprint &&
+      asset.facts?.streams.some(
+        (stream) => stream.descriptor.mediaType === "video" || stream.descriptor.mediaType === "audio",
+      ),
+  );
+  const readiness =
+    asset.availability !== "online"
+      ? asset.availability
+      : !asset.facts
+        ? "Checking media"
+        : pending > 0
+          ? `Preparing local media · ${pending} in progress`
+          : failed > 0
+            ? `Media needs attention · ${failed} failed`
+            : "Ready";
+  const readinessState =
+    asset.availability !== "online" || failed > 0 ? "unavailable" : !asset.facts || pending > 0 ? "pending" : "ready";
+  const transcriptReady = asset.artifacts.some(
+    (artifact) => artifact.kind === "transcript" && artifact.state === "ready",
+  );
   return (
-    <Stack spacing="compact">
-      <Text>{asset.displayName}</Text>
-      <Text tone="eyebrow">
-        {asset.availability} · r{asset.revision} · {pending} active · {blocked} blocked
-      </Text>
-      {asset.facts ? <Text>{formatMediaFacts(asset.facts)}</Text> : <Text>Awaiting identity and media facts.</Text>}
-      <Button onPress={onContext}>Use this Asset as @ context</Button>
-      <Button disabled={!previewAvailable} onPress={onPreview}>
-        {selected ? "Viewing source" : "Open in Source Viewer"}
-      </Button>
-      {asset.artifacts.some((artifact) => artifact.kind === "transcript" && artifact.state === "ready") ? (
-        <Button onPress={onTranscript}>Open transcript</Button>
-      ) : (
-        <Text>{transcriptJobStatus(asset)}</Text>
-      )}
-    </Stack>
+    <ResourceCard
+      actions={
+        <>
+          <Button onPress={onContext}>Add @ context</Button>
+          <Button disabled={!previewable} onPress={onPreview}>
+            {selected ? "In Viewer" : "Open source"}
+          </Button>
+          {transcriptReady ? <Button onPress={onTranscript}>Open transcript</Button> : null}
+        </>
+      }
+      eyebrow={asset.facts?.container ?? "Media"}
+      selected={selected}
+      status={<Status state={readinessState}>{readiness}</Status>}
+      title={asset.displayName}
+      details={[
+        asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts.",
+        ...(!transcriptReady ? [transcriptJobStatus(asset)] : []),
+      ]}
+    />
   );
 }
 
@@ -151,10 +176,10 @@ export function TranscriptSurface({
 function transcriptJobStatus(asset: Asset): string {
   const job = asset.jobs.find((candidate) => candidate.kind === "transcript");
   if (!job) return "Transcript has not been scheduled.";
-  if (job.state === "blocked") return "Transcript is waiting for its exact local model or executor.";
+  if (job.state === "blocked") return "Transcript is waiting for local transcription support. Check System.";
   if (job.state === "queued" || job.state === "running") {
-    return `Transcript ${job.state} · ${job.progressBasisPoints / 100}%`;
+    return `Preparing transcript · ${job.progressBasisPoints / 100}%`;
   }
   if (job.state === "succeeded") return "No transcript artifact was produced for this source.";
-  return `Transcript ${job.state}.`;
+  return `Transcript ${job.state}${job.terminalErrorCode ? ` · ${job.terminalErrorCode}` : ""}.`;
 }

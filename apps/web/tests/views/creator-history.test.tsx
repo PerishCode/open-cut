@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { ContractsProvider, type CreatorEditCommit, createContracts, durableID } from "@open-cut/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ContractsProvider, createContracts, durableID } from "@open-cut/contracts";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorHistory } from "../../src/components/creator-history.js";
@@ -23,49 +23,28 @@ afterEach(() => {
 });
 
 describe("Creator Workspace history", () => {
-  it("owns the newest durable transaction Undo across pane and actor boundaries", async () => {
-    const requests: Array<{ url: string; body?: string }> = [];
-    const onCommitted = vi.fn(async (_receipt: CreatorEditCommit) => undefined);
-    vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000908") });
+  it("presents the durable transaction log as read-only technical detail", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      vi.fn(async (input: string | URL | Request) => {
         const url = String(input);
-        requests.push({ url, ...(init?.body ? { body: String(init.body) } : {}) });
         if (url.includes("/creator-edit/transactions")) return jsonResponse(history());
-        if (url.endsWith(`/transactions/${ids.transaction}/undo`)) return jsonResponse(undoReceipt());
         throw new Error(`unexpected request ${url}`);
       }),
     );
     const base = createContracts();
     render(
       <ContractsProvider contracts={{ ...base, start: () => undefined, close: () => undefined }}>
-        <CreatorHistory
-          onCommitted={onCommitted}
-          projectId={durableID(ids.project)}
-          refreshEpoch={0}
-          sequenceId={durableID(ids.sequence)}
-        />
+        <CreatorHistory projectId={durableID(ids.project)} refreshEpoch={0} />
       </ContractsProvider>,
     );
 
     expect(await screen.findByText("Move selected Timeline Clip")).toBeTruthy();
     expect(screen.getByText(/LATEST · r8 · AGENT/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Undo latest change" }));
-
-    await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
-    const undoRequest = requests.find((request) => request.url.endsWith(`/transactions/${ids.transaction}/undo`));
-    expect(JSON.parse(undoRequest?.body ?? "{}")).toEqual({
-      requestId: "ui:creator-history-undo:018f0a60-7b80-7a01-8000-000000000908",
-      intent: "Undo latest creative change",
-    });
-    expect(onCommitted.mock.calls[0]?.[0]).toMatchObject({
-      transactionId: ids.undo,
-      undoesTransactionId: ids.transaction,
-    });
+    expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
 
-  it("presents undo-of-undo as Redo without a second history model", async () => {
+  it("retains prior undo transactions as labeled audit records", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse(history(true))),
@@ -73,17 +52,12 @@ describe("Creator Workspace history", () => {
     const base = createContracts();
     render(
       <ContractsProvider contracts={{ ...base, start: () => undefined, close: () => undefined }}>
-        <CreatorHistory
-          onCommitted={async () => undefined}
-          projectId={durableID(ids.project)}
-          refreshEpoch={0}
-          sequenceId={durableID(ids.sequence)}
-        />
+        <CreatorHistory projectId={durableID(ids.project)} refreshEpoch={0} />
       </ContractsProvider>,
     );
 
-    expect(await screen.findByRole("button", { name: "Redo previous change" })).toBeTruthy();
-    expect(screen.getByText(/UNDO\/REDO/)).toBeTruthy();
+    expect(await screen.findByText(/UNDO\/REDO/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
 });
 
@@ -101,33 +75,6 @@ function history(undone = false) {
       },
     ],
     activityCursor: "14",
-  };
-}
-
-function undoReceipt() {
-  return {
-    proposal: {
-      id: ids.proposal,
-      projectId: ids.project,
-      sequenceId: ids.sequence,
-      requestId: "ui:creator-history-undo:018f0a60-7b80-7a01-8000-000000000908",
-      actor: { kind: "creator", creatorId: ids.creator },
-      status: "applied",
-      appliedTransactionId: ids.undo,
-      allocation: [],
-    },
-    transaction: {
-      id: ids.undo,
-      proposalId: ids.proposal,
-      projectId: ids.project,
-      actor: { kind: "creator", creatorId: ids.creator },
-      intent: "Undo latest creative change",
-      committedProjectRevision: "9",
-      changes: [{ kind: "clip", id: ids.clip, before: "4", after: "5" }],
-      undoesTransactionId: ids.transaction,
-    },
-    activityCursor: "15",
-    replayed: false,
   };
 }
 

@@ -27,8 +27,10 @@ export class ApiProxy {
   browserCookie(): string | undefined {
     const session = this.#uiSession;
     if (!session) return undefined;
-    const maximumAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
-    return `${developmentSessionCookie}=${session.browserBinding}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maximumAge}`;
+    // This is a process-local browser binding, not the short-lived upstream
+    // API credential. A session cookie lets the sidecar rotate that credential
+    // without exposing it or forcing the browser to reload every five minutes.
+    return `${developmentSessionCookie}=${session.browserBinding}; Path=/; HttpOnly; SameSite=Strict`;
   }
 
   handle(request: IncomingMessage, response: ServerResponse): boolean {

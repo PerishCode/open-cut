@@ -11,15 +11,17 @@ import (
 	"github.com/PerishCode/open-cut/internal/cell"
 	"github.com/PerishCode/open-cut/internal/config"
 	"github.com/PerishCode/open-cut/internal/layout"
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/sidecar/broker"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
 
 type Check struct {
-	Name   string `json:"name"`
-	Passed bool   `json:"passed"`
-	Detail string `json:"detail,omitempty"`
+	Name       string `json:"name"`
+	Passed     bool   `json:"passed"`
+	DurationMS int64  `json:"durationMs"`
+	Detail     string `json:"detail,omitempty"`
 }
 
 type Report struct {
@@ -30,11 +32,35 @@ type Report struct {
 	Checks     []Check `json:"checks"`
 }
 
+func (report Report) TimingReport() timingreport.Report {
+	outcome := timingreport.OutcomeSucceeded
+	if !report.Passed {
+		outcome = timingreport.OutcomeFailed
+	}
+	result := timingreport.Report{
+		Schema: timingreport.Schema, Operation: "harness:" + report.Scenario,
+		Outcome: outcome, DurationMS: report.DurationMS, Phases: make([]timingreport.Phase, 0, len(report.Checks)),
+	}
+	for _, check := range report.Checks {
+		phaseOutcome := timingreport.OutcomeSucceeded
+		if !check.Passed {
+			phaseOutcome = timingreport.OutcomeFailed
+		}
+		result.Phases = append(result.Phases, timingreport.Phase{
+			Name: check.Name, Outcome: phaseOutcome, DurationMS: check.DurationMS, Detail: check.Detail,
+		})
+	}
+	return result
+}
+
 func RunBroker(ctx context.Context, workspace string) Report {
 	started := time.Now()
+	lastCheck := started
 	report := Report{Schema: 1, Scenario: "broker-registration-ready"}
 	check := func(name string, err error) bool {
-		entry := Check{Name: name, Passed: err == nil}
+		observed := time.Now()
+		entry := Check{Name: name, Passed: err == nil, DurationMS: observed.Sub(lastCheck).Milliseconds()}
+		lastCheck = observed
 		if err != nil {
 			entry.Detail = err.Error()
 		}

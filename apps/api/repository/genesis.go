@@ -114,6 +114,13 @@ INSERT INTO edit_transactions (
 		string(record.ProposalCanonical), string(record.InverseCanonical), actorKind, actorID, createdAt); err != nil {
 		return application.CreateProjectOutcome{}, fmt.Errorf("persist genesis transaction: %w", err)
 	}
+	if _, err := insertProjectVersionSnapshot(ctx, tx, projectVersionCapture{
+		ID: genesis.Record.ProjectVersionID, ProjectID: project.ID, CreatorID: *record.Actor.CreatorID,
+		Source: application.ProjectVersionGenesis, Name: "Project created",
+		Retention: application.ProjectVersionPinned, CreatedAt: genesis.Record.CreatedAt,
+	}); err != nil {
+		return application.CreateProjectOutcome{}, err
+	}
 
 	projectPayload, err := projectCreatedActivityPayload(genesis)
 	if err != nil {

@@ -36,6 +36,15 @@ export class DeliveryReceiptStore {
     return receipt;
   }
 
+  rebind(previousUISession: string, nextUISession: string): void {
+    if (previousUISession === nextUISession) return;
+    for (const [token, receipt] of this.#receipts) {
+      if (receipt.uiSession === previousUISession) {
+        this.#receipts.set(token, { ...receipt, uiSession: nextUISession });
+      }
+    }
+  }
+
   revoke(token: string): void {
     this.#receipts.delete(token);
   }

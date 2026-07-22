@@ -3,5 +3,5 @@ export type AgentBridgeAvailabilityPromptVersion = typeof AgentBridgeAvailabilit
 
 
 export const AgentBridgeAvailabilityPromptVersion = {
-  'open-cut-agent-v1': 'open-cut-agent-v1',
+  'open-cut-agent-v2': 'open-cut-agent-v2',
 } as const;

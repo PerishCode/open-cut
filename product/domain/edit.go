@@ -75,6 +75,7 @@ const (
 	NormalizedPutClip                 NormalizedEditOperationType = "put-clip"
 	NormalizedPutLinkGroup            NormalizedEditOperationType = "put-link-group"
 	NormalizedPutTranscriptCorrection NormalizedEditOperationType = "put-transcript-correction"
+	NormalizedRestoreProjectVersion   NormalizedEditOperationType = "restore-project-version"
 )
 
 type AlignmentStatus string
@@ -378,7 +379,7 @@ type LinkGroupState struct {
 }
 
 type NormalizedEditOperation struct {
-	Type                 NormalizedEditOperationType `json:"type" enum:"put-narrative-node,put-transcript-correction,put-caption,put-alignment,put-asset,put-clip,put-link-group"`
+	Type                 NormalizedEditOperationType `json:"type" enum:"put-narrative-node,put-transcript-correction,put-caption,put-alignment,put-asset,put-clip,put-link-group,restore-project-version"`
 	NarrativeNode        *NarrativeNodeState         `json:"narrativeNode,omitempty"`
 	TranscriptCorrection *TranscriptCorrectionState  `json:"transcriptCorrection,omitempty"`
 	Caption              *CaptionState               `json:"caption,omitempty"`
@@ -386,6 +387,12 @@ type NormalizedEditOperation struct {
 	Asset                *AssetState                 `json:"asset,omitempty"`
 	Clip                 *ClipState                  `json:"clip,omitempty"`
 	LinkGroup            *LinkGroupState             `json:"linkGroup,omitempty"`
+	ProjectVersion       *ProjectVersionRestoreRef   `json:"projectVersion,omitempty"`
+}
+
+type ProjectVersionRestoreRef struct {
+	ID     ProjectVersionID `json:"id"`
+	Digest Digest           `json:"digest" format:"sha256-digest"`
 }
 
 type EntityRevisionChange struct {

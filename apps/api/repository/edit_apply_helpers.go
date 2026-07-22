@@ -139,7 +139,7 @@ func currentAggregateChange(
 
 func proposalChangesNarrative(operations []domain.NormalizedEditOperation) bool {
 	for _, operation := range operations {
-		if operation.Type == domain.NormalizedPutNarrativeNode {
+		if operation.Type == domain.NormalizedPutNarrativeNode || operation.Type == domain.NormalizedRestoreProjectVersion {
 			return true
 		}
 	}
@@ -149,7 +149,7 @@ func proposalChangesNarrative(operations []domain.NormalizedEditOperation) bool 
 func proposalChangesSequence(operations []domain.NormalizedEditOperation) bool {
 	for _, operation := range operations {
 		if operation.Type == domain.NormalizedPutCaption || operation.Type == domain.NormalizedPutClip ||
-			operation.Type == domain.NormalizedPutLinkGroup {
+			operation.Type == domain.NormalizedPutLinkGroup || operation.Type == domain.NormalizedRestoreProjectVersion {
 			return true
 		}
 	}

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { ContractsProvider, durableID, revisionString } from "@open-cut/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorExport } from "../../src/components/creator-export.js";
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -69,6 +70,7 @@ describe("CreatorExport", () => {
       <ContractsProvider>
         <CreatorExport
           available
+          hasContent
           projectId={projectId}
           projectName="History story"
           sequenceId={sequenceId}
@@ -90,6 +92,39 @@ describe("CreatorExport", () => {
     expect(screen.getByRole("button", { name: "Retry export" })).toBeTruthy();
     expect(deleteRequests).toBe(1);
     view.unmount();
+  });
+
+  it("explains an empty Sequence before offering an invalid export", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000211");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000212");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          return jsonResponse({ lineages: [], activityCursor: "1" });
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=1`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    render(
+      <ContractsProvider>
+        <CreatorExport
+          available
+          hasContent={false}
+          projectId={projectId}
+          projectName="Empty story"
+          sequenceId={sequenceId}
+          sequenceRevision={revisionString("1")}
+        />
+      </ContractsProvider>,
+    );
+
+    const exportButton = await screen.findByRole("button", { name: "Nothing to export" });
+    expect((exportButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Add a clip or caption to the Sequence before exporting.")).toBeTruthy();
   });
 });
 

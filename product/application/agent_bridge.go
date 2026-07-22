@@ -12,6 +12,7 @@ import (
 const (
 	AgentBridgeRequestSchema         = "open-cut/agent-bridge-request/v1"
 	AgentBridgeAdapterCodexV1        = "codex-cli-v1"
+	AgentBridgePromptV2              = "open-cut-agent-v2"
 	MaximumCreatorMessageBytes       = 32 * 1024
 	MaximumAgentTurnTextBytes        = 256 * 1024
 	MaximumAgentRecoveryBytes        = 768 * 1024
@@ -56,7 +57,7 @@ const (
 type AgentBridgeAvailability struct {
 	AdapterID     string                       `json:"adapterId" enum:"codex-cli-v1"`
 	Version       string                       `json:"version,omitempty" maxLength:"128"`
-	PromptVersion string                       `json:"promptVersion" enum:"open-cut-agent-v1"`
+	PromptVersion string                       `json:"promptVersion" enum:"open-cut-agent-v2"`
 	State         AgentBridgeAvailabilityState `json:"state" enum:"available,missing,unauthenticated,incompatible"`
 }
 
@@ -146,6 +147,7 @@ type AgentConversationListInput struct {
 }
 
 type BeginAgentBridgeRecord struct {
+	VersionID        domain.ProjectVersionID
 	RunID            domain.RunID
 	TurnID           domain.TurnID
 	ProjectID        domain.ProjectID
@@ -162,6 +164,7 @@ type BeginAgentBridgeRecord struct {
 }
 
 type ContinueAgentBridgeRecord struct {
+	VersionID          domain.ProjectVersionID
 	ProjectID          domain.ProjectID
 	RunID              domain.RunID
 	ExpectedGeneration domain.Revision
@@ -277,7 +280,7 @@ func (bridges *AgentBridges) Begin(ctx context.Context, projectID domain.Project
 		return AgentBridgeResult{}, err
 	}
 	now := bridges.clock.Now().UTC()
-	values, err := bridges.newIDs(ctx, now, 4)
+	values, err := bridges.newIDs(ctx, now, 5)
 	if err != nil {
 		return AgentBridgeResult{}, err
 	}
@@ -285,8 +288,9 @@ func (bridges *AgentBridges) Begin(ctx context.Context, projectID domain.Project
 	turnID, _ := domain.ParseTurnID(values[1])
 	messageID, _ := domain.ParseConversationMessageID(values[2])
 	eventID, _ := domain.ParseActivityEventID(values[3])
+	versionID, _ := domain.ParseProjectVersionID(values[4])
 	return bridges.repository.BeginAgentBridge(ctx, BeginAgentBridgeRecord{
-		RunID: runID, TurnID: turnID, ProjectID: projectID,
+		VersionID: versionID, RunID: runID, TurnID: turnID, ProjectID: projectID,
 		SequenceID: input.SequenceID, Attachments: input.Attachments, Creator: authority.Actor, Intent: input.Message,
 		RequestID: requestID, RequestDigest: digest, RequestCanonical: canonical,
 		MessageID: messageID, ActivityEventID: eventID, CreatedAt: now,
@@ -309,15 +313,16 @@ func (bridges *AgentBridges) Continue(ctx context.Context, projectID domain.Proj
 		return AgentBridgeResult{}, err
 	}
 	now := bridges.clock.Now().UTC()
-	values, err := bridges.newIDs(ctx, now, 3)
+	values, err := bridges.newIDs(ctx, now, 4)
 	if err != nil {
 		return AgentBridgeResult{}, err
 	}
 	turnID, _ := domain.ParseTurnID(values[0])
 	messageID, _ := domain.ParseConversationMessageID(values[1])
 	eventID, _ := domain.ParseActivityEventID(values[2])
+	versionID, _ := domain.ParseProjectVersionID(values[3])
 	return bridges.repository.ContinueAgentBridge(ctx, ContinueAgentBridgeRecord{
-		ProjectID: projectID, RunID: runID, ExpectedGeneration: input.ExpectedGeneration,
+		VersionID: versionID, ProjectID: projectID, RunID: runID, ExpectedGeneration: input.ExpectedGeneration,
 		TurnID: turnID, SequenceID: input.SequenceID, Attachments: input.Attachments,
 		Creator: authority.Actor, Message: input.Message,
 		RequestID: requestID, RequestDigest: digest, RequestCanonical: canonical,

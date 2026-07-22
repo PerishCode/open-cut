@@ -1,4 +1,4 @@
-import { Button, Stack, Text, TextAreaField } from "@open-cut/components";
+import { Button, PanelDock, Stack, Text, TextAreaField } from "@open-cut/components";
 import {
   type AgentAvailability,
   type AgentContextAttachment,
@@ -47,11 +47,15 @@ const initialState: AgentPaneState = {
 
 export function CreatorAgentPane({
   contextCandidates,
+  onAddPlayheadContext,
+  onAddTimelineContext,
   onFocusReceiptRef,
   projectId,
   sequenceId,
 }: {
   contextCandidates: readonly CreatorAgentContextCandidate[];
+  onAddPlayheadContext?: () => void;
+  onAddTimelineContext?: () => void;
   onFocusReceiptRef?: (ref: CommandReceiptRef) => string;
   projectId: DurableID;
   sequenceId: DurableID;
@@ -351,167 +355,192 @@ export function CreatorAgentPane({
   const canSubmit = state.availability?.state === "available" && !state.submitting && (!state.selected || canContinue);
 
   return (
-    <Stack spacing="compact">
-      <Text tone="eyebrow">LOCAL AGENT</Text>
-      <Text>{availabilityText(state.availability)}</Text>
-      <Button disabled={state.loading || state.submitting} onPress={() => void load()}>
-        Refresh Agent
-      </Button>
-      <Button
-        disabled={state.submitting}
-        onPress={() => {
-          setState((current) => ({
-            ...current,
-            selected: undefined,
-            messages: [],
-            nextAfter: undefined,
-            turns: [],
-            turnNextBefore: undefined,
-            selectedTurn: undefined,
-            receipts: [],
-            receiptNextAfter: undefined,
-            error: undefined,
-          }));
-          setMessage("");
-          setContextKeys([]);
-        }}
-      >
-        New task
-      </Button>
-      {state.runs.length > 0 ? <Text tone="eyebrow">RECENT TASKS</Text> : null}
-      {state.runs.map((run) => (
-        <Button
-          disabled={state.loading || state.submitting || run.id === state.selected?.id}
-          key={run.id}
-          onPress={() => void selectRun(run.id)}
-        >
-          {runLabel(run)}
-        </Button>
-      ))}
-      {state.selected ? (
-        <Text tone="eyebrow">
-          {state.selected.status.toUpperCase()} · TURN {state.selected.currentTurn.generation}
-          {state.selected.waitingReason ? ` · ${state.selected.waitingReason}` : ""}
-        </Text>
-      ) : (
-        <Text>Describe a new writing or editing task.</Text>
-      )}
-      {state.messages.map((entry) => (
-        <Stack key={entry.id} spacing="compact">
-          <Text tone="eyebrow">{entry.role === "creator" ? "YOU" : entry.role === "agent" ? "AGENT" : "SYSTEM"}</Text>
-          <Text>
-            {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-          </Text>
-          {entry.attachments.map((attachment, index) => (
-            <Text key={`${entry.id}:attachment:${index}`}>@ {attachmentLabel(attachment)}</Text>
-          ))}
-        </Stack>
-      ))}
-      {state.nextAfter ? (
-        <Button disabled={state.loading} onPress={() => void loadMore()}>
-          {state.loading ? "Loading…" : "Load more conversation"}
-        </Button>
-      ) : null}
-      {state.selected && state.turns.length > 0 ? <Text tone="eyebrow">TURNS</Text> : null}
-      {state.turns.map((turn) => (
-        <Button
-          disabled={state.loading || turn.id === state.selectedTurn?.id}
-          key={turn.id}
-          onPress={() => void selectTurn(turn)}
-        >
-          Turn {turn.generation} · {turn.status}
-        </Button>
-      ))}
-      {state.turnNextBefore ? (
-        <Button disabled={state.loading} onPress={() => void loadOlderTurns()}>
-          {state.loading ? "Loading…" : "Load older Turns"}
-        </Button>
-      ) : null}
-      {state.selected && state.selectedTurn ? (
-        <>
-          <Text tone="eyebrow">COMMAND RECEIPTS · TURN {state.selectedTurn.generation}</Text>
-          {state.receipts.length === 0 ? <Text>No durable command receipts for this Turn yet.</Text> : null}
-          {state.receipts.map((receipt) => (
-            <Stack key={receipt.id} spacing="compact">
-              <Text tone="eyebrow">
-                {receipt.class.toUpperCase()} · {receipt.status.toUpperCase()} · #{receipt.ordinal}
-              </Text>
-              <Text>{receipt.command}</Text>
-              {receipt.resultRefs.map((ref, index) => (
-                <Stack key={`${receipt.id}:${index}`} spacing="compact">
-                  <Text>
-                    {ref.kind} · {ref.id}
-                    {ref.revision ? ` · r${ref.revision}` : ""}
-                  </Text>
-                  {onFocusReceiptRef ? (
-                    <Button
-                      onPress={() => setState((current) => ({ ...current, focusNotice: onFocusReceiptRef(ref) }))}
-                    >
-                      Focus {ref.kind}
-                    </Button>
-                  ) : null}
-                </Stack>
-              ))}
-            </Stack>
-          ))}
-          {state.receiptNextAfter ? (
-            <Button disabled={state.loading} onPress={() => void loadMoreReceipts()}>
-              {state.loading ? "Loading…" : "Load more receipts"}
+    <PanelDock
+      footer={
+        <Stack spacing="compact">
+          {onAddTimelineContext || onAddPlayheadContext ? <Text tone="eyebrow">QUICK CONTEXT</Text> : null}
+          {onAddTimelineContext ? (
+            <Button disabled={!canSubmit} onPress={onAddTimelineContext}>
+              Add visible timeline
             </Button>
           ) : null}
-        </>
-      ) : null}
-      {state.focusNotice ? <Text>{state.focusNotice}</Text> : null}
-      {state.presentation ? <Text>{presentationText(state.presentation)}</Text> : null}
-      {active ? (
-        <>
-          <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
-            Stop
+          {onAddPlayheadContext ? (
+            <Button disabled={!canSubmit} onPress={onAddPlayheadContext}>
+              Add playhead
+            </Button>
+          ) : null}
+          {contextCandidates.length > 0 ? <Text tone="eyebrow">@ CONTEXT</Text> : null}
+          {contextCandidates.map((candidate) => {
+            const selected = contextKeys.includes(candidate.key);
+            return (
+              <Button
+                disabled={!canSubmit}
+                key={candidate.key}
+                onPress={() =>
+                  setContextKeys((current) =>
+                    selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
+                  )
+                }
+              >
+                {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
+              </Button>
+            );
+          })}
+          <TextAreaField
+            disabled={!canSubmit}
+            label={state.selected ? "Continue this task" : "New task"}
+            maxLength={8000}
+            placeholder={
+              canContinue || !state.selected
+                ? "Tell the Agent what to write or change…"
+                : "Wait for this Turn to finish."
+            }
+            rows={5}
+            value={message}
+            onChange={setMessage}
+          />
+          <Button disabled={!canSubmit || message.trim() === ""} onPress={() => void submit()}>
+            {state.submitting ? "Submitting…" : state.selected ? "Continue" : "Start task"}
           </Button>
+        </Stack>
+      }
+      header={
+        <Stack spacing="compact">
+          <Text tone="eyebrow">LOCAL AGENT</Text>
+          <Text>{availabilityText(state.availability)}</Text>
+          <Button disabled={state.loading || state.submitting} onPress={() => void load()}>
+            Refresh Agent
+          </Button>
+          <Button
+            disabled={state.submitting}
+            onPress={() => {
+              setState((current) => ({
+                ...current,
+                selected: undefined,
+                messages: [],
+                nextAfter: undefined,
+                turns: [],
+                turnNextBefore: undefined,
+                selectedTurn: undefined,
+                receipts: [],
+                receiptNextAfter: undefined,
+                error: undefined,
+              }));
+              setMessage("");
+              setContextKeys([]);
+            }}
+          >
+            New task
+          </Button>
+        </Stack>
+      }
+      label="Agent collaboration"
+    >
+      <Stack spacing="compact">
+        {state.runs.length > 0 ? <Text tone="eyebrow">RECENT TASKS</Text> : null}
+        {state.runs.map((run) => (
+          <Button
+            disabled={state.loading || state.submitting || run.id === state.selected?.id}
+            key={run.id}
+            onPress={() => void selectRun(run.id)}
+          >
+            {runLabel(run)}
+          </Button>
+        ))}
+        {state.selected ? (
+          <Text tone="eyebrow">
+            {state.selected.status.toUpperCase()} · TURN {state.selected.currentTurn.generation}
+            {state.selected.waitingReason ? ` · ${state.selected.waitingReason}` : ""}
+          </Text>
+        ) : (
+          <Text>Describe a new writing or editing task.</Text>
+        )}
+        {state.messages.map((entry) => (
+          <Stack key={entry.id} spacing="compact">
+            <Text tone="eyebrow">{entry.role === "creator" ? "YOU" : entry.role === "agent" ? "AGENT" : "SYSTEM"}</Text>
+            <Text>
+              {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+            </Text>
+            {entry.attachments.map((attachment, index) => (
+              <Text key={`${entry.id}:attachment:${index}`}>@ {attachmentLabel(attachment)}</Text>
+            ))}
+          </Stack>
+        ))}
+        {state.nextAfter ? (
+          <Button disabled={state.loading} onPress={() => void loadMore()}>
+            {state.loading ? "Loading…" : "Load more conversation"}
+          </Button>
+        ) : null}
+        {state.selected && state.turns.length > 0 ? <Text tone="eyebrow">TURNS</Text> : null}
+        {state.turns.map((turn) => (
+          <Button
+            disabled={state.loading || turn.id === state.selectedTurn?.id}
+            key={turn.id}
+            onPress={() => void selectTurn(turn)}
+          >
+            Turn {turn.generation} · {turn.status}
+          </Button>
+        ))}
+        {state.turnNextBefore ? (
+          <Button disabled={state.loading} onPress={() => void loadOlderTurns()}>
+            {state.loading ? "Loading…" : "Load older Turns"}
+          </Button>
+        ) : null}
+        {state.selected && state.selectedTurn ? (
+          <>
+            <Text tone="eyebrow">COMMAND RECEIPTS · TURN {state.selectedTurn.generation}</Text>
+            {state.receipts.length === 0 ? <Text>No durable command receipts for this Turn yet.</Text> : null}
+            {state.receipts.map((receipt) => (
+              <Stack key={receipt.id} spacing="compact">
+                <Text tone="eyebrow">
+                  {receipt.class.toUpperCase()} · {receipt.status.toUpperCase()} · #{receipt.ordinal}
+                </Text>
+                <Text>{receipt.command}</Text>
+                {receipt.resultRefs.map((ref, index) => (
+                  <Stack key={`${receipt.id}:${index}`} spacing="compact">
+                    <Text>
+                      {ref.kind} · {ref.id}
+                      {ref.revision ? ` · r${ref.revision}` : ""}
+                    </Text>
+                    {onFocusReceiptRef ? (
+                      <Button
+                        onPress={() => setState((current) => ({ ...current, focusNotice: onFocusReceiptRef(ref) }))}
+                      >
+                        Focus {ref.kind}
+                      </Button>
+                    ) : null}
+                  </Stack>
+                ))}
+              </Stack>
+            ))}
+            {state.receiptNextAfter ? (
+              <Button disabled={state.loading} onPress={() => void loadMoreReceipts()}>
+                {state.loading ? "Loading…" : "Load more receipts"}
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+        {state.focusNotice ? <Text>{state.focusNotice}</Text> : null}
+        {state.presentation ? <Text>{presentationText(state.presentation)}</Text> : null}
+        {active ? (
+          <>
+            <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
+              Stop
+            </Button>
+            <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
+              Cancel task
+            </Button>
+          </>
+        ) : null}
+        {!active && state.selected && !terminal ? (
           <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
             Cancel task
           </Button>
-        </>
-      ) : null}
-      {!active && state.selected && !terminal ? (
-        <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-          Cancel task
-        </Button>
-      ) : null}
-      {terminal ? <Text>This task is closed. Choose New task to start another Run.</Text> : null}
-      {contextCandidates.length > 0 ? <Text tone="eyebrow">@ CONTEXT</Text> : null}
-      {contextCandidates.map((candidate) => {
-        const selected = contextKeys.includes(candidate.key);
-        return (
-          <Button
-            disabled={!canSubmit}
-            key={candidate.key}
-            onPress={() =>
-              setContextKeys((current) =>
-                selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
-              )
-            }
-          >
-            {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
-          </Button>
-        );
-      })}
-      <TextAreaField
-        disabled={!canSubmit}
-        label={state.selected ? "Continue this task" : "New task"}
-        maxLength={8000}
-        placeholder={
-          canContinue || !state.selected ? "Tell the Agent what to write or change…" : "Wait for this Turn to finish."
-        }
-        rows={5}
-        value={message}
-        onChange={setMessage}
-      />
-      <Button disabled={!canSubmit || message.trim() === ""} onPress={() => void submit()}>
-        {state.submitting ? "Submitting…" : state.selected ? "Continue" : "Start task"}
-      </Button>
-      {state.error ? <Text>{state.error.message}</Text> : null}
-    </Stack>
+        ) : null}
+        {terminal ? <Text>This task is closed. Choose New task to start another Run.</Text> : null}
+        {state.error ? <Text>{state.error.message}</Text> : null}
+      </Stack>
+    </PanelDock>
   );
 }
 

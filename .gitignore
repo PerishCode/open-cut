@@ -1,4 +1,5 @@
 .task/
+.playwright-cli/
 .DS_Store
 .tmp/
 node_modules/
