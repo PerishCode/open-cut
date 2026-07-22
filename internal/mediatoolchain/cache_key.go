@@ -9,6 +9,7 @@ import (
 
 	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
+	"github.com/PerishCode/open-cut/internal/whispertoolchain"
 	"github.com/PerishCode/open-cut/utils/target"
 	"github.com/PerishCode/open-cut/utils/tool"
 )
@@ -92,24 +93,43 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	if err != nil {
 		return CacheKeys{}, err
 	}
+	mediaQualification := RendererRelinkQualificationContractDigest(options.Target)
+	if !toolchainclosure.ValidDigest(mediaQualification) {
+		return CacheKeys{}, fmt.Errorf("media qualification contract identity is invalid")
+	}
+	whisperSource, err := whispertoolchain.SourceCacheIdentity()
+	if err != nil {
+		return CacheKeys{}, err
+	}
+	whisperClosure, err := whispertoolchain.ClosureCacheIdentity(repositoryRoot, options.Target)
+	if err != nil {
+		return CacheKeys{}, err
+	}
 
+	// These archives share one physical cache path, so its identity includes
+	// both independent source catalogs. The compiled identities stay separate:
+	// a Whisper edit still cannot invalidate the codec C tree.
 	sourcePrefix := "media-sources-v1-" + options.Target.String() + "-"
 	// The compiled C tree sits between the two: the renderer cannot affect it,
 	// but the build environment can, because identical sources compiled against
 	// a different system compiler are different objects.
 	cbuildPrefix := "media-cbuild-v2-" + options.Target.String() + "-"
+	// The published path co-locates both closures and their qualification
+	// receipts. Its cache identity therefore follows both owners even though
+	// their build recipes and reuse decisions remain independent.
 	closurePrefix := "media-closure-v1-" + options.Target.String() + "-"
 	return CacheKeys{
 		Schema: 1, Target: options.Target.String(),
 		SourcePrefix: sourcePrefix,
-		SourceKey:    sourcePrefix + shortDigest(toolchainVersion, catalog),
+		SourceKey:    sourcePrefix + shortDigest(toolchainVersion, catalog, whisperSource),
 		CBuildPrefix: cbuildPrefix,
 		CBuildKey: cbuildPrefix + shortDigest(
 			toolchainVersion, cbuildLogic, buildEnvironment, options.Environment,
 		),
 		ClosurePrefix: closurePrefix,
 		ClosureKey: closurePrefix + shortDigest(
-			toolchainVersion, cbuildLogic, renderer, goVersion, options.Environment,
+			toolchainVersion, cbuildLogic, renderer, goVersion, mediaQualification,
+			whisperClosure, options.Environment,
 		),
 	}, nil
 }

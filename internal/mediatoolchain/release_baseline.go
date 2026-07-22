@@ -15,7 +15,8 @@ var releaseBaselineCapabilities = [...]string{
 
 // VerifyReleaseBaseline is the app-owned production artifact policy. Load must
 // establish the verified byte closure before this declaration gate, and the
-// caller must still replay VerifyCapabilities before publication. The split
+// caller must still establish successful qualification either by replay or an
+// exact owner receipt before publication. The split
 // prevents a valid but deliberately reduced development catalog from becoming
 // a published desktop creator payload without wasting a full conformance run.
 func VerifyReleaseBaseline(verified Verified) error {

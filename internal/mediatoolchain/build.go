@@ -96,6 +96,16 @@ func Build(ctx context.Context, options BuildOptions) (result BuildResult, resul
 			"c-build-tree", "not-inspected",
 			"published closure reused before the C-tree cache was consulted",
 		)
+		recorder.Step("ensure-renderer-relink-qualification")
+		qualificationReused, err := EnsureRendererRelinkQualification(ctx, verified)
+		if err != nil {
+			return BuildResult{}, fmt.Errorf("qualify reused renderer relink closure: %w", err)
+		}
+		qualificationDecision := "replayed"
+		if qualificationReused {
+			qualificationDecision = "reused"
+		}
+		recorder.Decide("renderer-relink-qualification", qualificationDecision, "")
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry
@@ -271,6 +281,14 @@ func Build(ctx context.Context, options BuildOptions) (result BuildResult, resul
 	if err := VerifyCapabilities(ctx, staged); err != nil {
 		return BuildResult{}, fmt.Errorf("verify staged media capabilities: %w", err)
 	}
+	if err := VerifyReleaseBaseline(staged); err != nil {
+		return BuildResult{}, fmt.Errorf("verify staged media release baseline: %w", err)
+	}
+	recorder.Step("write-renderer-relink-qualification")
+	if err := writeRendererRelinkQualificationReceipt(staged); err != nil {
+		return BuildResult{}, fmt.Errorf("write staged renderer relink qualification: %w", err)
+	}
+	recorder.Decide("renderer-relink-qualification", "produced", "")
 	recorder.Step("publish-closure")
 	if err := publishStage(stageRoot, artifactRoot, staged.Manifest); err != nil {
 		return BuildResult{}, err
@@ -441,12 +459,14 @@ func publishStage(stageRoot, artifactRoot string, manifest Manifest) error {
 	if err := os.MkdirAll(artifactRoot, 0o700); err != nil {
 		return err
 	}
-	_ = os.Remove(filepath.Join(artifactRoot, ManifestName))
+	for _, name := range []string{ManifestName, RendererRelinkQualificationReceiptName} {
+		_ = os.Remove(filepath.Join(artifactRoot, name))
+	}
 	type publicationFile struct {
 		relative string
 		mode     os.FileMode
 	}
-	files := make([]publicationFile, 0, len(manifest.Tools)+len(manifest.Notices))
+	files := make([]publicationFile, 0, len(manifest.Tools)+len(manifest.Notices)+1)
 	for _, tool := range manifest.Tools {
 		files = append(files, publicationFile{relative: tool.Path, mode: 0o755})
 	}
@@ -458,6 +478,7 @@ func publishStage(stageRoot, artifactRoot string, manifest Manifest) error {
 	for _, notice := range manifest.Notices {
 		files = append(files, publicationFile{relative: notice.Path, mode: 0o600})
 	}
+	files = append(files, publicationFile{relative: RendererRelinkQualificationReceiptName, mode: 0o600})
 	for _, file := range files {
 		if err := copyRegularFile(
 			filepath.Join(stageRoot, filepath.FromSlash(file.relative)),
@@ -481,9 +502,9 @@ func copyRegularFile(source, destination string, mode os.FileMode) error {
 // be reused, and names the reason when it cannot. Reuse trusts Load's exact
 // contained-byte verification (digest, size, and tree closure for every
 // manifest entry) - the same strength the production installer applies - plus
-// the renderer's source closure fingerprint. Full re-qualification (relink,
-// smoke, conformance probes) belongs to the cold build, the explicit
-// `media-tools check` command, and the pack lane's declared artifact checks.
+// the renderer's source closure fingerprint. The reuse path separately requires
+// or repairs the exact renderer relink qualification receipt; deployed
+// conformance and process smoke remain in the pack lane's artifact check.
 func inspectReuse(
 	ctx context.Context,
 	repositoryRoot, artifactRoot string,

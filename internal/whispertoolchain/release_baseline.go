@@ -18,7 +18,8 @@ const ReleaseBaselineProfile = "desktop-creator-transcription-v1"
 
 // VerifyReleaseBaseline is the app-owned production policy for the whisper
 // closure. Load must have established the verified byte closure first, and the
-// caller must still replay VerifyCapabilities before publication.
+// caller must still establish successful qualification either by replay or an
+// exact owner receipt before publication.
 func VerifyReleaseBaseline(verified Verified) error {
 	capability, exists := verified.Capabilities[CapabilityLocalTranscriptionV1]
 	if !exists || capability.ID != CapabilityLocalTranscriptionV1 ||
