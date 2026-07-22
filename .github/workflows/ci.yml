@@ -159,21 +159,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes nasm
-      - name: Configure Windows media build toolchain
-        if: matrix.platform == 'win'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          path-type: inherit
-          # The package set is fixed, so installing it from scratch on every run
-          # spends most of a minute on the critical path for nothing.
-          cache: true
-          install: >-
-            make
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-nasm
-            mingw-w64-x86_64-pkgconf
       - name: Build control CLI from checkout
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
@@ -232,6 +217,33 @@ jobs:
           path: apps/api/dist/sidecar
           key: ${{ steps.media_cache.outputs.closure-key }}
           restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
+      - name: Select Windows media build prerequisites
+        if: matrix.platform == 'win'
+        id: windows_media_prerequisites
+        shell: bash
+        env:
+          MEDIA_CLOSURE_CACHE_HIT: ${{ steps.media_closure_restore.outputs.cache-hit }}
+        run: |
+          if [ "$MEDIA_CLOSURE_CACHE_HIT" = "true" ]; then
+            echo "packages=" >> "$GITHUB_OUTPUT"
+            echo "Windows media build prerequisites: skipped (exact closure cache key restored)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "packages=make mingw-w64-x86_64-cmake mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-pkgconf" >> "$GITHUB_OUTPUT"
+            echo "Windows media build prerequisites: required (cold or fallback closure path)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Configure Windows MSYS2 environment
+        if: matrix.platform == 'win'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          # The runner image already owns the base MSYS2 installation. An exact
+          # closure cache key only needs its shell; pack remains the byte-level
+          # authority. Cold and fallback paths add the cached compiler package
+          # set selected above.
+          release: false
+          cache: true
+          install: ${{ steps.windows_media_prerequisites.outputs.packages }}
       - name: Check delivery toolchain
         shell: bash
         run: |
@@ -511,15 +523,16 @@ jobs:
           path: |
             .tmp/ci/full-pack/reports/report.json
             .tmp/ci/full-pack/reports/timing.json
+            .tmp/ci/full-pack/reports/logs/full-pack.log
             .tmp/oc-control/timing/${{ matrix.target }}/*.json
           if-no-files-found: warn
-      - uses: actions/upload-artifact@v7
-        if: always()
+      - name: Upload delivery bundle
+        uses: actions/upload-artifact@v7
+        if: always() && github.event_name != 'pull_request'
         with:
           name: open-cut-${{ matrix.target }}
           path: |
             dist/open-cut-0.1.0-ci.1-${{ matrix.target }}.release-bundle.tar.zst
             .tmp/ci/origin/releases/0.1.0-ci.1/${{ matrix.target }}/release.json
             .tmp/ci/origin/metadata/ci/${{ matrix.target }}/latest.json
-            .tmp/ci/full-pack/reports/logs/full-pack.log
           if-no-files-found: warn
