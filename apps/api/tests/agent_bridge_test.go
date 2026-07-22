@@ -61,6 +61,7 @@ func (publisher *recordingPresentationPublisher) SubscribeAgentPresentation(
 }
 
 func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	reads, err := application.NewProjectReads(store)
@@ -129,6 +130,7 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 }
 
 func TestAgentBridgeOwnedRunAllowsOnlyAgentShowAndExplicitComplete(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	bridges := newAgentBridgesForTest(t, store)
@@ -434,6 +436,7 @@ func TestAgentBridgeOwnedRunAllowsOnlyAgentShowAndExplicitComplete(t *testing.T)
 }
 
 func TestAgentBridgeFreshRecoveryKeepsSafeConversationAndDurableResetNotice(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	bridges := newAgentBridgesForTest(t, store)
@@ -503,6 +506,7 @@ func TestAgentBridgeFreshRecoveryKeepsSafeConversationAndDurableResetNotice(t *t
 }
 
 func TestAgentBridgeInterruptCommitsDurableStateBeforeProcessCancellation(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	bridges := newAgentBridgesForTest(t, store)
@@ -558,6 +562,7 @@ func TestAgentBridgeInterruptCommitsDurableStateBeforeProcessCancellation(t *tes
 }
 
 func TestAgentBridgePairingApprovalDoesNotBindUntilExactGrantRevisionAuthorizes(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	bridges := newAgentBridgesForTest(t, store)
@@ -620,6 +625,7 @@ func TestAgentBridgePairingApprovalDoesNotBindUntilExactGrantRevisionAuthorizes(
 }
 
 func TestAgentBridgeHTTPIsCreatorOnlyAndNeverExposesAdapterInternals(t *testing.T) {
+	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
 	defer store.Close()
 	projects, reads, activity, runs := testProjectApplications(t, store)

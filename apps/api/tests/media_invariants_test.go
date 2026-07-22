@@ -15,6 +15,7 @@ import (
 )
 
 func TestMediaProbePreservesStreamIdentityAndIsolatesNonSourceFailures(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 )
 
 func TestCommonNarrativeNodeSQLMigrationPreservesTypedTreeAndAlignment(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	db := openMigrationDatabase(t, "narrative-projection.db")
 
@@ -190,6 +191,7 @@ WHERE n.id = ?`, ids[5]).Scan(
 }
 
 func TestNarrativeJournalV5MigrationWrapsLegacyPayloadsAndRecomputesDigests(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	db := openMigrationDatabase(t, "narrative-journal.db")
 	if _, err := db.ExecContext(ctx, `

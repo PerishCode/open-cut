@@ -18,6 +18,7 @@ import (
 )
 
 func TestSequenceExportDeliveryLeaseIsSessionBoundOneShotAndExact(t *testing.T) {
+	parallelAPITest(t)
 	now := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
 	projectID, _ := domain.ParseProjectID("018f0a60-7b80-7a01-8000-000000000301")
 	artifactID, _ := domain.ParseArtifactID("018f0a60-7b80-7a01-8000-000000000302")

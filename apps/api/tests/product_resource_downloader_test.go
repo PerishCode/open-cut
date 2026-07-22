@@ -20,6 +20,7 @@ import (
 )
 
 func TestProductResourceDownloaderPublishesOnlyExactAuthenticatedBytes(t *testing.T) {
+	parallelAPITest(t)
 	content := []byte("authenticated whisper model fixture")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/model.bin" || request.Header.Get("Accept-Encoding") != "identity" {
@@ -62,6 +63,7 @@ func TestProductResourceDownloaderPublishesOnlyExactAuthenticatedBytes(t *testin
 }
 
 func TestProductResourceDownloaderResumesOnlyAgainstTheSameStrongRepresentation(t *testing.T) {
+	parallelAPITest(t)
 	content := []byte("0123456789abcdef")
 	const split = 6
 	requests := 0
@@ -101,6 +103,7 @@ func TestProductResourceDownloaderResumesOnlyAgainstTheSameStrongRepresentation(
 }
 
 func TestProductResourceDownloaderRejectsDigestMismatchAndDeletesPoisonedStage(t *testing.T) {
+	parallelAPITest(t)
 	expected := []byte("expected")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Length", "8")
@@ -125,6 +128,7 @@ func TestProductResourceDownloaderRejectsDigestMismatchAndDeletesPoisonedStage(t
 }
 
 func TestProductResourceDownloaderFollowsOnlyBoundedHTTPSRedirects(t *testing.T) {
+	parallelAPITest(t)
 	content := []byte("redirected authenticated model")
 	final := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Accept-Encoding") != "identity" {
@@ -197,6 +201,7 @@ func downloaderProductResourceEntry(
 // that does not match costs a download, which the sibling digest-mismatch test
 // already pins.
 func TestProductResourceDownloaderReusesAVerifiedFullStageWithoutTheNetwork(t *testing.T) {
+	parallelAPITest(t)
 	content := []byte("authenticated whisper model fixture")
 	var requests atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {

@@ -109,6 +109,7 @@ func (observer *recordingAgentObserver) ObserveAgentPresentation(
 }
 
 func TestAgentProcessEngineDecodesOnlySafeCodexEvents(t *testing.T) {
+	parallelAPITest(t)
 	observer := &recordingAgentObserver{}
 	result, err := runAgentHelper(t, context.Background(), "success", 5*time.Second, observer)
 	if err != nil {
@@ -132,6 +133,7 @@ func TestAgentProcessEngineDecodesOnlySafeCodexEvents(t *testing.T) {
 }
 
 func TestAgentProcessEngineRejectsUnknownOrOversizedCodexOutput(t *testing.T) {
+	parallelAPITest(t)
 	for _, test := range []struct {
 		mode string
 		want error
@@ -150,6 +152,7 @@ func TestAgentProcessEngineRejectsUnknownOrOversizedCodexOutput(t *testing.T) {
 }
 
 func TestAgentProcessEngineContainsCancellationAndHidesNativeFailure(t *testing.T) {
+	parallelAPITest(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(100*time.Millisecond, cancel)
 	_, err := runAgentHelper(t, ctx, "wait", 5*time.Second, &recordingAgentObserver{})
@@ -163,6 +166,7 @@ func TestAgentProcessEngineContainsCancellationAndHidesNativeFailure(t *testing.
 }
 
 func TestCodexCLIAdapterKeepsPromptOnStdinAndInjectsOnlyClosedAppState(t *testing.T) {
+	parallelAPITest(t)
 	root := t.TempDir()
 	runner := &recordingAgentProcessRunner{}
 	adapter, err := service.NewCodexCLIAdapter(service.CodexCLIAdapterConfig{
@@ -218,6 +222,7 @@ func TestCodexCLIAdapterKeepsPromptOnStdinAndInjectsOnlyClosedAppState(t *testin
 }
 
 func TestCodexCLIAdapterResumesOnlyTheExactOpaqueSession(t *testing.T) {
+	parallelAPITest(t)
 	root := t.TempDir()
 	runner := &recordingAgentProcessRunner{}
 	adapter, err := service.NewCodexCLIAdapter(service.CodexCLIAdapterConfig{
@@ -280,6 +285,7 @@ func (runner *resumeFallbackRunner) Run(
 }
 
 func TestCodexCLIAdapterFallsBackOnlyBeforeNativeTurnStarts(t *testing.T) {
+	parallelAPITest(t)
 	for _, test := range []struct {
 		name        string
 		started     bool
@@ -320,6 +326,7 @@ func TestCodexCLIAdapterFallsBackOnlyBeforeNativeTurnStarts(t *testing.T) {
 }
 
 func TestCodexRuntimeStoreDerivesPrivateRunHomeAndTurnScratch(t *testing.T) {
+	parallelAPITest(t)
 	root := t.TempDir()
 	store, err := service.NewCodexRuntimeStore(
 		filepath.Join(root, "api"), filepath.Join(root, "stable", "open-cut"),
@@ -386,6 +393,7 @@ func TestCodexRuntimeStoreDerivesPrivateRunHomeAndTurnScratch(t *testing.T) {
 }
 
 func TestCodexLocatorUsesFirstFullyQualifiedCandidateAndKeyringHome(t *testing.T) {
+	parallelAPITest(t)
 	root := t.TempDir()
 	first := executableFixture(t, filepath.Join(root, "first-codex"))
 	second := executableFixture(t, filepath.Join(root, "second-codex"))
@@ -419,6 +427,7 @@ func TestCodexLocatorUsesFirstFullyQualifiedCandidateAndKeyringHome(t *testing.T
 }
 
 func TestCodexLocatorClassifiesMissingUnauthenticatedAndIncompatible(t *testing.T) {
+	parallelAPITest(t)
 	root := t.TempDir()
 	stableCLI := executableFixture(t, filepath.Join(root, "stable", "open-cut"))
 	candidate := executableFixture(t, filepath.Join(root, "codex"))
@@ -464,6 +473,7 @@ func executableFixture(t *testing.T, path string) string {
 }
 
 func TestAgentPresentationHubIsNonReplayableBoundedAndTerminal(t *testing.T) {
+	parallelAPITest(t)
 	hub := service.NewAgentPresentationHub()
 	runID := mustRunID(t, time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC))
 	turnID := mustTurnID(t, time.Date(2026, 7, 16, 4, 0, 0, int(time.Millisecond), time.UTC))
@@ -493,6 +503,7 @@ func TestAgentPresentationHubIsNonReplayableBoundedAndTerminal(t *testing.T) {
 }
 
 func TestAgentPresentationHubCapsSubscribers(t *testing.T) {
+	parallelAPITest(t)
 	hub := service.NewAgentPresentationHub()
 	runID := mustRunID(t, time.Date(2026, 7, 16, 5, 0, 0, 0, time.UTC))
 	turnID := mustTurnID(t, time.Date(2026, 7, 16, 5, 0, 0, int(time.Millisecond), time.UTC))
@@ -513,6 +524,7 @@ func TestAgentPresentationHubCapsSubscribers(t *testing.T) {
 }
 
 func TestAgentProcessHelper(t *testing.T) {
+	serialAPITest(t, "runs as the controlled subprocess for agent process tests")
 	if os.Getenv("OPEN_CUT_AGENT_HELPER") != "1" {
 		return
 	}

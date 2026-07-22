@@ -14,6 +14,7 @@ import (
 )
 
 func TestProjectHTTPUsesCreatorGenesisAndExactReadModels(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	projects, reads, activity, runs := testProjectApplications(t, store)
 	edits, editReads := testEditingApplications(t, store)
@@ -75,6 +76,7 @@ func TestProjectHTTPUsesCreatorGenesisAndExactReadModels(t *testing.T) {
 }
 
 func TestProjectRoutesFailClosedWithoutAuthority(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	projects, reads, activity, runs := testProjectApplications(t, store)
 	edits, editReads := testEditingApplications(t, store)

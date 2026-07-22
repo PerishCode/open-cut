@@ -19,6 +19,7 @@ import (
 )
 
 func TestCreatorEditsCommitConflictUndoRedoAndHTTPShareOneAtomicKernel(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {
@@ -159,6 +160,7 @@ func TestCreatorEditsCommitConflictUndoRedoAndHTTPShareOneAtomicKernel(t *testin
 }
 
 func TestCreatorParagraphSplitAndMergeCommitAsAtomicTransactions(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {
@@ -279,6 +281,7 @@ func TestCreatorParagraphSplitAndMergeCommitAsAtomicTransactions(t *testing.T) {
 }
 
 func TestCreatorSectionWritingUsesExactParentRevisionsAndRejectsNonEmptyRemoval(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {

@@ -24,6 +24,7 @@ import (
 )
 
 func TestMediaHTTPTrustedSelectionRegistersPathSafeAssetAndBoundedReads(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {
@@ -134,6 +135,7 @@ func TestMediaHTTPTrustedSelectionRegistersPathSafeAssetAndBoundedReads(t *testi
 }
 
 func TestFFProbeOutputNormalizationPreservesExactStreamFacts(t *testing.T) {
+	parallelAPITest(t)
 	raw := []byte(`{
   "streams": [
     {
@@ -226,6 +228,7 @@ func doJSON(t *testing.T, server *httptest.Server, method, path string, body []b
 }
 
 func TestSourceGrantAssetRegistrationJobsUndoAndReplayAreDurableAndPathSafe(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)

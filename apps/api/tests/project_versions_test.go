@@ -14,6 +14,7 @@ import (
 )
 
 func TestProjectVersionsCheckpointAndAtomicallyRestoreCreativeHead(t *testing.T) {
+	parallelAPITest(t)
 	store, err := repository.OpenSQLiteProjects(context.Background(), filepath.Join(t.TempDir(), "api"))
 	if err != nil {
 		t.Fatal(err)

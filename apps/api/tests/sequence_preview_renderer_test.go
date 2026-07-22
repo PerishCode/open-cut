@@ -22,6 +22,7 @@ import (
 )
 
 func TestExternalSequencePreviewRendererUsesPrivateManifestAndAttemptWorkspace(t *testing.T) {
+	parallelAPITest(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture helper is a POSIX script")
 	}
@@ -124,6 +125,7 @@ func TestExternalSequencePreviewRendererUsesPrivateManifestAndAttemptWorkspace(t
 }
 
 func TestExternalSequencePreviewRendererPreservesTypedHelperFailure(t *testing.T) {
+	parallelAPITest(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture helper is a POSIX script")
 	}

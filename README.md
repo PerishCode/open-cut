@@ -286,3 +286,10 @@ pnpm test
 oc-control protocol check
 oc-control harness guard
 ```
+
+Top-level tests in `apps/api/tests` declare their scheduling contract as the
+first statement: `parallelAPITest(t)` for tests that own all mutable resources,
+or `serialAPITest(t, reason)` for a documented shared/process-wide constraint.
+The package's suite-topology test rejects missing or implicit declarations.
+This keeps the race lane parallel by default without allowing a new test to
+silently serialize the package or share a resource accidentally.

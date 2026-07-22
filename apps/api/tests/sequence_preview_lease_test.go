@@ -18,6 +18,7 @@ import (
 )
 
 func TestSequencePreviewLeaseUsesClosedPrepareContinueRetryOperation(t *testing.T) {
+	parallelAPITest(t)
 	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
 	projectID, _ := domain.ParseProjectID("018f0a60-7b80-7a01-8000-000000000001")
 	sequenceID, _ := domain.ParseSequenceID("018f0a60-7b80-7a01-8000-000000000002")
@@ -67,6 +68,7 @@ func TestSequencePreviewLeaseUsesClosedPrepareContinueRetryOperation(t *testing.
 }
 
 func TestSequencePreviewLeaseServesOnlyPinnedRangeToIssuingSession(t *testing.T) {
+	parallelAPITest(t)
 	now := time.Date(2026, 7, 15, 11, 0, 0, 0, time.UTC)
 	projectID, _ := domain.ParseProjectID("018f0a60-7b80-7a01-8000-000000000011")
 	sequenceID, _ := domain.ParseSequenceID("018f0a60-7b80-7a01-8000-000000000012")

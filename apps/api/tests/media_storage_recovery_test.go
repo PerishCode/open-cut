@@ -14,6 +14,7 @@ import (
 )
 
 func TestMediaStorageRecoveryRemovesOnlyRecognizedOrphans(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)
