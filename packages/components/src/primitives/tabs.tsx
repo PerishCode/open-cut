@@ -12,10 +12,13 @@ export type TabsProps = {
   label: string;
   tabs: TabDefinition[];
   initialTabId?: string;
+  activeTabId?: string;
+  onTabChange?(tabId: string): void;
 };
 
-export function Tabs({ label, tabs, initialTabId }: TabsProps) {
-  const [activeId, setActiveId] = useState(initialTabId ?? tabs[0]?.id);
+export function Tabs({ activeTabId, label, onTabChange, tabs, initialTabId }: TabsProps) {
+  const [internalActiveId, setInternalActiveId] = useState(initialTabId ?? tabs[0]?.id);
+  const activeId = activeTabId ?? internalActiveId;
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
   if (!active) return null;
   return (
@@ -30,7 +33,10 @@ export function Tabs({ label, tabs, initialTabId }: TabsProps) {
             key={tab.id}
             role="tab"
             type="button"
-            onClick={() => setActiveId(tab.id)}
+            onClick={() => {
+              if (activeTabId === undefined) setInternalActiveId(tab.id);
+              onTabChange?.(tab.id);
+            }}
           >
             {tab.label}
           </button>

@@ -447,7 +447,11 @@ describe("HomeView", () => {
       </ContractsProvider>,
     );
     expect(await screen.findByRole("heading", { level: 1, name: "Alpha" })).toBeTruthy();
-    expect(await screen.findByText("Project r2 · Narrative r2 · Sequence r2")).toBeTruthy();
+    expect(await screen.findByText("All changes synced")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Sources" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Agent" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Timeline canvas" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Story" }));
     expect(screen.getByText("Open on a clear promise.")).toBeTruthy();
     expect(screen.getByText("A specific opening line.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
@@ -459,12 +463,13 @@ describe("HomeView", () => {
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
     fireEvent.click(screen.getByRole("tab", { name: "Export" }));
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-    expect(await screen.findByText("EXPORT r2 · BLOCKED · 0% · CREATOR · 1 ATTEMPT")).toBeTruthy();
-    expect(exportRequests).toBe(1);
-    expect(exportHistoryRequests).toBeGreaterThanOrEqual(2);
-    fireEvent.click(screen.getByRole("tab", { name: "Transcript" }));
+    expect((screen.getByRole("button", { name: "Nothing to export" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Add a clip or caption to the Sequence before exporting.")).toBeTruthy();
+    expect(exportRequests).toBe(0);
+    expect(exportHistoryRequests).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole("tab", { name: "Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Open transcript" }));
+    expect(screen.getByRole("tab", { name: "Transcript" }).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("A precise opening line.")).toBeTruthy();
     expect(screen.getByText("A precise opening line. → A specific opening line.")).toBeTruthy();
     expect(screen.getByText("en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
@@ -472,10 +477,11 @@ describe("HomeView", () => {
     expect(await screen.findByText("An alternate recognition.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make this the Creator default" }));
     expect(await screen.findByText("en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Open in Source Viewer" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Media" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     expect(await screen.findByText("SOURCE · VIEWER")).toBeTruthy();
     expect(sourceRequests).toBe(1);
-    fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
+    fireEvent.click(screen.getByRole("tab", { name: "System" }));
     expect(await screen.findByRole("button", { name: "Approve scope upgrade" })).toBeTruthy();
     expect(screen.getByText("Requested scopes: activity:read, project:read, run:write")).toBeTruthy();
     expect(screen.getByRole("main", { name: "Creator workspace" })).toBeTruthy();
@@ -483,6 +489,9 @@ describe("HomeView", () => {
       "/api/v1/projects",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Start with a story." })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alpha" })).toBeTruthy();
     view.unmount();
   });
 });

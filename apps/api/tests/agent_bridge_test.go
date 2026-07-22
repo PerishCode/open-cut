@@ -87,7 +87,8 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 		turn service.AgentAdapterTurn,
 		observer service.AgentProcessObserver,
 	) error {
-		if !strings.Contains(turn.Prompt, "stable recursive CLI") || !strings.Contains(turn.Prompt, "sequence-range") ||
+		if !strings.Contains(turn.Prompt, "stable recursive CLI") || !strings.Contains(turn.Prompt, "narrowest operation") ||
+			!strings.Contains(turn.Prompt, "last-resort safety net") || !strings.Contains(turn.Prompt, "sequence-range") ||
 			!strings.Contains(turn.RecoveryPrompt, "Write a concise opening") || turn.NativeSessionID != "" {
 			t.Fatalf("turn=%+v", turn)
 		}
@@ -108,6 +109,7 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertAgentTurnCheckpoint(t, store, projectID, overview.Project.Revision, result.Run.CurrentTurn.ID)
 	waitForAgentBridge(t, runtime, projectID, result.Run.ID, func(run application.AgentBridgeRun) bool {
 		return run.Status == application.AgentRunPaused && run.CurrentTurn.Status == application.AgentTurnCompleted
 	})
@@ -639,7 +641,7 @@ func TestAgentBridgeHTTPIsCreatorOnlyAndNeverExposesAdapterInternals(t *testing.
 	mux, api := controller.NewRouterWithAgentBridge(
 		service.NewHealth(repository.StaticHealth{}), nil, nil,
 		projects, reads, activity, runs, edits, editReads, media, assetReads, sourceAccess,
-		nil, nil, nil, nil, nil, runtime, creatorAuthorizer{},
+		nil, nil, nil, nil, nil, runtime, creatorAuthorizer{}, nil,
 	)
 	server := httptest.NewServer(mux)
 	defer server.Close()

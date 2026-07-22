@@ -68,8 +68,16 @@ describe("Creator source placement", () => {
 
     expect(screen.getByRole("button", { name: "Selected · V1 · r5" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Selected · A1 · r6" })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Capture current Sequence playhead" }));
     expect(screen.getByText("Destination 4/1s · Sequence r7")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Place selected source at captured playhead" }));
 
     const retry = await screen.findByRole("button", { name: "Retry identical apply" });
@@ -121,6 +129,27 @@ describe("Creator source placement", () => {
     expect(apply).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "Retry identical apply" })).toBeNull();
   });
+
+  it("blocks a marked range before preview when a selected lane does not cover it", () => {
+    const preview = vi.fn();
+    renderPlacement({
+      apply: vi.fn(),
+      onCommitted: vi.fn(),
+      onShowSequence: vi.fn(),
+      preview,
+      sequenceViewer: sequenceController(),
+      sourceViewer: sourceController(false),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture current Sequence playhead" }));
+
+    expect(screen.getByText(/Marked range falls outside selected A\/V coverage/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(preview).not.toHaveBeenCalled();
+  });
 });
 
 function renderPlacement({
@@ -161,9 +190,10 @@ function renderPlacement({
   );
 }
 
-function sourceController(): SourceViewerController {
+function sourceController(rangeFitsCoverage = true): SourceViewerController {
   return {
     selectedRange: vi.fn(() => range(-2, 1, 1, 1)),
+    selectedRangeFitsCoverage: vi.fn(() => rangeFitsCoverage),
     pause: vi.fn(),
     clearMarks: vi.fn(),
   } as unknown as SourceViewerController;

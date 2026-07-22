@@ -62,6 +62,8 @@ describe("SourceViewerController", () => {
       start: { value: "-1", scale: 1 },
       duration: { value: "4", scale: 1 },
     });
+    expect(controller.hasFiniteSelectedCoverage()).toBe(true);
+    expect(controller.selectedRangeFitsCoverage({ video: true, audio: true })).toBe(true);
     expect(controller.getSnapshot().marks).toEqual({
       in: { value: "-1", scale: 1 },
       out: { value: "3", scale: 1 },
@@ -92,7 +94,36 @@ describe("SourceViewerController", () => {
     const controller = new SourceViewerController(port, new FakeRuntime());
     controller.open(selection());
     await settle();
+    expect(controller.hasFiniteSelectedCoverage()).toBe(false);
     expect(() => controller.useFullSelectedSource()).toThrow(/finite coverage/);
+  });
+
+  it("detects a marked range that starts before a selected lane's coverage", async () => {
+    const port = viewerPort();
+    const preparation = readyPreparation();
+    const audio = preparation.lease?.audio;
+    if (!preparation.lease || !audio) throw new Error("fixture source lease has no audio timing");
+    vi.mocked(port.prepareSourcePreview).mockResolvedValue({
+      ...preparation,
+      lease: {
+        ...preparation.lease,
+        audio: { ...audio, coverageStart: rational("1", 2), coverageDuration: undefined },
+      },
+    });
+    vi.mocked(port.resolveSourcePosition)
+      .mockResolvedValueOnce(position("settle", "0", 1, "0", 1, "0", 1, false))
+      .mockResolvedValueOnce(position("settle", "0", 1, "0", 1, "0", 1, false))
+      .mockResolvedValueOnce(position("next", "1", 1, "1", 1, "1", 1, false));
+    const controller = new SourceViewerController(port, new FakeRuntime());
+    controller.open(selection());
+    await settle();
+    controller.attachActuator(mediaActuator(0));
+
+    await controller.captureIn();
+    await controller.captureOut();
+
+    expect(controller.selectedRangeFitsCoverage({ video: true, audio: false })).toBe(true);
+    expect(controller.selectedRangeFitsCoverage({ video: true, audio: true })).toBe(false);
   });
 });
 

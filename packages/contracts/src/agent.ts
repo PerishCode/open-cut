@@ -53,7 +53,7 @@ export type AgentContextAttachment =
 
 export type AgentAvailability = Readonly<{
   adapterId: "codex-cli-v1";
-  promptVersion: "open-cut-agent-v1";
+  promptVersion: "open-cut-agent-v2";
   state: "available" | "missing" | "unauthenticated" | "incompatible";
   version?: string;
 }>;
@@ -344,7 +344,7 @@ function normalizeAgentAvailability(value: unknown): AgentAvailability {
   const record = asRecord(value);
   if (
     record.adapterId !== "codex-cli-v1" ||
-    record.promptVersion !== "open-cut-agent-v1" ||
+    record.promptVersion !== "open-cut-agent-v2" ||
     (record.state !== "available" &&
       record.state !== "missing" &&
       record.state !== "unauthenticated" &&

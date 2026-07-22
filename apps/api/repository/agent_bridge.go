@@ -42,6 +42,14 @@ func (repository *SQLiteProjects) BeginAgentBridge(
 	if err := validateAgentContextAttachments(ctx, tx, record.ProjectID, record.SequenceID, record.Attachments); err != nil {
 		return application.AgentBridgeResult{}, err
 	}
+	if _, err := insertProjectVersionSnapshot(ctx, tx, projectVersionCapture{
+		ID: record.VersionID, ProjectID: record.ProjectID, CreatorID: *record.Creator.CreatorID,
+		Source: application.ProjectVersionAgentTurn, Name: "Before Agent turn",
+		TriggerKind: "turn", TriggerID: record.TurnID.String(), Retention: application.ProjectVersionAutomatic,
+		CreatedAt: record.CreatedAt,
+	}); err != nil {
+		return application.AgentBridgeResult{}, err
+	}
 	now := formatInstant(record.CreatedAt)
 	creatorID := record.Creator.IDString()
 	if _, err := tx.ExecContext(ctx, `
@@ -58,9 +66,9 @@ INSERT INTO agent_runs (
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO agent_turns (
   id, run_id, project_id, generation, adapter, agent_version, prompt_version, status, started_at
-) VALUES (?, ?, ?, 1, ?, 'unresolved', 'open-cut-agent-v1', 'starting', ?)`,
+) VALUES (?, ?, ?, 1, ?, 'unresolved', ?, 'starting', ?)`,
 		record.TurnID.String(), record.RunID.String(), record.ProjectID.String(),
-		application.AgentBridgeAdapterCodexV1, now,
+		application.AgentBridgeAdapterCodexV1, application.AgentBridgePromptV2, now,
 	); err != nil {
 		return application.AgentBridgeResult{}, fmt.Errorf("persist Creator AgentTurn: %w", err)
 	}
@@ -157,6 +165,14 @@ func (repository *SQLiteProjects) ContinueAgentBridge(
 	if err := validateAgentContextAttachments(ctx, tx, record.ProjectID, record.SequenceID, record.Attachments); err != nil {
 		return application.AgentBridgeResult{}, err
 	}
+	if _, err := insertProjectVersionSnapshot(ctx, tx, projectVersionCapture{
+		ID: record.VersionID, ProjectID: record.ProjectID, CreatorID: *record.Creator.CreatorID,
+		Source: application.ProjectVersionAgentTurn, Name: "Before Agent turn",
+		TriggerKind: "turn", TriggerID: record.TurnID.String(), Retention: application.ProjectVersionAutomatic,
+		CreatedAt: record.CreatedAt,
+	}); err != nil {
+		return application.AgentBridgeResult{}, err
+	}
 	nextGeneration, err := run.CurrentTurn.Generation.Next()
 	if err != nil {
 		return application.AgentBridgeResult{}, err
@@ -165,9 +181,9 @@ func (repository *SQLiteProjects) ContinueAgentBridge(
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO agent_turns (
   id, run_id, project_id, generation, adapter, agent_version, prompt_version, status, started_at
-) VALUES (?, ?, ?, ?, ?, 'unresolved', 'open-cut-agent-v1', 'starting', ?)`,
+) VALUES (?, ?, ?, ?, ?, 'unresolved', ?, 'starting', ?)`,
 		record.TurnID.String(), record.RunID.String(), record.ProjectID.String(), nextGeneration.Value(),
-		application.AgentBridgeAdapterCodexV1, now,
+		application.AgentBridgeAdapterCodexV1, application.AgentBridgePromptV2, now,
 	); err != nil {
 		return application.AgentBridgeResult{}, err
 	}
@@ -721,7 +737,7 @@ INSERT INTO agent_bridge_requests (
 }
 
 func validateBeginAgentBridge(record application.BeginAgentBridgeRecord) error {
-	if record.RunID.IsZero() || record.TurnID.IsZero() || record.ProjectID.IsZero() || record.MessageID.IsZero() ||
+	if record.VersionID.IsZero() || record.RunID.IsZero() || record.TurnID.IsZero() || record.ProjectID.IsZero() || record.MessageID.IsZero() ||
 		record.ActivityEventID.IsZero() || record.Creator.Validate() != nil || record.Creator.Kind != domain.ActorCreator ||
 		len(record.Intent) == 0 || len([]byte(record.Intent)) > application.MaximumCreatorMessageBytes ||
 		len(record.RequestCanonical) == 0 || application.ValidateAgentContextAttachments(record.Attachments) != nil {
@@ -731,7 +747,7 @@ func validateBeginAgentBridge(record application.BeginAgentBridgeRecord) error {
 }
 
 func validateContinueAgentBridge(record application.ContinueAgentBridgeRecord) error {
-	if record.ProjectID.IsZero() || record.RunID.IsZero() || record.TurnID.IsZero() || record.MessageID.IsZero() ||
+	if record.VersionID.IsZero() || record.ProjectID.IsZero() || record.RunID.IsZero() || record.TurnID.IsZero() || record.MessageID.IsZero() ||
 		record.ExpectedGeneration.Value() < 1 || record.ActivityEventID.IsZero() || record.Creator.Validate() != nil ||
 		record.Creator.Kind != domain.ActorCreator || len(record.Message) == 0 ||
 		len([]byte(record.Message)) > application.MaximumCreatorMessageBytes || len(record.RequestCanonical) == 0 ||

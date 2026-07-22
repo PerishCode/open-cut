@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -180,9 +181,10 @@ func TestUIChallengeHTTPBootstrapUnlocksCreatorProjectRoute(t *testing.T) {
 		t.Fatalf("activity page=%+v", page)
 	}
 
-	streamContext, cancelStream := context.WithCancel(context.Background())
+	streamContext, cancelStream := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelStream()
 	streamRequest, err := http.NewRequestWithContext(
-		streamContext, http.MethodGet, server.URL+"/v1/events?after=0", nil,
+		streamContext, http.MethodGet, server.URL+"/v1/events?after=1", nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -198,6 +200,18 @@ func TestUIChallengeHTTPBootstrapUnlocksCreatorProjectRoute(t *testing.T) {
 	}
 	if contentType := streamResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
 		t.Fatalf("stream content-type=%q", contentType)
+	}
+	streamReader := bufio.NewReader(streamResponse.Body)
+	readyFrame := ""
+	for range 4 {
+		line, readErr := streamReader.ReadString('\n')
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		readyFrame += line
+	}
+	if readyFrame != "retry: 1000\nevent: ready\ndata: {\"after\":\"1\"}\n\n" {
+		t.Fatalf("stream ready frame=%q", readyFrame)
 	}
 	cancelStream()
 	streamResponse.Body.Close()

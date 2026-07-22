@@ -63,14 +63,23 @@ async function reconcilePeers(force = false): Promise<void> {
       ? `${webPeer.instanceId}\n${webEndpoint}\n${apiPeer.instanceId}\n${apiEndpoint}`
       : undefined;
   if (!force && lease === activeLease) return;
-  const wasActive = activeLease !== undefined;
-  await clearActiveLease(wasActive);
+  // Rotating the short-lived UI credential inside one exact peer lease is an
+  // authority refresh, not a topology transition. Keep renderer state live.
+  const renewing = force && lease !== undefined && lease === activeLease;
+  if (renewing) {
+    if (renewal) clearTimeout(renewal);
+    renewal = undefined;
+  } else {
+    const wasActive = activeLease !== undefined;
+    await clearActiveLease(wasActive);
+  }
   if (!lease || !webEndpoint || !apiEndpoint) return;
 
   const session = await bootstrapUISession(apiEndpoint);
   if (stopping) return;
   if (electron) {
-    await electron.activateWeb(webEndpoint, apiEndpoint, session.token);
+    if (renewing) electron.renewUISession(apiEndpoint, session.token);
+    else await electron.activateWeb(webEndpoint, apiEndpoint, session.token);
   } else if (headlessWeb) {
     headlessWeb.setWebRuntime(webEndpoint);
     headlessWeb.setUISession(session.token);
@@ -83,7 +92,7 @@ async function reconcilePeers(force = false): Promise<void> {
     reconciliation = reconciliation.catch(() => undefined).then(() => reconcilePeers(true));
   }, renewAfter);
   renewal.unref();
-  sidecar.ready();
+  if (!renewing) sidecar.ready();
 }
 
 function scheduleReconciliation(): void {

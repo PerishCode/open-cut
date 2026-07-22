@@ -203,6 +203,7 @@ type Track struct {
 
 type GenesisIDs struct {
 	Project           ProjectID
+	ProjectVersion    ProjectVersionID
 	NarrativeDocument NarrativeDocumentID
 	RootSection       NarrativeNodeID
 	MainSequence      SequenceID
@@ -223,14 +224,15 @@ type ProjectGenesisInput struct {
 }
 
 type GenesisRecord struct {
-	ProposalID               ProposalID      `json:"proposalId"`
-	TransactionID            TransactionID   `json:"transactionId"`
-	RequestID                RequestID       `json:"requestId"`
-	Actor                    ActorRef        `json:"actor"`
-	CommittedProjectRevision Revision        `json:"committedProjectRevision"`
-	ProposalDigest           Digest          `json:"proposalDigest"`
-	ActivityEventID          ActivityEventID `json:"activityEventId"`
-	CreatedAt                time.Time       `json:"createdAt"`
+	ProjectVersionID         ProjectVersionID `json:"projectVersionId"`
+	ProposalID               ProposalID       `json:"proposalId"`
+	TransactionID            TransactionID    `json:"transactionId"`
+	RequestID                RequestID        `json:"requestId"`
+	Actor                    ActorRef         `json:"actor"`
+	CommittedProjectRevision Revision         `json:"committedProjectRevision"`
+	ProposalDigest           Digest           `json:"proposalDigest"`
+	ActivityEventID          ActivityEventID  `json:"activityEventId"`
+	CreatedAt                time.Time        `json:"createdAt"`
 }
 
 type ProjectGenesis struct {
@@ -282,7 +284,8 @@ func NewProjectGenesis(input ProjectGenesisInput, ids GenesisIDs) (ProjectGenesi
 			NarrativeDocuments: []NarrativeDocument{document}, Sequences: []Sequence{sequence},
 		},
 		Record: GenesisRecord{
-			ProposalID: ids.Proposal, TransactionID: ids.Transaction,
+			ProjectVersionID: ids.ProjectVersion,
+			ProposalID:       ids.Proposal, TransactionID: ids.Transaction,
 			ActivityEventID: ids.ActivityEvent,
 			RequestID:       input.RequestID, Actor: input.Actor,
 			CommittedProjectRevision: revision, CreatedAt: input.CreatedAt.UTC(),
@@ -305,7 +308,7 @@ func validateProjectName(name string) error {
 
 func validateGenesisIDs(ids GenesisIDs) error {
 	values := []string{
-		ids.Project.String(), ids.NarrativeDocument.String(), ids.RootSection.String(),
+		ids.Project.String(), ids.ProjectVersion.String(), ids.NarrativeDocument.String(), ids.RootSection.String(),
 		ids.MainSequence.String(), ids.VideoTrack.String(), ids.AudioTrack.String(),
 		ids.CaptionTrack.String(), ids.Proposal.String(), ids.Transaction.String(),
 		ids.ActivityEvent.String(),

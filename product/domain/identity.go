@@ -75,6 +75,7 @@ func (id *ID[Kind]) UnmarshalText(text []byte) error {
 }
 
 type projectIDKind struct{}
+type projectVersionIDKind struct{}
 type narrativeDocumentIDKind struct{}
 type narrativeNodeIDKind struct{}
 type sequenceIDKind struct{}
@@ -105,6 +106,7 @@ type conversationMessageIDKind struct{}
 type commandReceiptIDKind struct{}
 
 type ProjectID = ID[projectIDKind]
+type ProjectVersionID = ID[projectVersionIDKind]
 type NarrativeDocumentID = ID[narrativeDocumentIDKind]
 type NarrativeNodeID = ID[narrativeNodeIDKind]
 type SequenceID = ID[sequenceIDKind]
@@ -137,6 +139,10 @@ type CommandReceiptID = ID[commandReceiptIDKind]
 
 func ParseProjectID(value string) (ProjectID, error) {
 	return ParseID[projectIDKind](value)
+}
+
+func ParseProjectVersionID(value string) (ProjectVersionID, error) {
+	return ParseID[projectVersionIDKind](value)
 }
 
 func ParseNarrativeDocumentID(value string) (NarrativeDocumentID, error) {

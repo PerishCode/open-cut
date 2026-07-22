@@ -20,6 +20,11 @@ func applyNormalizedOperation(
 		return application.ErrEditInvalid
 	}
 	switch operation.Type {
+	case domain.NormalizedRestoreProjectVersion:
+		if operation.ProjectVersion == nil {
+			return application.ErrEditInvalid
+		}
+		return applyProjectVersionRestore(ctx, tx, projectID, transactionID, *operation.ProjectVersion, changes)
 	case domain.NormalizedPutNarrativeNode:
 		if operation.NarrativeNode == nil || operation.NarrativeNode.ID().IsZero() {
 			return application.ErrEditInvalid
@@ -74,6 +79,7 @@ func normalizedOperationPayloadCount(operation domain.NormalizedEditOperation) i
 		operation.TranscriptCorrection != nil, operation.Caption != nil,
 		operation.Alignment != nil, operation.Asset != nil, operation.Clip != nil,
 		operation.LinkGroup != nil,
+		operation.ProjectVersion != nil,
 	} {
 		if present {
 			count++

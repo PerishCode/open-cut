@@ -25,8 +25,12 @@ func TestVerifyDeliveredExport(t *testing.T) {
 	if err := os.WriteFile(path, []byte("changed"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyDeliveredExport(path, observation); err == nil {
-		t.Fatal("changed installed export passed verification")
+	if err := verifyDeliveredExport(path, observation); err == nil || err.Error() != "installed export destination has 7 bytes; expected 25" {
+		t.Fatalf("changed installed export error = %v", err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing.webm")
+	if err := verifyDeliveredExport(missing, observation); err == nil || err.Error() != "installed export destination is missing" {
+		t.Fatalf("missing installed export error = %v", err)
 	}
 }
 

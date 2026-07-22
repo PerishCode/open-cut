@@ -64,8 +64,17 @@ func verifyDeliveredExport(path string, observation Observation) error {
 		return fmt.Errorf("installed export delivery byte size is invalid")
 	}
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != expectedSize {
-		return fmt.Errorf("installed export destination is not the exact regular file")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("installed export destination is missing")
+		}
+		return fmt.Errorf("inspect installed export destination: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("installed export destination mode is %s, not a regular file", info.Mode())
+	}
+	if info.Size() != expectedSize {
+		return fmt.Errorf("installed export destination has %d bytes; expected %d", info.Size(), expectedSize)
 	}
 	file, err := os.Open(path)
 	if err != nil {

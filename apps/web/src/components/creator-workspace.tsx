@@ -13,7 +13,6 @@ import {
   type ProjectOverview,
   type RationalTime,
   type SequenceWindow,
-  type SourceStream,
   useContracts,
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -32,7 +31,6 @@ import {
   resolveWorkspaceFocus,
   sequencePointContext,
   sequenceRangeContext,
-  trackContext,
   transcriptSegmentContext,
   type WorkspaceSelection,
   workspaceFocusIntent,
@@ -50,6 +48,7 @@ import {
 } from "./creator-rough-cut.js";
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
+import { CreatorVersions } from "./creator-versions.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
 import {
   mergeTranscriptCorrections,
@@ -74,6 +73,8 @@ type WorkspaceState =
       sequence: SequenceWindow;
       assets: AssetPage;
     }>;
+
+type ReadyWorkspaceState = Extract<WorkspaceState, Readonly<{ status: "ready" }>>;
 
 type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
 
@@ -105,6 +106,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
+  const [sourcePanel, setSourcePanel] = useState("source-media");
   const [productAvailability, setProductAvailability] = useState<ProductAvailabilityState>({ status: "loading" });
 
   const loadProductAvailability = useCallback(async () => {
@@ -149,13 +151,18 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           ),
           contracts.media.read.list(project.id, { limit: 50 }, signal),
         ]);
-        if (!signal?.aborted) setState({ status: "ready", overview, narrative, sequence, assets });
+        if (!signal?.aborted) {
+          const readyState: ReadyWorkspaceState = { status: "ready", overview, narrative, sequence, assets };
+          setState(readyState);
+          return readyState;
+        }
       } catch (value) {
         if (!signal?.aborted) {
           if (preserveReady) throw value;
           setState({ status: "unavailable", error: value instanceof Error ? value : new Error(String(value)) });
         }
       }
+      return undefined;
     },
     [contracts, project.id],
   );
@@ -177,6 +184,19 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [recordCreativeCommit, refreshCommittedWorkspace],
   );
+  const refreshRestoredWorkspace = useCallback(async () => {
+    setHistoryRefreshEpoch((current) => current + 1);
+    setWorkspaceSelection(emptyWorkspaceSelection);
+    setNarrativeAnchor(undefined);
+    setRoughCutOccurrences([]);
+    setRoughCutTimelineStart(undefined);
+    setCaptionSource(undefined);
+    const restored = await refreshCommittedWorkspace();
+    if (restored) {
+      sequenceViewer.setAvailableRevision(restored.sequence.sequenceRevision);
+      sequenceViewer.adoptRevision(restored.sequence.sequenceRevision);
+    }
+  }, [refreshCommittedWorkspace, sequenceViewer]);
 
   useEffect(() => {
     void loadProductAvailability();
@@ -195,6 +215,8 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const ready = state.status === "ready" ? state : undefined;
   const selectedAsset = ready?.assets.assets.find((asset) => asset.id === selectedAssetId);
   const sourceAsset = ready?.assets.assets.find((asset) => asset.id === sourceStreamSelection?.assetId);
+  const sourceVideo = sourceAsset?.facts?.streams.find((stream) => stream.id === sourceStreamSelection?.videoStreamId)
+    ?.descriptor.video;
   const sequencePreviewAvailable =
     productAvailability.status === "ready" &&
     isProductFeatureAvailable(productAvailability.snapshot, "sequence-preview");
@@ -434,12 +456,58 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       }
       brand="OPEN CUT"
       inspector={
+        <CreatorAgentPane
+          contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
+          onAddPlayheadContext={
+            ready ? () => selectContext(sequencePointContext(ready.sequence, sequencePreview.playhead)) : undefined
+          }
+          onAddTimelineContext={ready ? () => selectContext(sequenceRangeContext(ready.sequence)) : undefined}
+          onFocusReceiptRef={focusReceiptRef}
+          projectId={project.id}
+          sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
+        />
+      }
+      inspectorLabel="Agent"
+      sidebar={
         <Tabs
-          label="Workspace panels"
+          activeTabId={sourcePanel}
+          label="Creative sources"
+          onTabChange={setSourcePanel}
           tabs={[
             {
-              id: "write",
-              label: "Write",
+              id: "source-media",
+              label: "Media",
+              content: (
+                <Stack spacing="compact">
+                  <SourceImportSurface
+                    disabled={!ready || importing}
+                    error={importError}
+                    onSelect={(file) => void importFootage(file)}
+                  />
+                  {ready && ready.assets.assets.length === 0 ? (
+                    <EmptyState hint="Add local footage to begin." title="No media yet" />
+                  ) : null}
+                  {ready?.assets.assets.map((asset) => (
+                    <AssetSummary
+                      asset={asset}
+                      key={asset.id}
+                      onContext={() => selectContext(assetContext(asset))}
+                      onTranscript={() => {
+                        setSelectedAssetId(asset.id);
+                        setSourcePanel("source-transcript");
+                        void readTranscript(asset.id);
+                      }}
+                      onPreview={() => openSourceAsset(asset)}
+                      previewAvailable={sourcePreviewAvailable}
+                      selected={viewerMode === "source" && asset.id === sourceStreamSelection?.assetId}
+                    />
+                  ))}
+                </Stack>
+              ),
+            },
+            {
+              id: "source-story",
+              label: "Story",
               content: (
                 <Stack spacing="compact">
                   {ready ? (
@@ -476,30 +544,19 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       sequenceId={ready.overview.project.mainSequenceId}
                     />
                   ) : null}
-                  {state.status === "loading" ? <Text>Loading bounded Narrative…</Text> : null}
+                  {state.status === "loading" ? <Text>Loading story…</Text> : null}
                   {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
-                  {ready ? (
-                    <CreatorHistory
-                      onCommitted={recordAndRefreshCreativeCommit}
-                      projectId={project.id}
-                      refreshEpoch={historyRefreshEpoch}
-                      sequenceId={ready.overview.project.mainSequenceId}
-                    />
-                  ) : null}
                 </Stack>
               ),
             },
             {
-              id: "transcript",
+              id: "source-transcript",
               label: "Transcript",
               content: (
                 <Stack spacing="compact">
-                  {selectedAsset ? null : (
-                    <EmptyState
-                      hint="Pick footage in the Library and open its transcript to quote exact spoken lines into your story."
-                      title="No source selected"
-                    />
-                  )}
+                  {!selectedAsset ? (
+                    <EmptyState hint="Choose media, then open its transcript." title="No source selected" />
+                  ) : null}
                   <TranscriptSurface
                     asset={selectedAsset}
                     excerptTarget={
@@ -529,106 +586,10 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 </Stack>
               ),
             },
-            {
-              id: "agent",
-              label: "Agent",
-              content: (
-                <Stack spacing="compact">
-                  <CreatorAgentPane
-                    contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
-                    onFocusReceiptRef={focusReceiptRef}
-                    projectId={project.id}
-                    sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
-                  />
-                  <AgentAccess />
-                  {ready ? (
-                    <>
-                      <Button onPress={() => selectContext(sequenceRangeContext(ready.sequence))}>
-                        Use visible timeline as @ context
-                      </Button>
-                      <Button
-                        onPress={() => selectContext(sequencePointContext(ready.sequence, ready.sequence.range.start))}
-                      >
-                        Use visible start as @ context
-                      </Button>
-                    </>
-                  ) : null}
-                  {ready?.overview.tracks.map((track) => (
-                    <Button key={track.id} onPress={() => selectContext(trackContext(track))}>
-                      Use {track.label} track as @ context
-                    </Button>
-                  ))}
-                </Stack>
-              ),
-            },
-            {
-              id: "export",
-              label: "Export",
-              content: (
-                <Stack spacing="compact">
-                  {ready ? (
-                    <CreatorExport
-                      available={sequenceExportAvailable}
-                      projectId={project.id}
-                      projectName={project.name}
-                      sequenceId={ready.overview.project.mainSequenceId}
-                      sequenceRevision={ready.sequence.sequenceRevision}
-                    />
-                  ) : (
-                    <EmptyState
-                      hint="Exports pin an exact Sequence revision; open a synchronized workspace first."
-                      title="Workspace is still loading"
-                    />
-                  )}
-                </Stack>
-              ),
-            },
-            {
-              id: "system",
-              label: "System",
-              content: (
-                <Stack spacing="compact">
-                  <ProductAvailability state={productAvailability} onRetry={() => void loadProductAvailability()} />
-                  <ProductResources />
-                </Stack>
-              ),
-            },
           ]}
         />
       }
-      inspectorLabel="Workspace"
-      sidebar={
-        <Stack spacing="compact">
-          <SourceImportSurface
-            disabled={!ready || importing}
-            error={importError}
-            onSelect={(file) => void importFootage(file)}
-          />
-          {ready && ready.assets.assets.length === 0 ? (
-            <EmptyState
-              hint="Add a local video to begin. Open Cut references it in place and prepares preview and transcript work in the background."
-              title="No footage yet"
-            />
-          ) : null}
-          {ready?.assets.assets.map((asset) => (
-            <AssetSummary
-              asset={asset}
-              key={asset.id}
-              onContext={() => selectContext(assetContext(asset))}
-              onTranscript={() => {
-                setSelectedAssetId(asset.id);
-                void readTranscript(asset.id);
-              }}
-              onPreview={() => {
-                openSourceAsset(asset);
-              }}
-              previewAvailable={sourcePreviewAvailable}
-              selected={viewerMode === "source" && asset.id === sourceStreamSelection?.assetId}
-            />
-          ))}
-        </Stack>
-      }
-      sidebarLabel="Library"
+      sidebarLabel="Sources"
       status={<Status state={status}>{workspaceStatus(state)}</Status>}
       timeline={
         <Tabs
@@ -639,19 +600,17 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Timeline",
               content: (
                 <Stack spacing="compact">
-                  {ready && ready.sequence.clips.length === 0 ? (
-                    <EmptyState
-                      hint="Quote transcript lines into your story, then apply a rough cut — clips land here."
-                      title="The timeline is empty"
-                    />
-                  ) : null}
                   {ready ? (
                     <CreatorTimeline
+                      assets={ready.assets.assets}
+                      captions={ready.sequence.captions}
                       clips={ready.sequence.clips}
+                      frameRate={ready.overview.format.frameRate}
                       onCommitted={recordAndRefreshCreativeCommit}
                       onContextClip={(clip) => selectContext(clipContext(clip))}
                       onReload={refreshCommittedWorkspace}
                       projectId={project.id}
+                      range={ready.sequence.range}
                       sequenceId={ready.overview.project.mainSequenceId}
                       tracks={ready.overview.tracks}
                       viewer={sequenceViewer}
@@ -726,6 +685,50 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 </Stack>
               ),
             },
+            {
+              id: "versions",
+              label: "Versions",
+              content: ready ? (
+                <Stack spacing="compact">
+                  <CreatorVersions
+                    currentRevision={ready.overview.project.revision}
+                    onRestored={refreshRestoredWorkspace}
+                    projectId={project.id}
+                    refreshEpoch={historyRefreshEpoch}
+                  />
+                  <CreatorHistory projectId={project.id} refreshEpoch={historyRefreshEpoch} />
+                </Stack>
+              ) : (
+                <Text>Synchronizing project versions…</Text>
+              ),
+            },
+            {
+              id: "export",
+              label: "Export",
+              content: ready ? (
+                <CreatorExport
+                  available={sequenceExportAvailable}
+                  hasContent={ready.sequence.clips.length > 0 || ready.sequence.captions.length > 0}
+                  projectId={project.id}
+                  projectName={project.name}
+                  sequenceId={ready.overview.project.mainSequenceId}
+                  sequenceRevision={ready.sequence.sequenceRevision}
+                />
+              ) : (
+                <Text>Synchronizing the project…</Text>
+              ),
+            },
+            {
+              id: "system",
+              label: "System",
+              content: (
+                <Stack spacing="compact">
+                  <AgentAccess />
+                  <ProductAvailability state={productAvailability} onRetry={() => void loadProductAvailability()} />
+                  <ProductResources />
+                </Stack>
+              ),
+            },
           ]}
         />
       }
@@ -735,7 +738,15 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         <Stack spacing="compact">
           <Text tone="eyebrow">{viewerMode === "sequence" ? "SEQUENCE · VIEWER" : "SOURCE · VIEWER"}</Text>
           <Text>
-            {ready ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}` : "Preparing"}
+            {viewerMode === "source"
+              ? sourceVideo
+                ? `${sourceVideo.width} × ${sourceVideo.height}`
+                : sourceAsset?.facts
+                  ? "Audio source"
+                  : "Preparing source"
+              : ready
+                ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}`
+                : "Preparing Sequence"}
           </Text>
           {viewerMode === "source" ? (
             <Button onPress={() => setViewerMode("sequence")}>Open Sequence Viewer</Button>
@@ -781,7 +792,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
 }
 
 function workspaceStatus(state: WorkspaceState): string {
-  if (state.status === "loading") return "Synchronizing bounded reads";
-  if (state.status === "unavailable") return "Workspace reads unavailable";
-  return `Project r${state.overview.project.revision} · Narrative r${state.narrative.documentRevision} · Sequence r${state.sequence.sequenceRevision}`;
+  if (state.status === "loading") return "Opening project";
+  if (state.status === "unavailable") return "Project unavailable";
+  return "All changes synced";
 }

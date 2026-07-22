@@ -198,6 +198,13 @@ export function CreatorSourcePlacement({
 
   const destinationStale =
     destination !== undefined && destination.sequenceRevision !== sequenceSnapshot.pinnedRevision;
+  const hasVideoLane = Boolean(selection?.videoStreamId && videoTrackId);
+  const hasAudioLane = Boolean(selection?.audioStreamId && audioTrackId);
+  const rangeFitsCoverage = sourceViewer.selectedRangeFitsCoverage({ video: hasVideoLane, audio: hasAudioLane });
+  const coverageConflict = Boolean(sourceRange && (hasVideoLane || hasAudioLane) && !rangeFitsCoverage);
+  const canPlace = Boolean(
+    selection && sourceRange && destination && !destinationStale && (hasVideoLane || hasAudioLane) && rangeFitsCoverage,
+  );
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">PLACE SOURCE</Text>
@@ -216,7 +223,10 @@ export function CreatorSourcePlacement({
       {selection?.audioStreamId ? (
         <TrackSelection label="AUDIO TRACK" onChange={setAudioTrackId} selected={audioTrackId} tracks={audioTracks} />
       ) : null}
-      <Button disabled={busy || destinationStale} onPress={() => void place()}>
+      {coverageConflict ? (
+        <Text>Marked range falls outside selected A/V coverage. Adjust In/Out or clear the incompatible lane.</Text>
+      ) : null}
+      <Button disabled={busy || !canPlace} onPress={() => void place()}>
         {busy ? "Placing…" : "Place selected source at captured playhead"}
       </Button>
       {pendingApply ? (

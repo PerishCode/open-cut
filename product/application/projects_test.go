@@ -35,7 +35,7 @@ func TestCreateProjectExpandsDefaultsAndConvergesRetries(t *testing.T) {
 	if !second.Replayed || second.Project.Project.ID != first.Project.Project.ID || second.RequestDigest != first.RequestDigest {
 		t.Fatalf("second = %+v first = %+v", second, first)
 	}
-	if identities.calls != 22 {
+	if identities.calls != 24 {
 		t.Fatalf("identity calls = %d", identities.calls)
 	}
 

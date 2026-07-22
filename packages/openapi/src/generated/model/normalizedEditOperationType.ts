@@ -10,4 +10,5 @@ export const NormalizedEditOperationType = {
   'put-asset': 'put-asset',
   'put-clip': 'put-clip',
   'put-link-group': 'put-link-group',
+  'restore-project-version': 'restore-project-version',
 } as const;

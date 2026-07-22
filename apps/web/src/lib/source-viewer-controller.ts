@@ -148,7 +148,7 @@ export class SourceViewerController {
     const timings = [lease.video, lease.audio].filter(
       (timing): timing is SourcePreviewTrackTiming => timing !== undefined,
     );
-    if (timings.length === 0 || timings.some((timing) => timing.coverageDuration === undefined)) {
+    if (!this.hasFiniteSelectedCoverage()) {
       throw new Error("Selected source does not declare finite coverage; capture In and Out explicitly");
     }
     let start = timings[0]?.coverageStart;
@@ -165,6 +165,30 @@ export class SourceViewerController {
     this.#snapshot = { ...this.#snapshot, marks: { in: start, out: end } };
     this.#emit();
     return { start, duration };
+  }
+
+  hasFiniteSelectedCoverage(): boolean {
+    const lease = this.#snapshot.preparation?.lease;
+    const timings = [lease?.video, lease?.audio].filter(
+      (timing): timing is SourcePreviewTrackTiming => timing !== undefined,
+    );
+    return timings.length > 0 && timings.every((timing) => timing.coverageDuration !== undefined);
+  }
+
+  selectedRangeFitsCoverage(lanes: Readonly<{ video: boolean; audio: boolean }>): boolean {
+    const range = this.selectedRange();
+    const lease = this.#snapshot.preparation?.lease;
+    if (!range || (!lanes.video && !lanes.audio)) return false;
+    const timings: SourcePreviewTrackTiming[] = [];
+    if (lanes.video) {
+      if (!lease?.video) return false;
+      timings.push(lease.video);
+    }
+    if (lanes.audio) {
+      if (!lease?.audio) return false;
+      timings.push(lease.audio);
+    }
+    return timings.every((timing) => rangeFitsCoverage(range, timing));
   }
 
   selectedRange(): Readonly<{ start: RationalTime; duration: RationalTime }> | undefined {
@@ -340,6 +364,20 @@ function rationalSeconds(value: RationalTime): number {
 function compareRational(left: RationalTime, right: RationalTime): number {
   const difference = BigInt(left.value) * BigInt(right.scale) - BigInt(right.value) * BigInt(left.scale);
   return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function rangeFitsCoverage(
+  range: Readonly<{ start: RationalTime; duration: RationalTime }>,
+  timing: SourcePreviewTrackTiming,
+): boolean {
+  if (compareRational(range.start, timing.coverageStart) < 0) return false;
+  if (!timing.coverageDuration) return true;
+  return (
+    compareRational(
+      addRational(range.start, range.duration),
+      addRational(timing.coverageStart, timing.coverageDuration),
+    ) <= 0
+  );
 }
 
 function addRational(left: RationalTime, right: RationalTime): RationalTime {

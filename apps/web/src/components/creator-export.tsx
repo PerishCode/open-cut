@@ -15,6 +15,7 @@ type CreatorExportProps = Readonly<{
   sequenceId: DurableID;
   sequenceRevision: RevisionString;
   available: boolean;
+  hasContent: boolean;
 }>;
 
 type SavedLineage = Readonly<{
@@ -22,7 +23,14 @@ type SavedLineage = Readonly<{
   result: ExportSaveResult;
 }>;
 
-export function CreatorExport({ projectId, projectName, sequenceId, sequenceRevision, available }: CreatorExportProps) {
+export function CreatorExport({
+  projectId,
+  projectName,
+  sequenceId,
+  sequenceRevision,
+  available,
+  hasContent,
+}: CreatorExportProps) {
   const contracts = useContracts();
   const [history, setHistory] = useState<SequenceExportHistoryPage>();
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -173,9 +181,10 @@ export function CreatorExport({ projectId, projectName, sequenceId, sequenceRevi
   const active = history?.lineages.some((lineage) => isActive(lineage)) ?? false;
   return (
     <Stack spacing="compact">
-      <Button disabled={!available || pending || active} onPress={() => void start()}>
-        {active ? "Export in progress" : "Export"}
+      <Button disabled={!available || !hasContent || pending || active} onPress={() => void start()}>
+        {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export"}
       </Button>
+      {!hasContent ? <Text>Add a clip or caption to the Sequence before exporting.</Text> : null}
       <Text tone="eyebrow">EXPORT HISTORY</Text>
       {loadingHistory && !history ? <Text>Loading exports…</Text> : null}
       {history?.lineages.length === 0 ? <Text>No exports yet.</Text> : null}

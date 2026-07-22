@@ -32,6 +32,7 @@ The business baseline is split across
 [`job-scheduler.md`](./specs/job-scheduler.md),
 [`project-lifecycle.md`](./specs/project-lifecycle.md),
 [`editing-interaction.md`](./specs/editing-interaction.md),
+[`project-versions.md`](./specs/project-versions.md),
 [`playback.md`](./specs/playback.md),
 [`workspace-ui.md`](./specs/workspace-ui.md) and
 [`business-harness.md`](./specs/business-harness.md). These sit above the
@@ -103,6 +104,47 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
   proving that the same runner starts independent Electron/web/API peers,
   aggregates READY, publishes endpoints, broadcasts lifecycle control, and exits
   the runtime tree cleanly without a GUI.
+
+### UI development loop
+
+Keep exploratory UI work out of the default dev data by giving the cell an
+isolated base directory. The path must end in the canonical `dev/default` cell
+suffix, and every companion command must use the same value:
+
+```sh
+oc-control dev --base-dir .tmp/oc-control/ui-audit/dev/default
+```
+
+From another terminal, inspect the live Electron renderer without discovering
+its transient CDP port by hand:
+
+```sh
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --screenshot .tmp/ui-audit.png
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --eval 'document.body?.innerText'
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --set-file .tmp/fixture.webm
+```
+
+`--set-file` accepts only a non-empty regular file, reports the exact attached
+byte size, and targets the first enabled file input. It is a generic renderer
+actuator; it does not import media through an internal API or learn product
+semantics.
+
+When a reproducible local media fixture is needed, record the running renderer
+through the contained media toolchain. On macOS, optional narration gives the
+transcription path known words without adding a checked-in binary fixture:
+
+```sh
+oc-control dev record --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --output .tmp/ui-audit.webm --duration 8 \
+  --speech 'A clear local workflow keeps creative work moving.'
+```
+
+Use `Ctrl-C` to end the owning `dev` command. `oc-control clean --scope quick`
+removes stopped ad-hoc dev and harness data while preserving the expensive
+media-toolchain cache; it refuses directories belonging to a live cell.
 
 ## Local delivery loop
 

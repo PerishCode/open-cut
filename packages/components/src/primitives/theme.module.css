@@ -135,7 +135,7 @@
 .editorShell {
   display: grid;
   height: 100%;
-  grid-template-rows: 54px minmax(340px, 1fr) minmax(220px, 34vh);
+  grid-template-rows: 54px minmax(0, 1fr);
   background: var(--oc-canvas);
 }
 
@@ -183,10 +183,19 @@
   gap: 8px;
 }
 
-.editorBody {
+.editorWorkspace {
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 360px);
+  grid-template-columns:
+    var(--oc-editor-source-width, 288px) 5px minmax(0, 1fr) 5px
+    var(--oc-editor-agent-width, 360px);
+}
+
+.editorMain {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(260px, 1fr) 5px minmax(220px, var(--oc-editor-timeline-height, 292px));
 }
 
 .editorSidebar,
@@ -196,11 +205,14 @@
   min-width: 0;
   min-height: 0;
   grid-template-rows: 42px 1fr;
-  border-right: 1px solid var(--oc-hairline-mid);
+}
+
+.editorSidebar {
+  background: var(--oc-surface);
 }
 
 .editorInspector {
-  border-right: 0;
+  background: color-mix(in srgb, var(--oc-surface) 92%, var(--oc-accent) 8%);
 }
 
 .editorPaneHeader {
@@ -216,7 +228,12 @@
 
 .editorPaneContent {
   overflow: auto;
-  padding: 18px;
+  padding: 14px;
+}
+
+.editorInspector .editorPaneContent {
+  overflow: hidden;
+  padding: 0;
 }
 
 .editorViewer .editorPaneContent {
@@ -244,7 +261,6 @@
 .editorTimeline {
   display: grid;
   min-height: 0;
-  border-top: 1px solid var(--oc-hairline-strong);
   grid-template-rows: 42px 1fr;
   background:
     repeating-linear-gradient(90deg, transparent 0, transparent 119px, var(--oc-timeline-ruler) 120px),
@@ -253,7 +269,42 @@
 
 .editorTimelineContent {
   overflow: auto;
-  padding: 18px;
+  padding: 12px;
+}
+
+.editorResizeVertical,
+.editorResizeHorizontal {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--oc-hairline-mid);
+  outline: none;
+  touch-action: none;
+}
+
+.editorResizeVertical {
+  cursor: col-resize;
+}
+
+.editorResizeHorizontal {
+  cursor: row-resize;
+}
+
+.editorResizeVertical::after,
+.editorResizeHorizontal::after {
+  position: absolute;
+  content: "";
+  background: transparent;
+  inset: -3px;
+}
+
+.editorResizeVertical:hover,
+.editorResizeVertical:focus-visible,
+.editorResizeHorizontal:hover,
+.editorResizeHorizontal:focus-visible {
+  background: var(--oc-accent-border-focus);
 }
 
 .surface {
@@ -285,6 +336,104 @@
 
 .stackCompact {
   gap: 18px;
+}
+
+.resourceCard {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--oc-hairline-strong);
+  background: color-mix(in srgb, var(--oc-surface) 94%, var(--oc-ink) 6%);
+}
+
+.resourceCard[aria-current="true"] {
+  border-color: var(--oc-accent-border-focus);
+  box-shadow: inset 3px 0 0 var(--oc-accent);
+}
+
+.resourceCardHeader {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  padding: 13px 13px 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.resourceCardTitleGroup,
+.resourceCardBody {
+  min-width: 0;
+}
+
+.resourceCardEyebrow {
+  margin-bottom: 5px;
+  color: var(--oc-ink-faint);
+  font: 700 10px / 1.2 var(--oc-font-mono);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.resourceCardTitle {
+  overflow: hidden;
+  color: var(--oc-ink-strong);
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceCardStatus {
+  padding-top: 1px;
+}
+
+.resourceCardBody {
+  padding: 0 13px 12px;
+  color: var(--oc-ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.resourceCardDetail + .resourceCardDetail {
+  margin-top: 3px;
+}
+
+.resourceCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 10px 13px 13px;
+  border-top: 1px solid var(--oc-hairline);
+  gap: 8px;
+}
+
+.panelDock {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.panelDockHeader,
+.panelDockBody,
+.panelDockFooter {
+  min-width: 0;
+  padding: 14px;
+}
+
+.panelDockHeader {
+  border-bottom: 1px solid var(--oc-hairline);
+  background: color-mix(in srgb, var(--oc-surface) 92%, var(--oc-accent) 8%);
+}
+
+.panelDockBody {
+  min-height: 0;
+  overflow: auto;
+}
+
+.panelDockFooter {
+  overflow: auto;
+  max-height: 58vh;
+  border-top: 1px solid var(--oc-hairline-strong);
+  background: color-mix(in srgb, var(--oc-surface) 88%, var(--oc-accent) 12%);
+  box-shadow: 0 -16px 36px rgb(0 0 0 / 8%);
 }
 
 .eyebrow,
@@ -585,6 +734,7 @@
 
 .editorShell,
 .editorHeader,
-.editorBody {
+.editorWorkspace,
+.editorMain {
   min-width: 0;
 }

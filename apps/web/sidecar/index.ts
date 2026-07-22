@@ -9,6 +9,7 @@ let unsubscribe: (() => void) | undefined;
 let renewal: NodeJS.Timeout | undefined;
 let stopping: Promise<void> | undefined;
 let apiLease: string | undefined;
+let browserBinding: string | undefined;
 let reconciliation = Promise.resolve();
 
 function stop(code = 0): Promise<void> {
@@ -28,19 +29,27 @@ async function reconcileAPI(api: SessionStatus | undefined, force = false): Prom
     : undefined;
   const lease = api?.ready && endpoint ? `${api.instanceId}\n${endpoint}` : undefined;
   if (!force && lease === apiLease) return;
+  // Preserve the browser binding and peer READY state while only the hidden
+  // upstream API credential rotates inside the same exact API lease.
+  const renewing = force && lease !== undefined && lease === apiLease;
   if (renewal) clearTimeout(renewal);
   renewal = undefined;
-  apiLease = undefined;
-  sidecar.notReady();
-  web.setApiRuntime(undefined);
-  web.setUISession(undefined);
+  if (!renewing) {
+    apiLease = undefined;
+    browserBinding = undefined;
+    sidecar.notReady();
+    web.setApiRuntime(undefined);
+    web.setUISession(undefined);
+  }
   if (!endpoint || !lease) return;
 
   web.setApiRuntime(endpoint);
   if (sidecar.mode === lifecycleMode.dev) {
-    const session = await bootstrapDevelopmentUISession(endpoint, web.url);
+    const issued = await bootstrapDevelopmentUISession(endpoint, web.url);
     if (stopping) return;
+    const session = browserBinding ? { ...issued, browserBinding } : issued;
     web.setUISession(session);
+    browserBinding = session.browserBinding;
     const renewAfter = Math.max(1_000, Math.floor((session.expiresAt - Date.now()) / 2));
     renewal = setTimeout(() => {
       reconciliation = reconciliation.catch(() => undefined).then(() => reconcileAPI(api, true));
@@ -48,7 +57,7 @@ async function reconcileAPI(api: SessionStatus | undefined, force = false): Prom
     renewal.unref();
   }
   apiLease = lease;
-  sidecar.ready();
+  if (!renewing) sidecar.ready();
 }
 
 sidecar = await SidecarConnection.connect({
@@ -67,6 +76,7 @@ unsubscribe = sidecar.watchApp(runtimePeer.api.app, (api) => {
     .then(() => reconcileAPI(api))
     .catch((error: unknown) => {
       apiLease = undefined;
+      browserBinding = undefined;
       sidecar?.notReady();
       web?.setApiRuntime(undefined);
       web?.setUISession(undefined);

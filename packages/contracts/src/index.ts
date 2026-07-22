@@ -177,6 +177,18 @@ export {
   type ProductStatusPort,
   type ProductStatusSnapshot,
 } from "./product.js";
+export type {
+  CreateProjectVersionInput,
+  ListProjectVersionsInput,
+  ProjectVersion,
+  ProjectVersionCreated,
+  ProjectVersionPage,
+  ProjectVersionPort,
+  ProjectVersionRestored,
+  ProjectVersionRetention,
+  ProjectVersionSource,
+  RestoreProjectVersionInput,
+} from "./project-versions.js";
 export {
   type ActivityActor,
   type ActivityEvent,

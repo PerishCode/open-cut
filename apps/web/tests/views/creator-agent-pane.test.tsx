@@ -31,7 +31,7 @@ describe("CreatorAgentPane", () => {
         if (url === "/api/v1/agent/availability") {
           return jsonResponse({
             adapterId: "codex-cli-v1",
-            promptVersion: "open-cut-agent-v1",
+            promptVersion: "open-cut-agent-v2",
             state: "available",
             version: "codex-cli 0.144.4",
           });
@@ -107,7 +107,7 @@ describe("CreatorAgentPane", () => {
         if (url === "/api/v1/agent/availability") {
           return jsonResponse({
             adapterId: "codex-cli-v1",
-            promptVersion: "open-cut-agent-v1",
+            promptVersion: "open-cut-agent-v2",
             state: "available",
             version: "codex-cli 0.144.4",
           });

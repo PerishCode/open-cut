@@ -110,6 +110,16 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		fmt.Fprintln(stderr, "dev inspect requires --screenshot, --eval, and/or --set-file")
 		return 2
 	}
+	setFilePath := ""
+	var setFileBytes int64
+	if *setFile != "" {
+		var inspectErr error
+		setFilePath, setFileBytes, inspectErr = inspectDevInputFile(*setFile)
+		if inspectErr != nil {
+			fmt.Fprintf(stderr, "inspect development input file: %v\n", inspectErr)
+			return 1
+		}
+	}
 	requestContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cdp, resolvedEndpoint, err := connectDevRenderer(requestContext, *repository, *baseDir, *endpoint, stderr)
@@ -119,17 +129,13 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 	}
 	defer cdp.Close()
 	result := map[string]any{"schema": 1, "endpoint": resolvedEndpoint}
-	if *setFile != "" {
-		filename, absErr := filepath.Abs(*setFile)
-		if absErr != nil {
-			fmt.Fprintln(stderr, absErr)
-			return 1
-		}
-		if err := setDevFileInput(requestContext, cdp, filename); err != nil {
+	if setFilePath != "" {
+		if err := setDevFileInput(requestContext, cdp, setFilePath); err != nil {
 			fmt.Fprintf(stderr, "attach file to development renderer: %v\n", err)
 			return 1
 		}
-		result["setFile"] = filename
+		result["setFile"] = setFilePath
+		result["setFileBytes"] = setFileBytes
 	}
 	if *evaluate != "" {
 		var evaluated struct {
@@ -178,6 +184,24 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		result["screenshotBytes"] = len(decoded)
 	}
 	return writeOutput(stdout, stderr, result)
+}
+
+func inspectDevInputFile(filename string) (string, int64, error) {
+	path, err := filepath.Abs(filename)
+	if err != nil {
+		return "", 0, err
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", 0, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", 0, fmt.Errorf("input must be a regular file")
+	}
+	if info.Size() == 0 {
+		return "", 0, fmt.Errorf("input file is empty")
+	}
+	return path, info.Size(), nil
 }
 
 func setDevFileInput(ctx context.Context, cdp *businessacceptance.CDPClient, filename string) error {
