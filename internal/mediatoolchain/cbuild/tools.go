@@ -11,7 +11,53 @@ import (
 	"strings"
 
 	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
+
+type buildTools struct {
+	compiler string
+	cxx      string
+	archiver string
+	makeTool string
+	cmake    string
+	shell    string
+}
+
+func resolveBuildTools(ctx context.Context) (buildTools, string, error) {
+	var result buildTools
+	for _, binding := range []struct {
+		name        string
+		destination *string
+	}{
+		{name: "cc", destination: &result.compiler},
+		{name: "c++", destination: &result.cxx},
+		{name: "ar", destination: &result.archiver},
+		{name: "make", destination: &result.makeTool},
+		{name: "cmake", destination: &result.cmake},
+		{name: "sh", destination: &result.shell},
+	} {
+		resolved, err := tool.Resolve(binding.name)
+		if err != nil {
+			return buildTools{}, "", fmt.Errorf("resolve media build tool %s: %w", binding.name, err)
+		}
+		*binding.destination = resolved
+	}
+	identity, err := inspectBuildTools(
+		ctx, result.compiler, result.cxx, result.archiver, result.makeTool, result.cmake,
+	)
+	if err != nil {
+		return buildTools{}, "", err
+	}
+	return result, identity, nil
+}
+
+// BuildEnvironmentIdentity is the exact compiler/tool identity persisted in a
+// C-tree stamp. Cache keys consume this same value so a restored generation
+// cannot claim compatibility that EnsureTree would reject.
+func BuildEnvironmentIdentity(ctx context.Context) (string, error) {
+	_, identity, err := resolveBuildTools(ctx)
+	return identity, err
+}
 
 func inspectCompiler(ctx context.Context, compiler string) (string, error) {
 	command := exec.CommandContext(ctx, compiler, "--version")

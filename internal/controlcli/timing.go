@@ -70,6 +70,32 @@ func newTimingCommand(stdout, stderr io.Writer) *cobra.Command {
 	}
 	parent.AddCommand(compare)
 
+	decision := &cobra.Command{Use: "decision", Short: "Read one exact timing decision", Args: cobra.NoArgs}
+	decisionReport := decision.Flags().String("report", "", "timing report JSON path")
+	decisionName := decision.Flags().String("name", "", "decision name")
+	decision.RunE = func(*cobra.Command, []string) error {
+		if *decisionReport == "" || *decisionName == "" {
+			fmt.Fprintln(stderr, "timing decision requires --report and --name")
+			return exitCodeError{code: 2}
+		}
+		report, err := timingreport.Read(*decisionReport)
+		if err != nil {
+			fmt.Fprintf(stderr, "timing decision: read report: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		value, err := timingreport.DecisionValue(report, *decisionName)
+		if err != nil {
+			fmt.Fprintf(stderr, "timing decision: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		if _, err := fmt.Fprintln(stdout, value); err != nil {
+			fmt.Fprintf(stderr, "timing decision: %v\n", err)
+			return exitCodeError{code: 1}
+		}
+		return nil
+	}
+	parent.AddCommand(decision)
+
 	cacheReport := &cobra.Command{Use: "cache-report", Short: "Record cache restore cohorts", Args: cobra.NoArgs}
 	output := cacheReport.Flags().String("output", "", "timing report JSON path")
 	target := cacheReport.Flags().String("target", "", "public build target")
