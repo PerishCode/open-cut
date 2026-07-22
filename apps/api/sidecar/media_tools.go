@@ -28,8 +28,10 @@ func runMediaTools(mode string) error {
 		if err != nil {
 			return err
 		}
+		timingRoot := filepath.Join(repositoryRoot, ".tmp", "oc-control", "timing", target.Host().String())
 		result, err := mediatoolchain.Build(ctx, mediatoolchain.BuildOptions{
 			RepositoryRoot: repositoryRoot, Target: target.Host(), Stdout: os.Stderr, Stderr: os.Stderr,
+			TimingReport: filepath.Join(timingRoot, "media-toolchain.json"),
 		})
 		if err != nil {
 			return fmt.Errorf("build API media artifact closure: %w", err)
@@ -39,6 +41,7 @@ func runMediaTools(mode string) error {
 		// executable, and nothing else.
 		whisperResult, err := whispertoolchain.Build(ctx, whispertoolchain.BuildOptions{
 			RepositoryRoot: repositoryRoot, Target: target.Host(), Stdout: os.Stderr, Stderr: os.Stderr,
+			TimingReport: filepath.Join(timingRoot, "whisper-toolchain.json"),
 		})
 		if err != nil {
 			return fmt.Errorf("build API whisper artifact closure: %w", err)

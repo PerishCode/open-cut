@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/PerishCode/open-cut/internal/mediatoolchain/cbuild"
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -25,6 +26,7 @@ type BuildOptions struct {
 	Target         target.Target
 	Stdout         io.Writer
 	Stderr         io.Writer
+	TimingReport   string
 }
 
 type BuildResult struct {
@@ -45,7 +47,18 @@ type BuildResult struct {
 	Reused         bool     `json:"reused"`
 }
 
-func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
+func Build(ctx context.Context, options BuildOptions) (result BuildResult, resultErr error) {
+	recorder := timingreport.New("media-toolchain-build", map[string]string{
+		"target": options.Target.String(), "version": toolchainVersion,
+	})
+	defer func() {
+		report := recorder.Finish(resultErr)
+		if options.TimingReport != "" {
+			if err := timingreport.Write(options.TimingReport, report); resultErr == nil && err != nil {
+				resultErr = fmt.Errorf("write media toolchain timing report: %w", err)
+			}
+		}
+	}()
 	repositoryRoot, err := filepath.Abs(options.RepositoryRoot)
 	if err != nil {
 		return BuildResult{}, err
@@ -68,10 +81,16 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	// Falling through to a cold build costs many minutes, so the decision has to
 	// say why it went that way. A closure restored from a build cache and then
 	// silently rebuilt is indistinguishable from a cache that never worked.
+	recorder.Step("inspect-published-closure")
 	verified, reusable, reuseReason := inspectReuse(ctx, repositoryRoot, artifactRoot, options.Target)
 	if !reusable {
 		fmt.Fprintf(stderr, "media toolchain cold build: %s\n", reuseReason)
 	}
+	closureDecision := "rebuilt"
+	if reusable {
+		closureDecision = "reused"
+	}
+	recorder.Decide("published-closure", closureDecision, reuseReason)
 	if reusable {
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
@@ -88,6 +107,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		}, nil
 	}
 	workspace := filepath.Join(repositoryRoot, ".tmp", "oc-control", "media-toolchain", options.Target.String())
+	recorder.Step("ensure-pinned-sources")
 	sources := mediaSourceRecords()
 	archives := make(map[string]string, len(sources))
 	for _, source := range sources {
@@ -100,6 +120,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		}
 		archives[source.ID] = archive
 	}
+	recorder.Step("ensure-c-build-tree")
 	products, err := cbuild.EnsureTree(ctx, cbuild.Options{
 		RepositoryRoot: repositoryRoot, Workspace: workspace, Archives: archives,
 		Target: options.Target, ToolchainVersion: toolchainVersion, Stdout: stdout, Stderr: stderr,
@@ -107,6 +128,11 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err != nil {
 		return BuildResult{}, err
 	}
+	cBuildDecision := "rebuilt"
+	if products.Reused {
+		cBuildDecision = "reused"
+	}
+	recorder.Decide("c-build-tree", cBuildDecision, "")
 	buildRoot := products.BuildRoot
 	sourceRoot := products.SourceRoot
 	dependencyRoot := products.DependencyRoot
@@ -122,6 +148,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	recordedLibVPXConfiguration := products.LibVPXConfiguration
 	recordedOpusConfiguration := products.OpusConfiguration
 
+	recorder.Step("assemble-staged-closure")
 	stageRoot := filepath.Join(workspace, "stage")
 	if err := os.RemoveAll(stageRoot); err != nil {
 		return BuildResult{}, err
@@ -188,6 +215,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		rendererTool,
 	}
 	baseCapabilities := baseCapabilityRecords(baseNotices)
+	recorder.Step("qualify-base-capabilities")
 	evidenceNotices, err := stageBaseConformanceEvidence(
 		ctx, options.Target, stageRoot, toolRecords, baseCapabilities, probePath, framePath,
 	)
@@ -196,6 +224,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	}
 	notices = append(notices, evidenceNotices...)
 	rendererCapabilities := make([]CapabilityRecord, 0, 2)
+	recorder.Step("qualify-renderer-capabilities")
 	for _, capabilityID := range []string{
 		CapabilitySequencePreviewRendererV1, CapabilitySequenceExportRendererV1,
 	} {
@@ -230,6 +259,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := atomicfile.WriteJSON(filepath.Join(stageRoot, ManifestName), manifest, 0o600); err != nil {
 		return BuildResult{}, err
 	}
+	recorder.Step("verify-staged-closure")
 	staged, err := Load(stageRoot, options.Target)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("verify staged media toolchain: %w", err)
@@ -237,12 +267,15 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := VerifyCapabilities(ctx, staged); err != nil {
 		return BuildResult{}, fmt.Errorf("verify staged media capabilities: %w", err)
 	}
+	recorder.Step("publish-closure")
 	if err := publishStage(stageRoot, artifactRoot, staged.Manifest); err != nil {
 		return BuildResult{}, err
 	}
+	recorder.Step("record-renderer-source-fingerprint")
 	if err := writeRendererSourceFingerprint(ctx, repositoryRoot, artifactRoot); err != nil {
 		return BuildResult{}, fmt.Errorf("record renderer source fingerprint: %w", err)
 	}
+	recorder.Step("verify-published-closure")
 	verified, err = Load(artifactRoot, options.Target)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("verify published media toolchain: %w", err)

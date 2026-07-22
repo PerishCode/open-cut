@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
@@ -30,6 +31,7 @@ type BuildOptions struct {
 	Target         target.Target
 	Stdout         io.Writer
 	Stderr         io.Writer
+	TimingReport   string
 }
 
 type BuildResult struct {
@@ -43,7 +45,18 @@ type BuildResult struct {
 	Reused        bool   `json:"reused"`
 }
 
-func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
+func Build(ctx context.Context, options BuildOptions) (result BuildResult, resultErr error) {
+	recorder := timingreport.New("whisper-toolchain-build", map[string]string{
+		"target": options.Target.String(), "version": toolchainVersion,
+	})
+	defer func() {
+		report := recorder.Finish(resultErr)
+		if options.TimingReport != "" {
+			if err := timingreport.Write(options.TimingReport, report); resultErr == nil && err != nil {
+				resultErr = fmt.Errorf("write whisper toolchain timing report: %w", err)
+			}
+		}
+	}()
 	repositoryRoot, err := filepath.Abs(options.RepositoryRoot)
 	if err != nil {
 		return BuildResult{}, err
@@ -76,7 +89,14 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	// digest — so the only thing it cannot see is a change to the build logic
 	// that does not alter the manifest, such as a different qualification
 	// suite. The recorded fingerprint covers exactly that.
-	if reused, ok, reason := inspectReuse(repositoryRoot, artifactRoot, options.Target); ok {
+	recorder.Step("inspect-published-closure")
+	reused, reusable, reuseReason := inspectReuse(repositoryRoot, artifactRoot, options.Target)
+	closureDecision := "rebuilt"
+	if reusable {
+		closureDecision = "reused"
+	}
+	recorder.Decide("published-closure", closureDecision, reuseReason)
+	if reusable {
 		capability := reused.Capabilities[CapabilityLocalTranscriptionV1]
 		return BuildResult{
 			Schema: ManifestSchema, Target: options.Target.String(), Version: reused.Manifest.Version,
@@ -85,12 +105,12 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 			Transcriber: capability.Entry.Path, TranscriberSH: capability.Entry.SHA256,
 			Reused: true,
 		}, nil
-	} else {
-		fmt.Fprintf(stderr, "whisper toolchain cold build: %s\n", reason)
 	}
+	fmt.Fprintf(stderr, "whisper toolchain cold build: %s\n", reuseReason)
 	workRoot := filepath.Join(
 		repositoryRoot, ".tmp", "oc-control", buildCacheRoot, options.Target.String(),
 	)
+	recorder.Step("prepare-build-workspace")
 	sourceRoot := filepath.Join(workRoot, "source")
 	buildRoot := filepath.Join(workRoot, "build")
 	stageRoot := filepath.Join(workRoot, "stage")
@@ -106,6 +126,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 
+	recorder.Step("inspect-build-tools")
 	cmake, err := exec.LookPath("cmake")
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("whisper toolchain build requires cmake: %w", err)
@@ -119,6 +140,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 
+	recorder.Step("ensure-pinned-source")
 	source := sourceRecords()[0]
 	archive, err := toolchainclosure.SourceArchivePath(sourceRoot, source)
 	if err != nil {
@@ -131,6 +153,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	// whisper build costs seconds, not the many minutes a codec toolchain
 	// costs, so there is nothing here worth the reuse machinery — and a tree
 	// that is always freshly extracted cannot drift from its pin.
+	recorder.Step("extract-pinned-source")
 	if err := os.RemoveAll(buildRoot); err != nil {
 		return BuildResult{}, err
 	}
@@ -144,6 +167,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, fmt.Errorf("extract pinned whisper.cpp: %w", err)
 	}
 
+	recorder.Step("build-whisper-cli")
 	builtWhisper, recordedConfiguration, err := buildWhisperCLI(
 		ctx, extracted, buildRoot, cmake, compiler, cxx, backend,
 		runtime.NumCPU(), options.Target, stdout, stderr,
@@ -152,6 +176,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 
+	recorder.Step("assemble-staged-closure")
 	whisperRelative := filepath.ToSlash(
 		filepath.Join("whisper", options.Target.ExecutableName("whisper-cli")),
 	)
@@ -185,6 +210,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	// Qualification runs the real binary against the real fixture. It proves
 	// semantic stability on this machine and that a non-model is rejected; it
 	// deliberately does not claim anything about other machines.
+	recorder.Step("qualify-transcription-capability")
 	observations, err := Qualify(ctx, whisperPath, filepath.Join(
 		stageRoot, filepath.FromSlash(ConformanceResourceRoot), ConformanceModelFile,
 	))
@@ -204,6 +230,7 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 		return BuildResult{}, err
 	}
 
+	recorder.Step("write-closure-manifest")
 	recipe, err := recipeDigest(options.Target, backend, recordedConfiguration)
 	if err != nil {
 		return BuildResult{}, err
@@ -231,9 +258,11 @@ func Build(ctx context.Context, options BuildOptions) (BuildResult, error) {
 	if err := atomicfile.WriteJSON(manifestPath, manifest, 0o600); err != nil {
 		return BuildResult{}, err
 	}
+	recorder.Step("publish-closure")
 	if err := publishStage(stageRoot, artifactRoot); err != nil {
 		return BuildResult{}, err
 	}
+	recorder.Step("record-build-fingerprint")
 	if err := writeBuildFingerprint(repositoryRoot, artifactRoot); err != nil {
 		return BuildResult{}, err
 	}

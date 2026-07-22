@@ -89,6 +89,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 		newCleanCommand(stdout, stderr),
 		newDevCommand(stdout, stderr),
 		newPackCommand(stdout, stderr),
+		newTimingCommand(stdout, stderr),
 		newMediaCacheKeyCommand(stdout, stderr),
 		newProtocolCommand(stdout, stderr),
 		newReleaseCommand(stdout, stderr),
@@ -249,6 +250,7 @@ func newPackCommand(stdout, stderr io.Writer) *cobra.Command {
 	version := command.Flags().String("version", "", "canonical X.Y.Z-channel.N version")
 	repository := command.Flags().String("repo", ".", "open-cut repository root")
 	launcher := command.Flags().String("launcher", "", "prebuilt target launcher")
+	timingReport := command.Flags().String("timing-report", "", "write a structured phase timing report")
 	keepWork := command.Flags().Bool("keep-work", false, "preserve successful .tmp/oc-control/pack workspace")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if *version == "" || *arch == "" {
@@ -262,7 +264,7 @@ func newPackCommand(stdout, stderr io.Writer) *cobra.Command {
 		}
 		result, err := packager.Pack(cmd.Context(), packager.Options{
 			RepositoryRoot: *repository, Version: *version, Target: buildTarget, Output: *output, Launcher: *launcher,
-			KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
+			TimingReport: *timingReport, KeepWork: *keepWork, Stdout: stderr, Stderr: stderr,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "pack: %v\n", err)
@@ -691,6 +693,10 @@ func runHarnessScenario(ctx context.Context, scenario, workspace, repository, bu
 			}
 		}
 		report = harness.RunColdStart(ctx, selected, launcherArtifact, payloadArtifact)
+	}
+	if err := writeHarnessReports(selected, report); err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return 1
 	}
 	if writeOutput(stdout, stderr, report) != 0 || !report.Passed {
 		return 1

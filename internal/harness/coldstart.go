@@ -34,10 +34,13 @@ const failingHarnessVersion = "3.0.0-harness.1"
 
 func RunColdStart(ctx context.Context, workspace, launcherArtifact, payloadArtifact string) Report {
 	started := time.Now()
+	lastCheck := started
 	report := Report{Schema: 1, Scenario: "genesis-download-confirm-offline-rollback"}
 	hostTarget := target.Host()
 	check := func(name string, err error) bool {
-		entry := Check{Name: name, Passed: err == nil}
+		observed := time.Now()
+		entry := Check{Name: name, Passed: err == nil, DurationMS: observed.Sub(lastCheck).Milliseconds()}
+		lastCheck = observed
 		if err != nil {
 			entry.Detail = err.Error()
 		}

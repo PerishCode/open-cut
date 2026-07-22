@@ -28,9 +28,12 @@ const fullPackReadyTimeout = 45 * time.Second
 
 func RunFullPack(ctx context.Context, workspace, repositoryRoot, bundlePath string) Report {
 	started := time.Now()
+	lastCheck := started
 	report := Report{Schema: 1, Scenario: "runtime-topology-peer-sidecars"}
 	check := func(name string, err error) bool {
-		entry := Check{Name: name, Passed: err == nil}
+		observed := time.Now()
+		entry := Check{Name: name, Passed: err == nil, DurationMS: observed.Sub(lastCheck).Milliseconds()}
+		lastCheck = observed
 		if err != nil {
 			entry.Detail = err.Error()
 		}

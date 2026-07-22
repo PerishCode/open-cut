@@ -192,6 +192,38 @@ inherits lifecycle authority from the API.
 The public CI builds and verifies native `mac-arm64`, `win-x64`, and `linux-x64`
 full packs; macOS additionally runs the install/offline-relaunch/uninstall loop.
 
+### Delivery timing reports
+
+Use a structured timing report when comparing delivery changes instead of
+inferring performance from the duration of one compound shell step:
+
+```sh
+oc-control pack mac --arch arm64 --version 0.1.0-beta.1 \
+  --output "$bundle" \
+  --timing-report .tmp/oc-control/timing/mac-arm64/pack.json
+
+oc-control timing summary \
+  --report .tmp/oc-control/timing/mac-arm64/media-toolchain.json \
+  --report .tmp/oc-control/timing/mac-arm64/whisper-toolchain.json \
+  --report .tmp/oc-control/timing/mac-arm64/pack.json
+
+oc-control timing compare \
+  --baseline .tmp/timing-baseline/pack.json \
+  --candidate .tmp/oc-control/timing/mac-arm64/pack.json
+```
+
+The API sidecar build automatically writes media and transcription reports
+under `.tmp/oc-control/timing/<target>/`. Harness commands write both their
+normal report and `reports/timing.json` below the selected workspace. Reports
+are written on failure as well as success and record reuse decisions separately
+from phase duration.
+
+Each native CI lane publishes these JSON reports as artifacts and renders them
+in the job summary. Its cache report distinguishes an exact key hit, a
+restore-prefix fallback, and a miss; the media reports independently show
+whether the restored closure and compiled C tree were actually reused. Compare
+the same target and cache cohort before attributing a duration change to code.
+
 Generated workspace cleanup is deliberately repository-scoped:
 
 ```sh
