@@ -502,6 +502,16 @@ jobs:
             echo
             "$CONTROL" timing summary "${reports[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload delivery timing reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-cut-timing-${{ matrix.target }}
+          path: |
+            .tmp/ci/full-pack/reports/report.json
+            .tmp/ci/full-pack/reports/timing.json
+            .tmp/oc-control/timing/${{ matrix.target }}/*.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -511,7 +521,4 @@ jobs:
             .tmp/ci/origin/releases/0.1.0-ci.1/${{ matrix.target }}/release.json
             .tmp/ci/origin/metadata/ci/${{ matrix.target }}/latest.json
             .tmp/ci/full-pack/reports/logs/full-pack.log
-            .tmp/ci/full-pack/reports/report.json
-            .tmp/ci/full-pack/reports/timing.json
-            .tmp/oc-control/timing/${{ matrix.target }}/*.json
           if-no-files-found: warn

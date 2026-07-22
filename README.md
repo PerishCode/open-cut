@@ -218,8 +218,9 @@ normal report and `reports/timing.json` below the selected workspace. Reports
 are written on failure as well as success and record reuse decisions separately
 from phase duration.
 
-Each native CI lane publishes these JSON reports as artifacts and renders them
-in the job summary. Its cache report distinguishes an exact key hit, a
+Each native CI lane publishes these JSON reports in a separate lightweight
+`open-cut-timing-<target>` artifact and renders them in the job summary. Its
+cache report distinguishes an exact key hit, a
 restore-prefix fallback, and a miss; the media reports independently show
 whether the restored closure and compiled C tree were actually reused. Compare
 the same target and cache cohort before attributing a duration change to code.
