@@ -492,6 +492,7 @@ function normalizeArtifact(value: unknown): MediaArtifact {
     artifact.kind !== "media-facts" &&
     artifact.kind !== "frame-sample-set" &&
     artifact.kind !== "proxy" &&
+    artifact.kind !== "render-input" &&
     artifact.kind !== "waveform" &&
     artifact.kind !== "transcript"
   ) {
@@ -519,6 +520,7 @@ export function normalizeJob(value: unknown): MediaJob {
     job.kind !== "probe" &&
     job.kind !== "frame-sample-set" &&
     job.kind !== "proxy" &&
+    job.kind !== "render-input" &&
     job.kind !== "waveform" &&
     job.kind !== "transcript"
   ) {
