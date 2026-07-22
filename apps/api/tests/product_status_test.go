@@ -18,6 +18,7 @@ import (
 )
 
 func TestProductStatusSeparatesAbsentInvalidAndUnqualifiedMediaTools(t *testing.T) {
+	parallelAPITest(t)
 	tests := []struct {
 		name     string
 		verified mediatoolchain.Verified
@@ -57,6 +58,7 @@ func TestProductStatusSeparatesAbsentInvalidAndUnqualifiedMediaTools(t *testing.
 }
 
 func TestProductStatusHTTPIsAuthorizedAndDoesNotExposeToolDetails(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	projects, reads, activity, runs := testProjectApplications(t, store)
 	edits, editReads := testEditingApplications(t, store)
@@ -94,6 +96,7 @@ func TestProductStatusHTTPIsAuthorizedAndDoesNotExposeToolDetails(t *testing.T) 
 }
 
 func TestProductStatusMapsOnlyClosedProductFeaturesFromVerifiedTools(t *testing.T) {
+	parallelAPITest(t)
 	verified := mediatoolchain.Verified{Capabilities: map[string]mediatoolchain.Capability{
 		mediatoolchain.CapabilityProbeV1:       {},
 		mediatoolchain.CapabilityFrameRGBV1:    {},
@@ -116,6 +119,7 @@ func TestProductStatusMapsOnlyClosedProductFeaturesFromVerifiedTools(t *testing.
 }
 
 func TestProductStatusRequiresBothTranscriptionExecutorAndAuthenticatedModelDeclaration(t *testing.T) {
+	parallelAPITest(t)
 	entry := resourceCatalogEntry(t, "https://catalog.invalid/whisper-small.bin", []byte("model"))
 	// Transcription now spans three closures: the media closure normalizes the
 	// audio, the whisper closure supplies the engine, the catalog declares the

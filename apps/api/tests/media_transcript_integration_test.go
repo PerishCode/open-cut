@@ -36,6 +36,7 @@ import (
 // binding records the engine that actually ran, and that real speech becomes
 // real tokens.
 func TestRealTranscriptCommandProducesTranscriptFromBothClosures(t *testing.T) {
+	serialAPITest(t, "uses shared media/model closures and a native transcription process")
 	modelPath := os.Getenv("OPEN_CUT_TRANSCRIPTION_MODEL")
 	if modelPath == "" {
 		t.Skip("set OPEN_CUT_TRANSCRIPTION_MODEL to the pinned multilingual model")

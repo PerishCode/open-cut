@@ -22,6 +22,7 @@ import (
 )
 
 func TestRealRenderInputExecutorProducesStableExactStreamMaterial(t *testing.T) {
+	serialAPITest(t, "uses the shared built media closure and native process budget")
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	if err != nil {
 		t.Fatal(err)

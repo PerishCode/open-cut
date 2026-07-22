@@ -17,6 +17,7 @@ import (
 )
 
 func TestCreatorCaptionPreviewCommitsOneAtomicInsertOnlyTransactionAndUndo(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	creator := creatorContext(t)
@@ -107,6 +108,7 @@ func TestCreatorCaptionPreviewCommitsOneAtomicInsertOnlyTransactionAndUndo(t *te
 }
 
 func TestCaptionDerivationPreviewApplyUndoAndProvenanceStatus(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 
@@ -276,6 +278,7 @@ func TestCaptionDerivationPreviewApplyUndoAndProvenanceStatus(t *testing.T) {
 }
 
 func TestCaptionDerivationMapsOneExcerptIntoTwoExplicitClipInstances(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	secondLocal, _ := domain.ParseLocalID("caption_clip_second")
@@ -369,6 +372,7 @@ func TestCaptionDerivationMapsOneExcerptIntoTwoExplicitClipInstances(t *testing.
 }
 
 func TestUnifiedAlignmentPersistsTwoClipTargetsAndWindowDeduplicatesIt(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	secondLocal, _ := domain.ParseLocalID("alignment_second_clip")

@@ -4,8 +4,25 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/PerishCode/open-cut/apps/api/service"
+	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 )
+
+type fixedTranscriptExecutor struct {
+	result application.TranscriptRecognition
+	claim  *application.MediaJobClaim
+}
+
+type fixedNoAudioTranscriptExecutor struct {
+	claim *application.MediaJobClaim
+}
+
+type resourceCheckingTranscriptExecutor struct {
+	models service.TranscriptModelAccess
+	result application.TranscriptRecognition
+	claim  *application.MediaJobClaim
+}
 
 func cloneTranscriptArtifactFixture(
 	t *testing.T,

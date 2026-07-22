@@ -8,6 +8,7 @@ import (
 )
 
 func TestRoughCutPreviewApplyUndoAndDeterministicReplay(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	prefix, err := domain.ParseLocalID("rough")
 	if err != nil {
@@ -111,6 +112,7 @@ func TestRoughCutPreviewApplyUndoAndDeterministicReplay(t *testing.T) {
 }
 
 func TestCreatorRoughCutPreviewAndDirectApplyShareTheAgentKernel(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	prefix, err := domain.ParseLocalID("creator_rough")
 	if err != nil {

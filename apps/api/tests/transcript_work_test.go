@@ -20,6 +20,7 @@ import (
 )
 
 func TestTranscriptWorkBindsExactInputsAndPublishesTypedArtifact(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)
@@ -326,6 +327,7 @@ func TestTranscriptWorkBindsExactInputsAndPublishesTypedArtifact(t *testing.T) {
 }
 
 func TestTranscriptWorkCompletesNoAudioWithoutModelBindingOrArtifact(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {
@@ -438,6 +440,7 @@ WHERE detail.asset_id = ? AND job.kind = 'transcript'`, registered.Asset.Asset.I
 }
 
 func TestTranscriptResourceCorruptionInvalidatesAndReblocksBoundWork(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)
@@ -601,21 +604,6 @@ const (
 	transcriptFixtureVersion = "whisper.cpp-fixture-v1"
 	transcriptFixtureTarget  = "test-x64"
 )
-
-type fixedTranscriptExecutor struct {
-	result application.TranscriptRecognition
-	claim  *application.MediaJobClaim
-}
-
-type fixedNoAudioTranscriptExecutor struct {
-	claim *application.MediaJobClaim
-}
-
-type resourceCheckingTranscriptExecutor struct {
-	models service.TranscriptModelAccess
-	result application.TranscriptRecognition
-	claim  *application.MediaJobClaim
-}
 
 func (executor *resourceCheckingTranscriptExecutor) Registration() application.MediaExecutorRegistration {
 	return application.MediaExecutorRegistration{

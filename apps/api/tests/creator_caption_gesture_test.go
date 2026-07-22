@@ -9,6 +9,7 @@ import (
 )
 
 func TestSQLiteCreatorManualCaptionCreatePreviewCommitAndUndo(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	creator := creatorContext(t)
@@ -90,6 +91,7 @@ func TestSQLiteCreatorManualCaptionCreatePreviewCommitAndUndo(t *testing.T) {
 }
 
 func TestSQLiteCreatorCaptionUpdatePreservesOnlyProvableCaptionAlignment(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	creator := creatorContext(t)
@@ -179,6 +181,7 @@ func TestSQLiteCreatorCaptionUpdatePreservesOnlyProvableCaptionAlignment(t *test
 }
 
 func TestSQLiteCreatorCaptionRemoveRequiresExplicitUnbindAndUndoesAtomically(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	creator := creatorContext(t)

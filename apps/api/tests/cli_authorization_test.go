@@ -26,6 +26,7 @@ import (
 )
 
 func TestCLIRequiresPossessionThenExactCreatorApprovedGrant(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
 	ui, uiPrivateKey := newTestUISessions(t, store, clock, false)
@@ -151,6 +152,7 @@ func TestCLIRequiresPossessionThenExactCreatorApprovedGrant(t *testing.T) {
 // silently 401ing that command in installed products. The failure hides from
 // CI because the fast lane stops before frames and exports.
 func TestCLICommandBodyAuthorityCoversEveryPostBodyCommand(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
 	ui, uiPrivateKey := newTestUISessions(t, store, clock, false)
@@ -270,6 +272,7 @@ func TestCLICommandBodyAuthorityCoversEveryPostBodyCommand(t *testing.T) {
 }
 
 func TestCLIChallengeRejectsBindingChangesAndConsumesNonce(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
 	cli, privateKey := newTestCLIAuthorization(t, store, clock)
@@ -308,6 +311,7 @@ func TestCLIChallengeRejectsBindingChangesAndConsumesNonce(t *testing.T) {
 }
 
 func TestCLIChallengeAcceptsSpecializedHTTPBindings(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 15, 5, 0, 0, 0, time.UTC)}
 	cli, _ := newTestCLIAuthorization(t, store, clock)
@@ -383,6 +387,7 @@ func TestCLIChallengeAcceptsSpecializedHTTPBindings(t *testing.T) {
 }
 
 func TestCLIGrantRevisionInvalidatesOldChallengeWithoutChangingAgentPrincipal(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 15, 2, 0, 0, 0, time.UTC)}
 	cli, privateKey := newTestCLIAuthorization(t, store, clock)
@@ -460,6 +465,7 @@ func TestCLIGrantRevisionInvalidatesOldChallengeWithoutChangingAgentPrincipal(t 
 }
 
 func TestSignedRunBodyRequiresScopeUpgradeAndRejectsTampering(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 15, 4, 0, 0, 0, time.UTC)}
 	cli, privateKey := newTestCLIAuthorization(t, store, clock)

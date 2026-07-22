@@ -11,6 +11,7 @@ import (
 )
 
 func TestResolveVideoSourcePositionUsesAbsoluteVFRPresentationBoundaries(t *testing.T) {
+	parallelAPITest(t)
 	encoded, err := application.EncodeSourceProxyTimeMap(
 		[]int64{-2000, 0, 3000},
 		[]int64{0, 2000, 5000},
@@ -47,6 +48,7 @@ func TestResolveVideoSourcePositionUsesAbsoluteVFRPresentationBoundaries(t *test
 }
 
 func TestResolveAudioSourcePositionUsesSourceSampleBoundaries(t *testing.T) {
+	parallelAPITest(t)
 	start := positionTime(t, -2, 1)
 	duration := positionTime(t, 4, 1)
 	timeBase := positionTime(t, 1, 48000)

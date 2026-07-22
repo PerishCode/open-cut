@@ -15,6 +15,7 @@ import (
 )
 
 func TestSQLiteProjectGenesisIsAtomicExactAndIdempotentAcrossRestart(t *testing.T) {
+	parallelAPITest(t)
 	ctx := creatorContext(t)
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)
@@ -90,6 +91,7 @@ func TestSQLiteProjectGenesisIsAtomicExactAndIdempotentAcrossRestart(t *testing.
 }
 
 func TestSQLiteLocalCreatorIsSingletonAndAuthorizationAuditSurvivesRestart(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)}
@@ -136,6 +138,7 @@ func TestSQLiteLocalCreatorIsSingletonAndAuthorizationAuditSurvivesRestart(t *te
 }
 
 func TestSQLiteCLIGrantKeepsAgentAndExactDecisionAcrossRestart(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	createdAt := time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)
@@ -237,6 +240,7 @@ func TestSQLiteCLIGrantKeepsAgentAndExactDecisionAcrossRestart(t *testing.T) {
 }
 
 func TestSQLiteMigrationCutoverRemovesPlaceholderShape(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)
@@ -379,6 +383,7 @@ SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sequence_export_a
 }
 
 func TestSQLiteProjectsRejectRewrittenMigrationHistory(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	projects, err := repository.OpenSQLiteProjects(ctx, dataDir)
@@ -407,6 +412,7 @@ func TestSQLiteProjectsRejectRewrittenMigrationHistory(t *testing.T) {
 }
 
 func TestSQLiteProjectsRejectNewerMigrationHistory(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	projects, err := repository.OpenSQLiteProjects(ctx, dataDir)

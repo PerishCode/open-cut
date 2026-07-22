@@ -16,6 +16,7 @@ import (
 )
 
 func TestUnifiedAlignmentDataMigrationRewritesJournalsAndDigests(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	db, err := sqliteDriver.Open(t.TempDir()+"/migration.db", func(connection *sqlite3.Conn) error {
 		return connection.Exec(`PRAGMA foreign_keys = ON;`)
@@ -177,6 +178,7 @@ SELECT schema_version, digest, operation_json FROM edit_transactions WHERE id = 
 }
 
 func TestUnifiedAlignmentSQLMigrationRewritesProjection(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	db, err := sqliteDriver.Open(t.TempDir()+"/projection.db", func(connection *sqlite3.Conn) error {
 		return connection.Exec(`PRAGMA foreign_keys = ON;`)
@@ -255,6 +257,7 @@ FROM alignments a JOIN alignment_targets t ON t.alignment_id = a.id WHERE a.id =
 }
 
 func TestClipMutationMigrationRejectsDegenerateLiveLinkGroup(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	db, err := sqliteDriver.Open(t.TempDir()+"/invalid-group.db", func(connection *sqlite3.Conn) error {
 		return connection.Exec(`PRAGMA foreign_keys = ON;`)

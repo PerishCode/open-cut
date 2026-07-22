@@ -20,6 +20,7 @@ import (
 )
 
 func TestProductResourceHTTPIsCreatorOnlyAndHidesAcquisitionInternals(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, filepath.Join(t.TempDir(), "api"))
 	if err != nil {
@@ -80,6 +81,7 @@ func TestProductResourceHTTPIsCreatorOnlyAndHidesAcquisitionInternals(t *testing
 }
 
 func TestProductResourceAcquisitionIsCreatorAuthorizedDurableAndUnblocksModelRequirement(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(ctx, dataDir)

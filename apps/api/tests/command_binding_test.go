@@ -12,6 +12,7 @@ import (
 )
 
 func TestAgentAPIEndpointsAreBoundToRegistryFingerprints(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	projects, reads, activity, runs := testProjectApplications(t, store)
 	edits, editReads := testEditingApplications(t, store)
@@ -100,6 +101,7 @@ func TestAgentAPIEndpointsAreBoundToRegistryFingerprints(t *testing.T) {
 // command missing from that binding table fails closed at challenge time and
 // silently amputates part of the Agent surface in installed products.
 func TestChallengeBindingCoversEveryAgentEndpoint(t *testing.T) {
+	parallelAPITest(t)
 	replacements := map[string]string{
 		"{id}":            "019f6f4f-88da-7f98-a91b-0bd7cf213013",
 		"{projectId}":     "019f6f4f-88da-7f98-a91b-0bd7cf213013",

@@ -12,6 +12,7 @@ import (
 )
 
 func TestSQLiteCreatorClipPlacementCommitsLinkedAVAtAbsoluteSourceTime(t *testing.T) {
+	parallelAPITest(t)
 	ctx := context.Background()
 	store, err := repository.OpenSQLiteProjects(ctx, t.TempDir())
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 )
 
 func TestSQLiteCreatorTimelineGesturePlansCompleteAlignmentClosureAndCommitsAtomically(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	alignmentID := bindFixtureClipAlignment(t, fixture, "creator_timeline_alignment")
@@ -98,6 +99,7 @@ func TestSQLiteCreatorTimelineGesturePlansCompleteAlignmentClosureAndCommitsAtom
 }
 
 func TestSQLiteCreatorTimelineGestureRejectsUnprovableAlignmentPreservation(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	bindFixtureClipAlignment(t, fixture, "creator_trim_alignment")
@@ -151,6 +153,7 @@ func TestSQLiteCreatorTimelineGestureRejectsUnprovableAlignmentPreservation(t *t
 }
 
 func TestSQLiteCreatorTimelineGestureReturnsTypedNoChangeWithoutWriting(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	beforeProposals, beforeTransactions := editJournalCounts(t, fixture.store.Path())
@@ -177,6 +180,7 @@ func TestSQLiteCreatorTimelineGestureReturnsTypedNoChangeWithoutWriting(t *testi
 }
 
 func TestSQLiteCreatorTimelineGestureReturnsTypedCollisionClosure(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	local, _ := domain.ParseLocalID("timeline_collision_clip")
@@ -237,6 +241,7 @@ func TestSQLiteCreatorTimelineGestureReturnsTypedCollisionClosure(t *testing.T) 
 }
 
 func TestSQLiteCreatorTimelineSplitEffectsHideAllocatedIdentities(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	half := mustRational(t, 1, 2)
@@ -349,6 +354,7 @@ func editJournalCounts(t *testing.T, databasePath string) (int, int) {
 }
 
 func TestSQLiteClipMoveAlignmentRemapApplyReadAndUndo(t *testing.T) {
+	parallelAPITest(t)
 	fixture := newCaptionDerivationIntegrationFixture(t)
 	defer fixture.store.Close()
 	alignmentLocal, _ := domain.ParseLocalID("move_alignment")

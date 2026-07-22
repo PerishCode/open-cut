@@ -14,6 +14,7 @@ import (
 )
 
 func TestHealthContract(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	projects, reads, activity, runs := testProjectApplications(t, store)
 	edits, editReads := testEditingApplications(t, store)
@@ -52,6 +53,7 @@ func TestHealthContract(t *testing.T) {
 }
 
 func TestHealthServiceUsesRepository(t *testing.T) {
+	parallelAPITest(t)
 	healthService := service.NewHealth(repository.StaticHealth{})
 	status, err := healthService.Get(context.Background())
 	if err != nil {

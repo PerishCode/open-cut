@@ -30,6 +30,7 @@ func (clock *mutableClock) Now() time.Time {
 }
 
 func TestUISessionRequiresSingleUsePossessionProofAndAuditsAuthority(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 14, 0, 0, 0, time.UTC)}
 	sessions, privateKey := newTestUISessions(t, store, clock, false)
@@ -66,6 +67,7 @@ func TestUISessionRequiresSingleUsePossessionProofAndAuditsAuthority(t *testing.
 }
 
 func TestUISessionRejectsTamperingExpiryAndUntrustedOrigins(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 14, 0, 0, 0, time.UTC)}
 	sessions, privateKey := newTestUISessions(t, store, clock, false)
@@ -107,6 +109,7 @@ func TestUISessionRejectsTamperingExpiryAndUntrustedOrigins(t *testing.T) {
 }
 
 func TestDevelopmentUISessionAcceptsOnlyExplicitLoopbackHTTPOrigin(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 14, 0, 0, 0, time.UTC)}
 	sessions, _ := newTestUISessions(t, store, clock, true)
@@ -127,6 +130,7 @@ func TestDevelopmentUISessionAcceptsOnlyExplicitLoopbackHTTPOrigin(t *testing.T)
 }
 
 func TestUIChallengeHTTPBootstrapUnlocksCreatorProjectRoute(t *testing.T) {
+	parallelAPITest(t)
 	store := repository.NewMemoryProjects()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 14, 0, 0, 0, time.UTC)}
 	sessions, privateKey := newTestUISessions(t, store, clock, false)

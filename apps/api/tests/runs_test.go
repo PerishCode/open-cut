@@ -14,6 +14,7 @@ import (
 )
 
 func TestSQLiteAgentRunIsIdempotentGenerationFencedAndDurable(t *testing.T) {
+	parallelAPITest(t)
 	createdAt := time.Date(2026, 7, 15, 3, 0, 0, 0, time.UTC)
 	dataDir := filepath.Join(t.TempDir(), "api")
 	store, err := repository.OpenSQLiteProjects(context.Background(), dataDir)
