@@ -224,6 +224,9 @@ cache report distinguishes an exact key hit, a
 restore-prefix fallback, and a miss; the media reports independently show
 whether the restored closure and compiled C tree were actually reused. Compare
 the same target and cache cohort before attributing a duration change to code.
+An app artifact check that opts into generic timing also emits
+`artifact-check-<app>-<index>.json`; the app owns its phases while the packager
+only provides the output path and rejects a missing or invalid declared report.
 
 The CI C-tree cache is a sequence of validated producer generations below one
 exact build-identity prefix. A restored generation is only a reuse hint:

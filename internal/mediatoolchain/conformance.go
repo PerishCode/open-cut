@@ -37,6 +37,17 @@ func VerifyCapabilities(ctx context.Context, verified Verified) error {
 	if err := VerifyRendererRelink(ctx, verified); err != nil {
 		return err
 	}
+	if err := VerifyBaseCapabilities(ctx, verified); err != nil {
+		return err
+	}
+	return VerifyRendererCapabilities(ctx, verified)
+}
+
+// VerifyBaseCapabilities replays the probe, frame, proxy, and render-input
+// qualification suite and requires it to reproduce the contained evidence.
+// It is exported separately so an app-owned packaging gate can measure this
+// semantically closed stage without duplicating verification logic.
+func VerifyBaseCapabilities(ctx context.Context, verified Verified) error {
 	probeCapability, exists := verified.Capabilities[CapabilityProbeV1]
 	if !exists || probeCapability.Entry.Path == "" {
 		return fmt.Errorf("probe-v1 conformance capability is unavailable")
@@ -60,14 +71,7 @@ func VerifyCapabilities(ctx context.Context, verified Verified) error {
 	if err != nil {
 		return err
 	}
-	tools := make(map[string]ToolRecord, len(verified.Manifest.Tools))
-	for _, tool := range verified.Manifest.Tools {
-		tools[tool.ID] = tool
-	}
-	resources := make(map[string]ResourceRecord, len(verified.Manifest.Resources))
-	for _, resource := range verified.Manifest.Resources {
-		resources[resource.ID] = resource
-	}
+	tools, resources := verificationDependencies(verified)
 	for _, capabilityID := range []string{
 		CapabilityProbeV1, CapabilityFrameRGBV1, CapabilitySourceProxyV1, CapabilityRenderInputV1,
 	} {
@@ -86,6 +90,13 @@ func VerifyCapabilities(ctx context.Context, verified Verified) error {
 			return fmt.Errorf("%s conformance evidence mismatch", capabilityID)
 		}
 	}
+	return nil
+}
+
+// VerifyRendererCapabilities replays every declared renderer matrix and
+// requires its observations to reproduce the contained evidence.
+func VerifyRendererCapabilities(ctx context.Context, verified Verified) error {
+	tools, resources := verificationDependencies(verified)
 	for _, capabilityID := range []string{
 		CapabilitySequencePreviewRendererV1, CapabilitySequenceExportRendererV1,
 	} {
@@ -96,6 +107,18 @@ func VerifyCapabilities(ctx context.Context, verified Verified) error {
 		}
 	}
 	return nil
+}
+
+func verificationDependencies(verified Verified) (map[string]ToolRecord, map[string]ResourceRecord) {
+	tools := make(map[string]ToolRecord, len(verified.Manifest.Tools))
+	for _, tool := range verified.Manifest.Tools {
+		tools[tool.ID] = tool
+	}
+	resources := make(map[string]ResourceRecord, len(verified.Manifest.Resources))
+	for _, resource := range verified.Manifest.Resources {
+		resources[resource.ID] = resource
+	}
+	return tools, resources
 }
 
 func qualifyBaseCapabilities(

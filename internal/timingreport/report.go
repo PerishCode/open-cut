@@ -14,6 +14,12 @@ import (
 
 const Schema = 1
 
+// ArtifactCheckReportEnvironment is the generic handoff from a packaging
+// runner to an app-owned artifact check that declared timing support. The
+// runner selects the output path; the app owns the report's operation, phases,
+// and decisions.
+const ArtifactCheckReportEnvironment = "OPEN_CUT_ARTIFACT_CHECK_TIMING_REPORT"
+
 const (
 	OutcomeSucceeded = "succeeded"
 	OutcomeFailed    = "failed"

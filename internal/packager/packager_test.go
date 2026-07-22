@@ -35,6 +35,19 @@ func TestPackWritesFailureTimingReportBeforeWorkspaceBuild(t *testing.T) {
 
 func TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand(t *testing.T) {
 	if os.Getenv("OPEN_CUT_ARTIFACT_CHECK_HELPER") == "1" {
+		if os.Getenv("OPEN_CUT_EXPECT_ARTIFACT_CHECK_TIMING_ABSENT") == "1" &&
+			os.Getenv(timingreport.ArtifactCheckReportEnvironment) != "" {
+			t.Fatal("ambient artifact check timing path reached the child")
+		}
+		if reportPath := os.Getenv(timingreport.ArtifactCheckReportEnvironment); reportPath != "" &&
+			os.Getenv("OPEN_CUT_SUPPRESS_ARTIFACT_CHECK_TIMING") != "1" {
+			if err := timingreport.Write(reportPath, timingreport.Report{
+				Schema: timingreport.Schema, Operation: "test-artifact-check",
+				Outcome: timingreport.OutcomeSucceeded, Phases: []timingreport.Phase{},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		return
 	}
 	appRoot := t.TempDir()
@@ -49,10 +62,33 @@ func TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand(t *testing.T) {
 	}
 	t.Setenv("OPEN_CUT_ARTIFACT_CHECK_HELPER", "1")
 	var stdout, stderr bytes.Buffer
-	if err := runArtifactChecks(context.Background(), appRoot, []workspace.ArtifactCheck{{
+	reportRoot := t.TempDir()
+	if err := runArtifactChecks(context.Background(), appRoot, "api", []workspace.ArtifactCheck{{
 		Command: filepath.ToSlash(commandName), Args: []string{"-test.run=TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand"},
-	}}, &stdout, &stderr); err != nil {
+		TimingReport: true,
+	}}, reportRoot, &stdout, &stderr); err != nil {
 		t.Fatalf("artifact check failed: %v stderr=%q", err, stderr.String())
+	}
+	report, err := timingreport.Read(filepath.Join(reportRoot, "artifact-check-api-1.json"))
+	if err != nil || report.Operation != "test-artifact-check" {
+		t.Fatalf("artifact check timing report=%+v error=%v", report, err)
+	}
+
+	t.Setenv(timingreport.ArtifactCheckReportEnvironment, filepath.Join(t.TempDir(), "ambient.json"))
+	t.Setenv("OPEN_CUT_EXPECT_ARTIFACT_CHECK_TIMING_ABSENT", "1")
+	if err := runArtifactChecks(context.Background(), appRoot, "api", []workspace.ArtifactCheck{{
+		Command: filepath.ToSlash(commandName), Args: []string{"-test.run=TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand"},
+	}}, reportRoot, &stdout, &stderr); err != nil {
+		t.Fatalf("artifact check inherited an ambient report path: %v stderr=%q", err, stderr.String())
+	}
+	t.Setenv("OPEN_CUT_EXPECT_ARTIFACT_CHECK_TIMING_ABSENT", "0")
+
+	t.Setenv("OPEN_CUT_SUPPRESS_ARTIFACT_CHECK_TIMING", "1")
+	if err := runArtifactChecks(context.Background(), appRoot, "api", []workspace.ArtifactCheck{{
+		Command: filepath.ToSlash(commandName), Args: []string{"-test.run=TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand"},
+		TimingReport: true,
+	}}, reportRoot, &stdout, &stderr); err == nil {
+		t.Fatal("artifact check without its declared timing report was accepted")
 	}
 
 	external := filepath.Join(filepath.Dir(appRoot), target.Host().ExecutableName("external-check"))
@@ -61,9 +97,9 @@ func TestRunArtifactChecksExecutesOnlyContainedDeclaredCommand(t *testing.T) {
 	}
 	link := filepath.Join(appRoot, target.Host().ExecutableName("linked-check"))
 	if err := os.Symlink(external, link); err == nil {
-		if err := runArtifactChecks(context.Background(), appRoot, []workspace.ArtifactCheck{{
+		if err := runArtifactChecks(context.Background(), appRoot, "api", []workspace.ArtifactCheck{{
 			Command: filepath.ToSlash(filepath.Base(link)),
-		}}, &stdout, &stderr); err == nil {
+		}}, "", &stdout, &stderr); err == nil {
 			t.Fatal("escaping artifact check link was accepted")
 		}
 	}

@@ -107,6 +107,14 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	if err != nil {
 		return Result{}, err
 	}
+	artifactCheckReportRoot := ""
+	if strings.TrimSpace(options.TimingReport) != "" {
+		absoluteTimingReport, err := filepath.Abs(options.TimingReport)
+		if err != nil {
+			return Result{}, err
+		}
+		artifactCheckReportRoot = filepath.Dir(absoluteTimingReport)
+	}
 	transaction, err := randomID()
 	if err != nil {
 		return Result{}, err
@@ -148,7 +156,9 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 	for _, sidecar := range topology.Sidecars {
 		if sidecar.App == controlConfig.PayloadWorkspace {
 			finish = recorder.Begin("check-artifacts:" + sidecar.App)
-			err = runArtifactChecks(ctx, deployedApp, sidecar.ArtifactChecks, stdout, stderr)
+			err = runArtifactChecks(
+				ctx, deployedApp, sidecar.App, sidecar.ArtifactChecks, artifactCheckReportRoot, stdout, stderr,
+			)
 			finish(err)
 			if err != nil {
 				return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
@@ -173,7 +183,9 @@ func Pack(ctx context.Context, options Options) (result Result, resultErr error)
 			return Result{}, err
 		}
 		finish = recorder.Begin("check-artifacts:" + sidecar.App)
-		err = runArtifactChecks(ctx, destination, sidecar.ArtifactChecks, stdout, stderr)
+		err = runArtifactChecks(
+			ctx, destination, sidecar.App, sidecar.ArtifactChecks, artifactCheckReportRoot, stdout, stderr,
+		)
 		finish(err)
 		if err != nil {
 			return Result{}, fmt.Errorf("verify deployed %s artifact closure: %w", sidecar.App, err)
@@ -432,15 +444,16 @@ func run(ctx context.Context, directory string, stdout, stderr io.Writer, enviro
 
 func runArtifactChecks(
 	ctx context.Context,
-	appRoot string,
+	appRoot, app string,
 	checks []workspace.ArtifactCheck,
+	reportRoot string,
 	stdout, stderr io.Writer,
 ) error {
 	physicalRoot, err := filepath.EvalSymlinks(appRoot)
 	if err != nil {
 		return err
 	}
-	for _, check := range checks {
+	for index, check := range checks {
 		candidate := filepath.Join(appRoot, filepath.FromSlash(check.Command))
 		physical, err := filepath.EvalSymlinks(candidate)
 		if err != nil || !pathWithin(physicalRoot, physical) {
@@ -450,13 +463,33 @@ func runArtifactChecks(
 		if err != nil || !info.Mode().IsRegular() {
 			return fmt.Errorf("artifact check command is unavailable")
 		}
+		reportPath := ""
+		env := environment.Merge(os.Environ(), []string{timingreport.ArtifactCheckReportEnvironment})
+		if check.TimingReport && reportRoot != "" {
+			reportPath = filepath.Join(reportRoot, fmt.Sprintf("artifact-check-%s-%d.json", app, index+1))
+			if err := os.Remove(reportPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("reset artifact check timing report: %w", err)
+			}
+			env = environment.Merge(env, nil, map[string]string{
+				timingreport.ArtifactCheckReportEnvironment: reportPath,
+			})
+		}
 		if err := lifecycle.Run(ctx, lifecycle.ProcessSpec{
 			Executable: physical, Args: append([]string(nil), check.Args...), Directory: appRoot,
-			Env: os.Environ(), Stdout: stdout, Stderr: stderr,
+			Env: env, Stdout: stdout, Stderr: stderr,
 			Profile: lifecycle.ProfileProduction, Presentation: lifecycle.PresentationHeadless,
 			ContainProcessTree: true, TerminationGrace: 2 * time.Second,
 		}); err != nil {
 			return fmt.Errorf("run %s: %w", check.Command, err)
+		}
+		if reportPath != "" {
+			report, err := timingreport.Read(reportPath)
+			if err != nil {
+				return fmt.Errorf("read artifact check timing report: %w", err)
+			}
+			if report.Outcome != timingreport.OutcomeSucceeded {
+				return fmt.Errorf("artifact check timing report did not succeed")
+			}
 		}
 	}
 	return nil

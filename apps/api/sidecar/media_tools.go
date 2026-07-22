@@ -12,9 +12,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/PerishCode/open-cut/internal/mediatoolchain"
 	"github.com/PerishCode/open-cut/internal/productresource"
+	"github.com/PerishCode/open-cut/internal/timingreport"
 	"github.com/PerishCode/open-cut/internal/whispertoolchain"
 	"github.com/PerishCode/open-cut/utils/target"
 )
@@ -67,58 +69,123 @@ func runMediaTools(mode string) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(result)
 	case "check":
-		executable, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("resolve API executable: %w", err)
-		}
-		verified, err := mediatoolchain.LoadForExecutable(executable, target.Host())
-		if err != nil {
-			return fmt.Errorf("verify API media artifact closure: %w", err)
-		}
-		if err := mediatoolchain.VerifyReleaseBaseline(verified); err != nil {
-			return fmt.Errorf("verify API production media baseline: %w", err)
-		}
-		if err := mediatoolchain.VerifyCapabilities(ctx, verified); err != nil {
-			return fmt.Errorf("verify API media capabilities: %w", err)
-		}
-		whisperClosure, err := whispertoolchain.LoadForExecutable(executable, target.Host())
-		if err != nil {
-			return fmt.Errorf("verify API whisper artifact closure: %w", err)
-		}
-		if err := whispertoolchain.VerifyReleaseBaseline(whisperClosure); err != nil {
-			return fmt.Errorf("verify API production transcription baseline: %w", err)
-		}
-		if err := whispertoolchain.VerifyCapabilities(ctx, whisperClosure); err != nil {
-			return fmt.Errorf("verify API whisper capabilities: %w", err)
-		}
-		if _, err := productresource.LoadForExecutable(executable); err != nil {
-			return fmt.Errorf("verify product resource catalog: %w", err)
-		}
-		probe := verified.Capabilities[mediatoolchain.CapabilityProbeV1].Entry
-		frameDecoder := verified.Capabilities[mediatoolchain.CapabilityFrameRGBV1].Entry
-		proxyEncoder := verified.Capabilities[mediatoolchain.CapabilitySourceProxyV1].Entry
-		renderInput := verified.Capabilities[mediatoolchain.CapabilityRenderInputV1].Entry
-		previewRenderer := verified.Capabilities[mediatoolchain.CapabilitySequencePreviewRendererV1].Entry
-		exportRenderer := verified.Capabilities[mediatoolchain.CapabilitySequenceExportRendererV1].Entry
-		sourceDigests := make([]string, len(verified.Manifest.Sources))
-		for index, source := range verified.Manifest.Sources {
-			sourceDigests[index] = source.ID + "@" + source.SHA256
-		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{
-			"schema": 1, "target": verified.Manifest.Target.String(), "version": verified.Manifest.Version,
-			"probeSha256": probe.SHA256, "frameSha256": frameDecoder.SHA256,
-			"proxySha256": proxyEncoder.SHA256, "renderInputSha256": renderInput.SHA256,
-			"previewRendererSha256": previewRenderer.SHA256,
-			"exportRendererSha256":  exportRenderer.SHA256,
-			"releaseProfile":        mediatoolchain.ReleaseBaselineProfile, "sourceSha256": sourceDigests,
-			"transcriptionReleaseProfile": whispertoolchain.ReleaseBaselineProfile,
-			"whisperVersion":              whisperClosure.Manifest.Version,
-			"whisperBackend":              whisperClosure.Manifest.Build.Backend,
-			"transcriberSha256":           whisperClosure.Capabilities[whispertoolchain.CapabilityLocalTranscriptionV1].Entry.SHA256,
-		})
+		return checkMediaTools(ctx)
 	default:
 		return fmt.Errorf("usage: api-sidecar media-tools <build|check>")
 	}
+}
+
+func checkMediaTools(ctx context.Context) (resultErr error) {
+	recorder := timingreport.New("api-artifact-check", map[string]string{"target": target.Host().String()})
+	reportPath := strings.TrimSpace(os.Getenv(timingreport.ArtifactCheckReportEnvironment))
+	if reportPath != "" {
+		if !filepath.IsAbs(reportPath) || filepath.Clean(reportPath) != reportPath {
+			return fmt.Errorf("API artifact check timing report path is invalid")
+		}
+		defer func() {
+			if err := timingreport.Write(reportPath, recorder.Finish(resultErr)); resultErr == nil && err != nil {
+				resultErr = fmt.Errorf("write API artifact check timing report: %w", err)
+			}
+		}()
+	}
+
+	finish := recorder.Begin("resolve-executable")
+	executable, err := os.Executable()
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("resolve API executable: %w", err)
+	}
+
+	finish = recorder.Begin("load-media-closure")
+	verified, err := mediatoolchain.LoadForExecutable(executable, target.Host())
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API media artifact closure: %w", err)
+	}
+	recorder.Attribute("media-version", verified.Manifest.Version)
+
+	finish = recorder.Begin("verify-media-release-baseline")
+	err = mediatoolchain.VerifyReleaseBaseline(verified)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API production media baseline: %w", err)
+	}
+
+	finish = recorder.Begin("verify-renderer-relink")
+	err = mediatoolchain.VerifyRendererRelink(ctx, verified)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API renderer relink: %w", err)
+	}
+
+	finish = recorder.Begin("verify-base-media-capabilities")
+	err = mediatoolchain.VerifyBaseCapabilities(ctx, verified)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API base media capabilities: %w", err)
+	}
+
+	finish = recorder.Begin("verify-renderer-capabilities")
+	err = mediatoolchain.VerifyRendererCapabilities(ctx, verified)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API renderer capabilities: %w", err)
+	}
+
+	finish = recorder.Begin("load-whisper-closure")
+	whisperClosure, err := whispertoolchain.LoadForExecutable(executable, target.Host())
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API whisper artifact closure: %w", err)
+	}
+	recorder.Attribute("whisper-version", whisperClosure.Manifest.Version)
+
+	finish = recorder.Begin("verify-whisper-release-baseline")
+	err = whispertoolchain.VerifyReleaseBaseline(whisperClosure)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API production transcription baseline: %w", err)
+	}
+
+	finish = recorder.Begin("verify-whisper-capabilities")
+	err = whispertoolchain.VerifyCapabilities(ctx, whisperClosure)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API whisper capabilities: %w", err)
+	}
+
+	finish = recorder.Begin("load-product-resources")
+	_, err = productresource.LoadForExecutable(executable)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify product resource catalog: %w", err)
+	}
+
+	probe := verified.Capabilities[mediatoolchain.CapabilityProbeV1].Entry
+	frameDecoder := verified.Capabilities[mediatoolchain.CapabilityFrameRGBV1].Entry
+	proxyEncoder := verified.Capabilities[mediatoolchain.CapabilitySourceProxyV1].Entry
+	renderInput := verified.Capabilities[mediatoolchain.CapabilityRenderInputV1].Entry
+	previewRenderer := verified.Capabilities[mediatoolchain.CapabilitySequencePreviewRendererV1].Entry
+	exportRenderer := verified.Capabilities[mediatoolchain.CapabilitySequenceExportRendererV1].Entry
+	sourceDigests := make([]string, len(verified.Manifest.Sources))
+	for index, source := range verified.Manifest.Sources {
+		sourceDigests[index] = source.ID + "@" + source.SHA256
+	}
+	finish = recorder.Begin("encode-result")
+	err = json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"schema": 1, "target": verified.Manifest.Target.String(), "version": verified.Manifest.Version,
+		"probeSha256": probe.SHA256, "frameSha256": frameDecoder.SHA256,
+		"proxySha256": proxyEncoder.SHA256, "renderInputSha256": renderInput.SHA256,
+		"previewRendererSha256": previewRenderer.SHA256,
+		"exportRendererSha256":  exportRenderer.SHA256,
+		"releaseProfile":        mediatoolchain.ReleaseBaselineProfile, "sourceSha256": sourceDigests,
+		"transcriptionReleaseProfile": whispertoolchain.ReleaseBaselineProfile,
+		"whisperVersion":              whisperClosure.Manifest.Version,
+		"whisperBackend":              whisperClosure.Manifest.Build.Backend,
+		"transcriberSha256":           whisperClosure.Capabilities[whispertoolchain.CapabilityLocalTranscriptionV1].Entry.SHA256,
+	})
+	finish(err)
+	return err
 }
 
 func sourceRepositoryRoot() (string, error) {
