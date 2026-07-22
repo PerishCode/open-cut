@@ -14,6 +14,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  adoptViewerSequenceFromCommit,
   CreatorTimelineController,
   type TimelinePlayheadAuthority,
 } from "../../src/lib/creator-timeline-controller.js";
@@ -33,7 +34,13 @@ describe("CreatorTimelineController", () => {
     const port = timelinePort();
     const playhead = new FakePlayhead(5);
     const controller = new CreatorTimelineController(port, playhead);
-    controller.setProjection({ projectId, sequenceId, clips: [clip(true)], tracks: [track()] });
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(true, "3", 2)],
+      tracks: [track()],
+    });
     controller.selectClip(clipId);
 
     expect(controller.getSnapshot()).toMatchObject({ phase: "selected", selectedClip: { id: clipId } });
@@ -68,7 +75,13 @@ describe("CreatorTimelineController", () => {
   it("derives exact trim ranges from the Viewer playhead", async () => {
     const port = timelinePort();
     const controller = new CreatorTimelineController(port, new FakePlayhead(5));
-    controller.setProjection({ projectId, sequenceId, clips: [clip(false)], tracks: [track()] });
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(false, "3", 2)],
+      tracks: [track()],
+    });
     controller.selectClip(clipId);
     controller.chooseAlignmentHandling("preserve-if-provable");
 
@@ -87,13 +100,98 @@ describe("CreatorTimelineController", () => {
     });
   });
 
+  it("accepts exact target times for move and trim without moving the Viewer playhead", async () => {
+    const port = timelinePort();
+    const playhead = new FakePlayhead(1);
+    const controller = new CreatorTimelineController(port, playhead);
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(false, "3", 2)],
+      tracks: [track()],
+    });
+    controller.selectClip(clipId);
+    controller.chooseAlignmentHandling("preserve-if-provable");
+
+    await controller.moveTo({ value: int64String("6"), scale: 1 });
+    expect(port.preview).toHaveBeenCalledWith({
+      projectId,
+      sequenceId,
+      kind: "move",
+      clipId,
+      clipRevision: "3",
+      scope: "single",
+      alignmentHandling: "preserve-if-provable",
+      trackId,
+      trackRevision: "4",
+      timelineStart: { value: "6", scale: 1 },
+    });
+    expect(playhead.value).toEqual({ value: "1", scale: 1 });
+
+    // Resolve the post-commit selection epoch so subsequent gestures use the refreshed Clip.
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("6"),
+      clips: [clip(false, "4", 6)],
+      tracks: [track()],
+    });
+    vi.mocked(port.preview).mockClear();
+    vi.mocked(port.apply).mockResolvedValueOnce({
+      commit: receipt({ sequenceRevision: "7", clipRevision: "5" }),
+      selectionHint: { clipId, revision: revisionString("5") },
+    });
+    await controller.trimEndTo({ value: int64String("12"), scale: 1 });
+    expect(port.preview).toHaveBeenCalledWith({
+      projectId,
+      sequenceId,
+      kind: "trim",
+      clipId,
+      clipRevision: "4",
+      scope: "single",
+      alignmentHandling: "preserve-if-provable",
+      sourceRange: { start: { value: "10", scale: 1 }, duration: { value: "6", scale: 1 } },
+      timelineRange: { start: { value: "6", scale: 1 }, duration: { value: "6", scale: 1 } },
+    });
+    expect(playhead.value).toEqual({ value: "1", scale: 1 });
+
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("7"),
+      clips: [clip(false, "5", 6)],
+      tracks: [track()],
+    });
+    vi.mocked(port.preview).mockClear();
+    await controller.trimStartTo({ value: int64String("8"), scale: 1 });
+    expect(port.preview).toHaveBeenCalledWith({
+      projectId,
+      sequenceId,
+      kind: "trim",
+      clipId,
+      clipRevision: "5",
+      scope: "single",
+      alignmentHandling: "preserve-if-provable",
+      sourceRange: { start: { value: "12", scale: 1 }, duration: { value: "8", scale: 1 } },
+      timelineRange: { start: { value: "8", scale: 1 }, duration: { value: "8", scale: 1 } },
+    });
+    expect(playhead.value).toEqual({ value: "1", scale: 1 });
+  });
+
   it("retries an ambiguous apply with the identical review and request identity", async () => {
     const port = timelinePort();
     vi.mocked(port.apply)
       .mockRejectedValueOnce(new CreatorEditError("failed", 503))
       .mockResolvedValueOnce(applyResult());
     const controller = new CreatorTimelineController(port, new FakePlayhead(6));
-    controller.setProjection({ projectId, sequenceId, clips: [clip(false)], tracks: [track()] });
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(false, "3", 2)],
+      tracks: [track()],
+    });
     controller.selectClip(clipId);
     controller.chooseAlignmentHandling("preserve-if-provable");
 
@@ -113,7 +211,13 @@ describe("CreatorTimelineController", () => {
     const port = timelinePort();
     vi.mocked(port.apply).mockRejectedValueOnce(new CreatorEditError("conflict", 409));
     const controller = new CreatorTimelineController(port, new FakePlayhead(5));
-    controller.setProjection({ projectId, sequenceId, clips: [clip(false)], tracks: [track()] });
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(false, "3", 2)],
+      tracks: [track()],
+    });
     controller.selectClip(clipId);
 
     expect(() => controller.remove()).toThrow("mark-stale or unbind");
@@ -121,6 +225,154 @@ describe("CreatorTimelineController", () => {
     expect(await controller.remove()).toBeUndefined();
     expect(controller.getSnapshot()).toMatchObject({ phase: "conflict", canRetryIdenticalApply: false });
     expect(await controller.retryIdenticalApply()).toBeUndefined();
+  });
+
+  it("keeps pending post-commit selection across a stale projection until the committed epoch arrives", async () => {
+    const port = timelinePort();
+    vi.mocked(port.apply).mockResolvedValueOnce({
+      commit: receipt({
+        sequenceRevision: "6",
+        clipRevision: "2",
+      }),
+      selectionHint: { clipId, revision: revisionString("2") },
+    });
+    const controller = new CreatorTimelineController(port, new FakePlayhead(0));
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(true, "1", 0)],
+      tracks: [track()],
+    });
+    controller.selectClip(clipId);
+    controller.chooseScope("linked");
+    controller.chooseAlignmentHandling("preserve-if-provable");
+
+    const commit = await controller.moveTo({ value: int64String("2"), scale: 1 });
+    expect(commit?.changes.some((change) => change.kind === "sequence" && change.revision === "6")).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "committed",
+      selectionHint: { clipId, revision: "2" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+      selectedClip: { id: clipId, revision: "1" },
+    });
+
+    // Stale activity/read: Sequence still r5 / Clip still r1 — must not clear selection.
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("5"),
+      clips: [clip(true, "1", 0)],
+      tracks: [track()],
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "committed",
+      selectionHint: { clipId, revision: "2" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+      selectedClip: { id: clipId, revision: "1" },
+    });
+
+    // Authoritative committed projection resolves the seed with policy intact.
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("6"),
+      clips: [clip(true, "2", 2)],
+      tracks: [track()],
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "selected",
+      selectedClip: { id: clipId, revision: "2" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+    });
+    expect(controller.getSnapshot().selectionHint).toBeUndefined();
+  });
+
+  it("adopts the exact Sequence revision from a successful commit without moving the playhead", () => {
+    const playhead = new FakePlayhead(4);
+    const viewer = {
+      setAvailableRevision: vi.fn(),
+      adoptRevision: vi.fn(),
+      getSnapshot: playhead.getSnapshot,
+      setPlayhead: playhead.setPlayhead,
+    };
+    const commit = receipt({ sequenceRevision: "6", clipRevision: "2" });
+
+    adoptViewerSequenceFromCommit(viewer, commit, sequenceId);
+
+    expect(viewer.setAvailableRevision).toHaveBeenCalledWith("6");
+    expect(viewer.adoptRevision).toHaveBeenCalledWith("6");
+    expect(playhead.value).toEqual({ value: "4", scale: 1 });
+  });
+
+  it("keeps an in-flight move alive when the committed projection arrives before apply resolves", async () => {
+    let resolveApply!: (value: {
+      commit: CreatorEditCommit;
+      selectionHint: { clipId: typeof clipId; revision: ReturnType<typeof revisionString> };
+    }) => void;
+    const applyGate = new Promise<{
+      commit: CreatorEditCommit;
+      selectionHint: { clipId: typeof clipId; revision: ReturnType<typeof revisionString> };
+    }>((resolve) => {
+      resolveApply = resolve;
+    });
+    const port: CreatorTimelinePort = {
+      preview: vi.fn(async (input) => ({ status: "ready" as const, review: review(input.kind, input.scope) })),
+      apply: vi.fn(() => applyGate),
+    };
+    const controller = new CreatorTimelineController(port, new FakePlayhead(0));
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("6"),
+      clips: [clip(true, "2", 0)],
+      tracks: [track()],
+    });
+    controller.selectClip(clipId);
+    controller.chooseScope("linked");
+    controller.chooseAlignmentHandling("preserve-if-provable");
+
+    const movePromise = controller.moveTo({ value: int64String("3"), scale: 1 });
+    await vi.waitFor(() => expect(port.apply).toHaveBeenCalledTimes(1));
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "applying",
+      selectedClip: { id: clipId, revision: "2" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+    });
+
+    // Product activity observed Sequence r7 / Clip r3 before apply resumed.
+    controller.setProjection({
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("7"),
+      clips: [clip(true, "3", 3)],
+      tracks: [track()],
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "applying",
+      selectedClip: { id: clipId, revision: "2" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+    });
+
+    resolveApply({
+      commit: receipt({ sequenceRevision: "7", clipRevision: "3" }),
+      selectionHint: { clipId, revision: revisionString("3") },
+    });
+
+    const commit = await movePromise;
+    expect(commit?.changes.some((change) => change.kind === "sequence" && change.revision === "7")).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "selected",
+      selectedClip: { id: clipId, revision: "3" },
+      scope: "linked",
+      alignmentHandling: "preserve-if-provable",
+    });
+    expect(controller.getSnapshot().selectionHint).toBeUndefined();
   });
 });
 
@@ -131,16 +383,16 @@ function timelinePort(): CreatorTimelinePort {
   };
 }
 
-function clip(linked: boolean): Clip {
+function clip(linked: boolean, revision = "3", start = 2): Clip {
   return {
     id: clipId,
-    revision: revisionString("3"),
+    revision: revisionString(revision),
     sequenceId,
     trackId,
     assetId,
     sourceStreamId: streamId,
     sourceRange: range(10, 10),
-    timelineRange: range(2, 10),
+    timelineRange: range(start, 10),
     enabled: true,
     ...(linked ? { linkGroupId: groupId } : {}),
     tombstoned: false,
@@ -177,7 +429,10 @@ function review(kind: "move" | "trim" | "split" | "remove", scope: "single" | "l
 }
 
 function applyResult() {
-  return { commit: receipt(), selectionHint: { clipId, revision: revisionString("4") } };
+  return {
+    commit: receipt({ sequenceRevision: "6", clipRevision: "4" }),
+    selectionHint: { clipId, revision: revisionString("4") },
+  };
 }
 
 function placement(revision: string, start: number) {
@@ -190,13 +445,18 @@ function placement(revision: string, start: number) {
   };
 }
 
-function receipt(): CreatorEditCommit {
+function receipt(options?: { sequenceRevision?: string; clipRevision?: string }): CreatorEditCommit {
+  const sequenceRevision = options?.sequenceRevision ?? "6";
+  const clipRevision = options?.clipRevision ?? "4";
   return {
     proposalId,
     transactionId,
     committedProjectRevision: revisionString("9"),
     activityCursor: cursorString("13"),
-    changes: [{ kind: "clip", id: clipId, revision: revisionString("4"), tombstoned: false }],
+    changes: [
+      { kind: "sequence", id: sequenceId, revision: revisionString(sequenceRevision), tombstoned: false },
+      { kind: "clip", id: clipId, revision: revisionString(clipRevision), tombstoned: false },
+    ],
     allocation: [],
     replayed: false,
   };

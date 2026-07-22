@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text, TimelineSurface } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text, TimelineSurface } from "@open-cut/components";
 import {
   type Asset,
   type Caption,
@@ -7,13 +7,14 @@ import {
   type DurableID,
   int64String,
   type RationalTime,
+  type RevisionString,
   type TimeRange,
   type Track,
   useContracts,
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { CreatorTimelineController } from "../lib/creator-timeline-controller.js";
+import { adoptViewerSequenceFromCommit, CreatorTimelineController } from "../lib/creator-timeline-controller.js";
 import type { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
 
@@ -30,6 +31,7 @@ export function CreatorTimeline({
   projectId,
   range,
   sequenceId,
+  sequenceRevision,
   tracks,
   viewer,
 }: Readonly<{
@@ -43,6 +45,7 @@ export function CreatorTimeline({
   projectId: DurableID;
   range: TimeRange;
   sequenceId: DurableID;
+  sequenceRevision: RevisionString;
   tracks: readonly Track[];
   viewer: SequenceViewerController;
 }>) {
@@ -53,10 +56,11 @@ export function CreatorTimeline({
   );
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [validationError, setValidationError] = useState<Error>();
+  const viewerSnapshot = useSyncExternalStore(viewer.subscribe, viewer.getSnapshot, viewer.getSnapshot);
 
   useEffect(() => {
-    controller.setProjection({ projectId, sequenceId, clips, tracks });
-  }, [clips, controller, projectId, sequenceId, tracks]);
+    controller.setProjection({ projectId, sequenceId, sequenceRevision, clips, tracks });
+  }, [clips, controller, projectId, sequenceId, sequenceRevision, tracks]);
 
   useEffect(() => () => controller.close(), [controller]);
 
@@ -65,19 +69,25 @@ export function CreatorTimeline({
       setValidationError(undefined);
       try {
         const receipt = await operation();
-        if (receipt) await onCommitted(receipt);
+        if (!receipt) return;
+        await onCommitted(receipt);
+        adoptViewerSequenceFromCommit(viewer, receipt, sequenceId);
       } catch (value) {
         setValidationError(value instanceof Error ? value : new Error(String(value)));
       }
     },
-    [onCommitted],
+    [onCommitted, sequenceId, viewer],
   );
 
   const selected = snapshot.selectedClip;
   const selectedTrack = selected ? tracks.find((track) => track.id === selected.trackId) : undefined;
   const busy = snapshot.phase === "planning" || snapshot.phase === "applying";
+  const awaitingProjection = snapshot.phase === "committed" && snapshot.selectionHint !== undefined;
   const ready =
-    Boolean(selected && snapshot.scope && snapshot.alignmentHandling) && !busy && snapshot.phase !== "conflict";
+    Boolean(selected && snapshot.scope && snapshot.alignmentHandling) &&
+    !busy &&
+    !awaitingProjection &&
+    snapshot.phase !== "conflict";
   const rangeStart = seconds(range.start);
   const rangeDuration = seconds(range.duration);
   const timelineItems = [
@@ -87,7 +97,7 @@ export function CreatorTimeline({
       label: assets.find((asset) => asset.id === clip.assetId)?.displayName ?? "Source clip",
       startSeconds: seconds(clip.timelineRange.start),
       durationSeconds: seconds(clip.timelineRange.duration),
-      selected: clip.id === selected?.id,
+      selected: clip.id === selected?.id || clip.id === snapshot.selectionHint?.clipId,
       linked: clip.linkGroupId !== undefined,
     })),
     ...captions.map((caption) => ({
@@ -100,51 +110,116 @@ export function CreatorTimeline({
     })),
   ];
 
+  const commitMove = useCallback(
+    (id: string, startSeconds: number) => {
+      if (!selected || selected.id !== id || !ready) return;
+      void run(() => controller.moveTo(snapToFrame(startSeconds, frameRate)));
+    },
+    [controller, frameRate, ready, run, selected],
+  );
+
+  const commitTrimStart = useCallback(
+    (id: string, startSeconds: number) => {
+      if (!selected || selected.id !== id || !ready) return;
+      void run(() => controller.trimStartTo(snapToFrame(startSeconds, frameRate)));
+    },
+    [controller, frameRate, ready, run, selected],
+  );
+
+  const commitTrimEnd = useCallback(
+    (id: string, endSeconds: number) => {
+      if (!selected || selected.id !== id || !ready) return;
+      void run(() => controller.trimEndTo(snapToFrame(endSeconds, frameRate)));
+    },
+    [controller, frameRate, ready, run, selected],
+  );
+
+  const policyVisible = Boolean(selected || snapshot.selectionHint);
+  const readinessHint = awaitingProjection
+    ? "Synchronizing committed selection…"
+    : !selected
+      ? undefined
+      : ready
+        ? "Canvas ready · drag body to move · drag edges to trim"
+        : !busy && snapshot.phase !== "conflict"
+          ? selected.linkGroupId && !snapshot.scope
+            ? "Choose linked scope, then Alignment, to enable move and trim."
+            : !snapshot.alignmentHandling
+              ? "Choose an explicit Alignment consequence to enable move and trim."
+              : "Finish the current Timeline recovery before the next canvas gesture."
+          : undefined;
+
+  const accessory = policyVisible ? (
+    <ControlStrip
+      hint={readinessHint}
+      label="Timeline selection policy"
+      summary={
+        selected ? (
+          <>
+            SELECTED · {selectedTrack?.label ?? selected.trackId}
+            {selected.linkGroupId ? " · LINK" : ""} · Source {formatTime(selected.sourceRange.start)} →{" "}
+            {formatTimeEnd(selected.sourceRange)} · Timeline {formatTime(selected.timelineRange.start)} →{" "}
+            {formatTimeEnd(selected.timelineRange)}
+          </>
+        ) : (
+          <>SELECTED · synchronizing committed Clip</>
+        )
+      }
+    >
+      {selected?.linkGroupId ? (
+        <>
+          <Button disabled={busy || awaitingProjection} onPress={() => controller.chooseScope("linked")}>
+            {snapshot.scope === "linked" ? "✓ " : ""}Linked A/V
+          </Button>
+          <Button disabled={busy || awaitingProjection} onPress={() => controller.chooseScope("single")}>
+            {snapshot.scope === "single" ? "✓ " : ""}Clip only
+          </Button>
+        </>
+      ) : selected ? (
+        <Text>Scope · selected Clip only</Text>
+      ) : null}
+      <Button
+        disabled={busy || awaitingProjection || !selected}
+        onPress={() => controller.chooseAlignmentHandling("preserve-if-provable")}
+      >
+        {snapshot.alignmentHandling === "preserve-if-provable" ? "✓ " : ""}Preserve
+      </Button>
+      <Button
+        disabled={busy || awaitingProjection || !selected}
+        onPress={() => controller.chooseAlignmentHandling("mark-stale")}
+      >
+        {snapshot.alignmentHandling === "mark-stale" ? "✓ " : ""}Mark stale
+      </Button>
+      <Button
+        disabled={busy || awaitingProjection || !selected}
+        onPress={() => controller.chooseAlignmentHandling("unbind")}
+      >
+        {snapshot.alignmentHandling === "unbind" ? "✓ " : ""}Unbind
+      </Button>
+      {selected ? <Button onPress={() => onContextClip(selected)}>Add @ context</Button> : null}
+    </ControlStrip>
+  ) : undefined;
+
   return (
     <Stack spacing="compact">
       <TimelineSurface
+        accessory={accessory}
         durationSeconds={rangeDuration}
+        itemGesturesEnabled={ready}
         items={timelineItems}
+        onItemMove={commitMove}
         onItemSelect={(id) => controller.selectClip(id as DurableID)}
+        onItemTrimEnd={commitTrimEnd}
+        onItemTrimStart={commitTrimStart}
         onSeek={(value) => controller.setPlayhead(snapToFrame(value, frameRate))}
-        playheadSeconds={seconds(viewer.getSnapshot().playhead)}
+        playheadSeconds={seconds(viewerSnapshot.playhead)}
         startSeconds={rangeStart}
         tracks={tracks.map((track) => ({ id: track.id, label: track.label, kind: track.type }))}
       />
       {clips.length === 0 ? <Text>Drop a source range or apply a rough cut to add the first Clip.</Text> : null}
       {selected ? (
         <Stack spacing="compact">
-          <Text tone="eyebrow">SELECTED CLIP · {selectedTrack?.label ?? selected.trackId}</Text>
-          <Text>
-            Source {formatTime(selected.sourceRange.start)} → {formatTimeEnd(selected.sourceRange)} · Timeline{" "}
-            {formatTime(selected.timelineRange.start)} → {formatTimeEnd(selected.timelineRange)}
-          </Text>
-          <Button onPress={() => onContextClip(selected)}>Add selected Clip to Agent context</Button>
-          {selected.linkGroupId ? (
-            <Stack spacing="compact">
-              <Text>Choose whether this gesture affects the complete LinkGroup or only the selected Clip.</Text>
-              <Button disabled={busy} onPress={() => controller.chooseScope("linked")}>
-                {snapshot.scope === "linked" ? "✓ " : ""}Edit linked A/V
-              </Button>
-              <Button disabled={busy} onPress={() => controller.chooseScope("single")}>
-                {snapshot.scope === "single" ? "✓ " : ""}Edit selected Clip only
-              </Button>
-            </Stack>
-          ) : (
-            <Text>Scope · selected Clip only</Text>
-          )}
-          <Text tone="eyebrow">ALIGNMENT CONSEQUENCE</Text>
-          {snapshot.alignmentHandling === undefined ? <Text>Choose an explicit Alignment consequence.</Text> : null}
-          <Button disabled={busy} onPress={() => controller.chooseAlignmentHandling("preserve-if-provable")}>
-            {snapshot.alignmentHandling === "preserve-if-provable" ? "✓ " : ""}Preserve if provable
-          </Button>
-          <Button disabled={busy} onPress={() => controller.chooseAlignmentHandling("mark-stale")}>
-            {snapshot.alignmentHandling === "mark-stale" ? "✓ " : ""}Mark dependent Alignments stale
-          </Button>
-          <Button disabled={busy} onPress={() => controller.chooseAlignmentHandling("unbind")}>
-            {snapshot.alignmentHandling === "unbind" ? "✓ " : ""}Unbind dependent Alignments
-          </Button>
-          <Text>Gesture target · exact Sequence Viewer playhead {formatTime(viewer.getSnapshot().playhead)}</Text>
+          <Text tone="eyebrow">PLAYHEAD ACTIONS · {formatTime(viewerSnapshot.playhead)}</Text>
           <Button disabled={!ready} onPress={() => void run(() => controller.moveToPlayhead())}>
             Move selected scope to playhead
           </Button>
@@ -214,7 +289,9 @@ export function CreatorTimeline({
           ) : null}
         </Stack>
       ) : null}
-      {snapshot.phase === "committed" ? <Status state="ready">Timeline transaction committed</Status> : null}
+      {snapshot.phase === "committed" && !awaitingProjection ? (
+        <Status state="ready">Timeline transaction committed</Status>
+      ) : null}
       {snapshot.phase === "conflict" ? (
         <Stack spacing="compact">
           <Status state="unavailable">Timeline conflict · reload and reselect the Clip before retrying</Status>

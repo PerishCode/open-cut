@@ -488,6 +488,56 @@
   opacity: 0.5;
 }
 
+.controlStrip {
+  display: grid;
+  gap: 2px;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+}
+
+.controlStripMeta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.controlStripSummary {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--oc-ink-strong);
+  font: 650 10px / 1.2 var(--oc-font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controlStripHint {
+  min-width: 0;
+  flex: 0 1 42%;
+  overflow: hidden;
+  color: var(--oc-ink-soft);
+  font: 9px / 1.2 var(--oc-font-sans);
+  text-overflow: ellipsis;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.controlStripBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.controlStripBody > .button {
+  align-self: center;
+  min-height: 22px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
 .mediaPlayer,
 .audioPlayer {
   width: min(100%, 960px);

@@ -13,6 +13,7 @@ import {
   type DurableID,
   int64String,
   type RationalTime,
+  type RevisionString,
   type Track,
 } from "@open-cut/contracts";
 
@@ -43,9 +44,15 @@ export interface TimelinePlayheadAuthority {
   setPlayhead(value: RationalTime): void;
 }
 
+export interface TimelineViewerRevisionAuthority {
+  setAvailableRevision(revision: RevisionString): void;
+  adoptRevision(revision: RevisionString): void;
+}
+
 type TimelineProjection = Readonly<{
   projectId: DurableID;
   sequenceId: DurableID;
+  sequenceRevision: RevisionString;
   clips: readonly Clip[];
   tracks: readonly Track[];
 }>;
@@ -53,6 +60,13 @@ type TimelineProjection = Readonly<{
 type ApplyAttempt = Readonly<{
   review: CreatorTimelineGestureReview;
   input: Readonly<{ requestId: string; intent: string }>;
+}>;
+
+type PendingSelection = Readonly<{
+  hint: CreatorTimelineSelectionHint;
+  kind: CreatorTimelineGestureInput["kind"];
+  /** Sequence revision at/after which the selection hint is authoritative. */
+  sequenceRevision: RevisionString;
 }>;
 
 const initialSnapshot: CreatorTimelineSnapshot = {
@@ -68,10 +82,7 @@ export class CreatorTimelineController {
   #projection?: TimelineProjection;
   #attempt?: ApplyAttempt;
   #blockedInput?: CreatorTimelineGestureInput;
-  #pendingSelection?: Readonly<{
-    hint: CreatorTimelineSelectionHint;
-    kind: CreatorTimelineGestureInput["kind"];
-  }>;
+  #pendingSelection?: PendingSelection;
   #generation = 0;
   #inFlight = false;
 
@@ -90,25 +101,13 @@ export class CreatorTimelineController {
   setProjection(projection: TimelineProjection): void {
     this.#projection = projection;
     if (this.#pendingSelection) {
-      const pending = this.#pendingSelection;
-      this.#pendingSelection = undefined;
-      const current = projection.clips.find(
-        (clip) => clip.id === pending.hint.clipId && clip.revision === pending.hint.revision && !clip.tombstoned,
-      );
-      if (!current) {
-        this.clearSelection();
-        return;
-      }
-      this.#snapshot = {
-        ...this.#snapshot,
-        selectedClip: current,
-        scope: pending.kind === "split" ? (current.linkGroupId ? undefined : "single") : this.#snapshot.scope,
-        alignmentHandling: pending.kind === "split" ? undefined : this.#snapshot.alignmentHandling,
-        selectionHint: undefined,
-      };
-      this.#emit();
+      this.#resolvePendingSelection(projection);
       return;
     }
+    // Activity can observe the committed Sequence before apply resumes. Keep the
+    // latest projection for post-commit reconciliation, but never invalidate an
+    // in-flight preview/apply generation solely for a seed revision mismatch.
+    if (this.#inFlight) return;
     const selected = this.#snapshot.selectedClip;
     if (!selected) return;
     const current = projection.clips.find((clip) => clip.id === selected.id && !clip.tombstoned);
@@ -124,6 +123,7 @@ export class CreatorTimelineController {
     const clip = this.#projection?.clips.find((candidate) => candidate.id === clipId && !candidate.tombstoned);
     if (!clip) throw new Error("Timeline Clip is not in the current projection");
     this.#generation += 1;
+    this.#inFlight = false;
     this.#attempt = undefined;
     this.#blockedInput = undefined;
     this.#pendingSelection = undefined;
@@ -138,6 +138,7 @@ export class CreatorTimelineController {
 
   clearSelection(): void {
     this.#generation += 1;
+    this.#inFlight = false;
     this.#attempt = undefined;
     this.#blockedInput = undefined;
     this.#pendingSelection = undefined;
@@ -184,6 +185,10 @@ export class CreatorTimelineController {
   }
 
   moveToPlayhead(): Promise<CreatorEditCommit | undefined> {
+    return this.moveTo(this.#playhead.getSnapshot().playhead);
+  }
+
+  moveTo(timelineStart: RationalTime): Promise<CreatorEditCommit | undefined> {
     const { projection, clip, common } = this.#gestureContext();
     const track = projection.tracks.find((candidate) => candidate.id === clip.trackId);
     if (!track) throw new Error("The selected Clip Track is outside the current projection");
@@ -192,31 +197,37 @@ export class CreatorTimelineController {
       kind: "move",
       trackId: track.id,
       trackRevision: track.revision,
-      timelineStart: this.#playhead.getSnapshot().playhead,
+      timelineStart,
     });
   }
 
   trimStartToPlayhead(): Promise<CreatorEditCommit | undefined> {
+    return this.trimStartTo(this.#playhead.getSnapshot().playhead);
+  }
+
+  trimStartTo(target: RationalTime): Promise<CreatorEditCommit | undefined> {
     const { clip, common } = this.#gestureContext();
-    const playhead = this.#playhead.getSnapshot().playhead;
     const timelineEnd = addTime(clip.timelineRange.start, clip.timelineRange.duration);
-    requireInteriorPoint(playhead, clip.timelineRange.start, timelineEnd, "trim start");
-    const leftTrim = subtractTime(playhead, clip.timelineRange.start);
-    const duration = subtractTime(timelineEnd, playhead);
+    requireInteriorPoint(target, clip.timelineRange.start, timelineEnd, "trim start");
+    const leftTrim = subtractTime(target, clip.timelineRange.start);
+    const duration = subtractTime(timelineEnd, target);
     return this.#commit({
       ...common,
       kind: "trim",
       sourceRange: { start: addTime(clip.sourceRange.start, leftTrim), duration },
-      timelineRange: { start: playhead, duration },
+      timelineRange: { start: target, duration },
     });
   }
 
   trimEndToPlayhead(): Promise<CreatorEditCommit | undefined> {
+    return this.trimEndTo(this.#playhead.getSnapshot().playhead);
+  }
+
+  trimEndTo(target: RationalTime): Promise<CreatorEditCommit | undefined> {
     const { clip, common } = this.#gestureContext();
-    const playhead = this.#playhead.getSnapshot().playhead;
     const timelineEnd = addTime(clip.timelineRange.start, clip.timelineRange.duration);
-    requireInteriorPoint(playhead, clip.timelineRange.start, timelineEnd, "trim end");
-    const duration = subtractTime(playhead, clip.timelineRange.start);
+    requireInteriorPoint(target, clip.timelineRange.start, timelineEnd, "trim end");
+    const duration = subtractTime(target, clip.timelineRange.start);
     return this.#commit({
       ...common,
       kind: "trim",
@@ -283,12 +294,39 @@ export class CreatorTimelineController {
     this.#emit();
   }
 
+  #resolvePendingSelection(projection: TimelineProjection): void {
+    const pending = this.#pendingSelection;
+    if (!pending) return;
+    const match = projection.clips.find(
+      (clip) => clip.id === pending.hint.clipId && clip.revision === pending.hint.revision && !clip.tombstoned,
+    );
+    if (match) {
+      this.#pendingSelection = undefined;
+      this.#snapshot = {
+        ...this.#snapshot,
+        phase: "selected",
+        selectedClip: match,
+        scope: pending.kind === "split" ? (match.linkGroupId ? undefined : "single") : this.#snapshot.scope,
+        alignmentHandling: pending.kind === "split" ? undefined : this.#snapshot.alignmentHandling,
+        selectionHint: undefined,
+      };
+      this.#emit();
+      return;
+    }
+    // Stale read: projection epoch is still older than the commit that produced the hint.
+    if (BigInt(projection.sequenceRevision) < BigInt(pending.sequenceRevision)) {
+      return;
+    }
+    // Authoritative projection at/after the commit cannot satisfy the hint.
+    this.clearSelection();
+  }
+
   #gestureContext() {
     const projection = this.#projection;
     const clip = this.#snapshot.selectedClip;
     const scope = this.#snapshot.scope;
     const alignmentHandling = this.#snapshot.alignmentHandling;
-    if (!projection || !clip || !scope || !alignmentHandling || this.#inFlight) {
+    if (!projection || !clip || !scope || !alignmentHandling || this.#inFlight || this.#pendingSelection) {
       throw new Error("Timeline gesture is not ready");
     }
     return {
@@ -345,7 +383,8 @@ export class CreatorTimelineController {
         },
       };
       this.#attempt = attempt;
-      this.#inFlight = false;
+      // Keep #inFlight true across the preview→apply handoff so activity-driven
+      // projections observed before apply resumes cannot clearSelection/bump generation.
       return this.#apply(attempt, generation);
     } catch (value) {
       if (generation === this.#generation) this.#fail(value, false);
@@ -370,21 +409,41 @@ export class CreatorTimelineController {
       if (generation !== this.#generation) return undefined;
       this.#attempt = undefined;
       this.#blockedInput = undefined;
-      if (applied.selectionHint) {
-        this.#pendingSelection = { hint: applied.selectionHint, kind: attempt.review.kind };
+      const sequenceRevision = sequenceRevisionFromCommit(applied.commit, attempt.review.sequenceId);
+      if (applied.selectionHint && sequenceRevision !== undefined) {
+        this.#pendingSelection = {
+          hint: applied.selectionHint,
+          kind: attempt.review.kind,
+          sequenceRevision,
+        };
+        this.#snapshot = {
+          ...this.#snapshot,
+          phase: "committed",
+          review: attempt.review,
+          blocked: undefined,
+          selectionHint: applied.selectionHint,
+          error: undefined,
+          canRetryIdenticalApply: false,
+        };
+        this.#emit();
+        // Reconcile against the latest projection already observed during apply.
+        if (this.#projection) this.#resolvePendingSelection(this.#projection);
+      } else {
+        this.#pendingSelection = undefined;
+        this.#snapshot = {
+          ...this.#snapshot,
+          phase: "committed",
+          review: attempt.review,
+          blocked: undefined,
+          selectedClip: undefined,
+          scope: undefined,
+          alignmentHandling: undefined,
+          selectionHint: undefined,
+          error: undefined,
+          canRetryIdenticalApply: false,
+        };
+        this.#emit();
       }
-      this.#snapshot = {
-        ...this.#snapshot,
-        phase: "committed",
-        review: attempt.review,
-        blocked: undefined,
-        ...(applied.selectionHint === undefined
-          ? { selectedClip: undefined, scope: undefined, alignmentHandling: undefined, selectionHint: undefined }
-          : { selectionHint: applied.selectionHint }),
-        error: undefined,
-        canRetryIdenticalApply: false,
-      };
-      this.#emit();
       return applied.commit;
     } catch (value) {
       if (generation === this.#generation) this.#fail(value, true);
@@ -419,6 +478,29 @@ export class CreatorTimelineController {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+}
+
+/** Exact Sequence revision carried by a successful direct-gesture commit, when present. */
+export function sequenceRevisionFromCommit(
+  commit: CreatorEditCommit,
+  sequenceId: DurableID,
+): RevisionString | undefined {
+  const change = commit.changes.find(
+    (entry) => entry.kind === "sequence" && entry.id === sequenceId && !entry.tombstoned,
+  );
+  return change?.revision;
+}
+
+/** Adopt Viewer pin from the commit only after the workspace refresh has observed it. */
+export function adoptViewerSequenceFromCommit(
+  viewer: TimelineViewerRevisionAuthority,
+  commit: CreatorEditCommit,
+  sequenceId: DurableID,
+): void {
+  const revision = sequenceRevisionFromCommit(commit, sequenceId);
+  if (revision === undefined) return;
+  viewer.setAvailableRevision(revision);
+  viewer.adoptRevision(revision);
 }
 
 function timelineIntent(kind: CreatorTimelineGestureInput["kind"]): string {

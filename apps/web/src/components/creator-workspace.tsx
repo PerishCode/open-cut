@@ -17,6 +17,7 @@ import {
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CreatorCaptionSource } from "../lib/creator-caption-controller.js";
+import { createBackgroundWorkspaceInvalidation, workspaceStatus } from "../lib/creator-workspace-refresh.js";
 import { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import { SourceViewerController } from "../lib/source-viewer-controller.js";
 import { AgentAccess } from "./agent-access.js";
@@ -174,6 +175,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   }, [load]);
 
   const refreshCommittedWorkspace = useCallback(() => load(undefined, true), [load]);
+  const reconcileBackgroundWorkspace = useMemo(() => createBackgroundWorkspaceInvalidation(load), [load]);
   const recordCreativeCommit = useCallback((_receipt: CreatorEditCommit) => {
     setHistoryRefreshEpoch((current) => current + 1);
   }, []);
@@ -202,7 +204,10 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     void loadProductAvailability();
   }, [loadProductAvailability]);
 
-  useEffect(() => contracts.media.read.subscribe(project.id, () => void load()), [contracts, load, project.id]);
+  useEffect(
+    () => contracts.media.read.subscribe(project.id, reconcileBackgroundWorkspace),
+    [contracts, project.id, reconcileBackgroundWorkspace],
+  );
 
   useEffect(
     () => () => {
@@ -590,7 +595,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         />
       }
       sidebarLabel="Sources"
-      status={<Status state={status}>{workspaceStatus(state)}</Status>}
+      status={<Status state={status}>{workspaceStatus(state.status)}</Status>}
       timeline={
         <Tabs
           label="Timeline panels"
@@ -612,6 +617,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       projectId={project.id}
                       range={ready.sequence.range}
                       sequenceId={ready.overview.project.mainSequenceId}
+                      sequenceRevision={ready.sequence.sequenceRevision}
                       tracks={ready.overview.tracks}
                       viewer={sequenceViewer}
                     />
@@ -789,10 +795,4 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       viewerLabel="Viewer"
     />
   );
-}
-
-function workspaceStatus(state: WorkspaceState): string {
-  if (state.status === "loading") return "Opening project";
-  if (state.status === "unavailable") return "Project unavailable";
-  return "All changes synced";
 }

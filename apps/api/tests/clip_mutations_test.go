@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"testing"
 
 	"github.com/PerishCode/open-cut/product/application"
@@ -72,6 +74,13 @@ func TestSQLiteCreatorTimelineGesturePlansCompleteAlignmentClosureAndCommitsAtom
 	if err != nil || committed.Transaction.CommittedProjectRevision.Value() != 6 ||
 		committed.Proposal.RunID != nil || committed.Proposal.TurnID != nil {
 		t.Fatalf("committed=%+v err=%v", committed, err)
+	}
+	if committed.Proposal.Allocation == nil {
+		t.Fatal("no-allocation Timeline commit exposed a nil product collection")
+	}
+	encodedCommit, err := json.Marshal(committed)
+	if err != nil || !bytes.Contains(encodedCommit, []byte(`"allocation":[]`)) {
+		t.Fatalf("Timeline commit allocation wire is not a non-null empty collection: %s err=%v", encodedCommit, err)
 	}
 	clip := readClipEntity(t, fixture, fixture.clipID)
 	alignment := readAlignmentEntity(t, fixture, alignmentID)

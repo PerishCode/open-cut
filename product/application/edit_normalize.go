@@ -126,7 +126,7 @@ func NormalizeEditProposal(input NormalizeEditInput) (domain.EditProposal, []byt
 		RequestID: input.Input.RequestID, Actor: input.Actor, Intent: input.Input.Intent,
 		BaseProjectRevision: input.Input.BaseProjectRevision,
 		Preconditions:       append([]domain.EntityPrecondition(nil), input.Input.Preconditions...),
-		Allocation:          append([]domain.LocalAllocation(nil), input.Allocation...),
+		Allocation:          append(make([]domain.LocalAllocation, 0, len(input.Allocation)), input.Allocation...),
 		Operations:          normalizer.operations, InversePreview: normalizer.inverse,
 		Changes: normalizer.changes,
 		Impact:  domain.EditImpact{Classifier: domain.EditImpactClassifierV1, Class: "reversible-local"},
