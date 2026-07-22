@@ -157,8 +157,15 @@ func (creator Creator) wait(ctx context.Context, expression string) error {
 // describeSurface reports what the renderer was actually showing, bounded so a
 // large document cannot flood a build log. It is best effort by design: a
 // failure to describe must never replace the failure being described.
+//
+// It runs on its own short deadline rather than the caller's context. The
+// caller reaches here precisely because a wait timed out, so its context is
+// already cancelled; describing the surface with it would always fail with
+// "undescribable" and waste the one diagnostic this path exists to produce.
 func (creator Creator) describeSurface(ctx context.Context) string {
-	value, err := creator.evaluate(ctx, surfaceDescriptionExpression)
+	described, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	value, err := creator.evaluate(described, surfaceDescriptionExpression)
 	if err != nil {
 		return fmt.Sprintf("surface is undescribable: %v", err)
 	}

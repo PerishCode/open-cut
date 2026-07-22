@@ -18,6 +18,18 @@ type CreatorToCLIOptions struct {
 	DeliveryPath           string
 	NativeSaveDialog       NativeSaveDialog
 	CLI                    CommandExecutor
+	// Progressf, if set, is called as each step begins. The journey is a long
+	// sequence under one deadline, so without it a timeout says only that the
+	// whole thing did not finish. The last step announced before the deadline
+	// is the one that was running when time ran out - which distinguishes a
+	// genuinely slow upstream step from a downstream step that hung.
+	Progressf func(format string, args ...any)
+}
+
+func (options CreatorToCLIOptions) progress(format string, args ...any) {
+	if options.Progressf != nil {
+		options.Progressf(format, args...)
+	}
 }
 
 func RunCreatorToCLI(ctx context.Context, options CreatorToCLIOptions) (Observation, error) {
@@ -29,16 +41,19 @@ func RunCreatorToCLI(ctx context.Context, options CreatorToCLIOptions) (Observat
 	if (options.DeliveryPath == "") != (options.NativeSaveDialog == nil) {
 		return Observation{}, fmt.Errorf("Creator-to-CLI delivery options are incomplete")
 	}
+	options.progress("connect renderer CDP")
 	cdp, err := ConnectCreatorCDP(ctx, options.CDPEndpoint)
 	if err != nil {
 		return Observation{}, err
 	}
 	defer cdp.Close()
 	creator := Creator{CDP: cdp}
+	options.progress("bootstrap Creator project and import footage")
 	if err := creator.Bootstrap(ctx, options.ProjectName, options.FixturePath); err != nil {
 		return Observation{}, err
 	}
 	actor := Actor{CLI: options.CLI}
+	options.progress("discover and request Agent pairing")
 	pairing, err := actor.DiscoverAndRequestPairing(ctx)
 	if err != nil {
 		return Observation{}, err
@@ -46,13 +61,16 @@ func RunCreatorToCLI(ctx context.Context, options CreatorToCLIOptions) (Observat
 	if pairing.ID == "" {
 		return Observation{}, fmt.Errorf("business actor did not receive a pairing identity")
 	}
+	options.progress("approve pairing")
 	if err := creator.ApprovePairing(ctx); err != nil {
 		return Observation{}, err
 	}
+	options.progress("observe Creator bootstrap")
 	observation, err := actor.ObserveCreatorBootstrap(ctx, options.ProjectName, filepath.Base(options.FixturePath))
 	if err != nil {
 		return Observation{}, err
 	}
+	options.progress("begin standalone run")
 	run, err := actor.BeginAndObserveStandaloneRun(ctx, observation.ProjectID, options.RunIntent)
 	if err != nil {
 		return Observation{}, err
@@ -60,6 +78,7 @@ func RunCreatorToCLI(ctx context.Context, options CreatorToCLIOptions) (Observat
 	observation.RunID = run.RunID
 	observation.TurnID = run.TurnID
 	observation.RunStatus = run.RunStatus
+	options.progress("observe media pipeline")
 	observation, err = actor.ObserveMediaPipeline(
 		ctx, observation, options.ExpectedAudioChannels, options.ExpectedVideo,
 	)
@@ -67,34 +86,42 @@ func RunCreatorToCLI(ctx context.Context, options CreatorToCLIOptions) (Observat
 		return Observation{}, err
 	}
 	if options.AcquireProductionModel {
+		options.progress("acquire production transcription model")
 		if err := creator.AcquireTranscriptionModel(ctx); err != nil {
 			return Observation{}, err
 		}
+		options.progress("observe production transcript")
 		observation, err = actor.ObserveProductionTranscript(ctx, observation)
 		if err != nil {
 			return Observation{}, err
 		}
 	}
+	options.progress("propose and apply authored text")
 	observation, err = actor.ProposeAndApplyAuthoredText(ctx, observation, options.AuthoredText)
 	if err != nil || !options.AcquireProductionModel {
 		return observation, err
 	}
+	options.progress("propose and apply transcript source excerpt")
 	observation, err = actor.ProposeAndApplyTranscriptSourceExcerpt(ctx, observation)
 	if err != nil {
 		return Observation{}, err
 	}
+	options.progress("derive and apply rough cut")
 	observation, err = actor.DeriveAndApplyRoughCut(ctx, observation)
 	if err != nil {
 		return Observation{}, err
 	}
+	options.progress("inspect committed sequence frames")
 	observation, err = actor.InspectCommittedSequenceFrames(ctx, observation)
 	if err != nil {
 		return Observation{}, err
 	}
+	options.progress("export committed sequence")
 	observation, err = actor.ExportCommittedSequence(ctx, observation)
 	if err != nil || options.NativeSaveDialog == nil {
 		return observation, err
 	}
+	options.progress("save and reveal export")
 	if err := creator.SaveAndRevealExport(ctx, options.DeliveryPath, options.NativeSaveDialog); err != nil {
 		return Observation{}, err
 	}

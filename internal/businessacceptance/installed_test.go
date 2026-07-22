@@ -3,6 +3,7 @@ package businessacceptance
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,7 +53,18 @@ func TestInstalledCreatorToCLI(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	// Progress goes to stderr immediately rather than through t.Log, so a step
+	// that hangs until the deadline still leaves a trail: the last line printed
+	// names the step that was running and how long into the run it began. A
+	// t.Log buffer would only flush after the test returns, which is exactly
+	// when a hang has already cost the information.
+	start := time.Now()
+	progressf := func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "[acceptance +%s] %s\n",
+			time.Since(start).Round(time.Second), fmt.Sprintf(format, args...))
+	}
 	observation, err := RunCreatorToCLI(ctx, CreatorToCLIOptions{
+		Progressf:              progressf,
 		CDPEndpoint:            endpoint,
 		ProjectName:            "Installed Creator Acceptance",
 		FixturePath:            fixture,
