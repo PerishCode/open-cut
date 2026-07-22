@@ -123,7 +123,7 @@ export type MediaFacts = Readonly<{
 
 export type MediaArtifact = Readonly<{
   id: DurableID;
-  kind: "media-facts" | "frame-sample-set" | "proxy" | "waveform" | "transcript";
+  kind: "media-facts" | "frame-sample-set" | "proxy" | "render-input" | "waveform" | "transcript";
   producerVersion: string;
   inputFingerprint: DigestString;
   state: "ready" | "evicted";
@@ -139,7 +139,7 @@ export type MediaJobPrerequisite =
 
 export type MediaJob = Readonly<{
   id: DurableID;
-  kind: "identify" | "probe" | "frame-sample-set" | "proxy" | "waveform" | "transcript";
+  kind: "identify" | "probe" | "frame-sample-set" | "proxy" | "render-input" | "waveform" | "transcript";
   state: "blocked" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
   progressBasisPoints: number;
   prerequisites: readonly MediaJobPrerequisite[];
