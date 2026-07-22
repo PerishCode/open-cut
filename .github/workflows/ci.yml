@@ -486,6 +486,7 @@ jobs:
             "$TIMING_ROOT/cache-restore.json" \
             "$TIMING_ROOT/media-toolchain.json" \
             "$TIMING_ROOT/whisper-toolchain.json" \
+            "$TIMING_ROOT"/artifact-check-*.json \
             "$TIMING_ROOT/pack.json" \
             .tmp/ci/full-pack/reports/timing.json
           do

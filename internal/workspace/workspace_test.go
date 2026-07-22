@@ -16,7 +16,7 @@ func TestTopologyIsDerivedFromSidecarManifests(t *testing.T) {
 	manifests := map[string]string{
 		"electron": `{"schema":1,"command":"$payload"}`,
 		"web":      `{"schema":1,"command":"$node","args":["dist/sidecar/index.js"]}`,
-		"api":      `{"schema":1,"command":"dist/sidecar/api-sidecar.exe","artifactChecks":[{"command":"dist/sidecar/api-sidecar.exe","args":["artifact","check"]}]}`,
+		"api":      `{"schema":1,"command":"dist/sidecar/api-sidecar.exe","artifactChecks":[{"command":"dist/sidecar/api-sidecar.exe","args":["artifact","check"],"timingReport":true}]}`,
 	}
 	for app, manifest := range manifests {
 		path := filepath.Join(root, "apps", app, "sidecar", SidecarManifestFilename)
@@ -44,7 +44,8 @@ func TestTopologyIsDerivedFromSidecarManifests(t *testing.T) {
 	if topology.Sidecars[0].Command != "dist/sidecar/api-sidecar.exe" || topology.Sidecars[2].Command != SidecarCommandNode {
 		t.Fatalf("unexpected declared commands: %+v", topology.Sidecars)
 	}
-	if len(topology.Sidecars[0].ArtifactChecks) != 1 || topology.Sidecars[0].ArtifactChecks[0].Args[1] != "check" {
+	if len(topology.Sidecars[0].ArtifactChecks) != 1 || topology.Sidecars[0].ArtifactChecks[0].Args[1] != "check" ||
+		!topology.Sidecars[0].ArtifactChecks[0].TimingReport {
 		t.Fatalf("artifact checks were not preserved: %+v", topology.Sidecars[0].ArtifactChecks)
 	}
 }

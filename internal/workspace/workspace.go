@@ -43,8 +43,9 @@ type SidecarManifest struct {
 }
 
 type ArtifactCheck struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args,omitempty"`
+	Command      string   `json:"command"`
+	Args         []string `json:"args,omitempty"`
+	TimingReport bool     `json:"timingReport,omitempty"`
 }
 
 type Topology struct {
@@ -247,7 +248,9 @@ func loadSidecarManifest(filename string) (SidecarManifest, error) {
 func cloneArtifactChecks(checks []ArtifactCheck) []ArtifactCheck {
 	result := make([]ArtifactCheck, len(checks))
 	for index, check := range checks {
-		result[index] = ArtifactCheck{Command: check.Command, Args: append([]string(nil), check.Args...)}
+		result[index] = ArtifactCheck{
+			Command: check.Command, Args: append([]string(nil), check.Args...), TimingReport: check.TimingReport,
+		}
 	}
 	return result
 }

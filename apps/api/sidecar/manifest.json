@@ -4,7 +4,8 @@
   "artifactChecks": [
     {
       "command": "dist/sidecar/api-sidecar.exe",
-      "args": ["media-tools", "check"]
+      "args": ["media-tools", "check"],
+      "timingReport": true
     }
   ]
 }
