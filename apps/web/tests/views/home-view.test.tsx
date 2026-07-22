@@ -450,7 +450,7 @@ describe("HomeView", () => {
     expect(await screen.findByText("All changes synced")).toBeTruthy();
     expect(screen.getByRole("region", { name: "Sources" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agent" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Timeline canvas" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Timeline editor" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Story" }));
     expect(screen.getByText("Open on a clear promise.")).toBeTruthy();
     expect(screen.getByText("A specific opening line.")).toBeTruthy();

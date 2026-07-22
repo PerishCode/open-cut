@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ControlStrip,
   EditorShell,
   FileField,
   Heading,
@@ -16,6 +17,10 @@ import {
 } from "../src/index.js";
 
 describe("atomic components", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("provides semantic structure without consumer styling props", () => {
     render(
       <Surface label="Workspace">
@@ -159,6 +164,197 @@ describe("atomic components", () => {
     fireEvent.click(screen.getByRole("button", { name: "Seek A1" }));
     expect(onSeek).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole("button", { name: "Zoom timeline in" }));
-    expect(screen.getByText("2×")).toBeTruthy();
+    expect(screen.getByText("8×")).toBeTruthy();
+  });
+
+  it("exposes move and trim affordances only when gestures are enabled", () => {
+    const view = render(
+      <TimelineSurface
+        durationSeconds={60}
+        itemGesturesEnabled={false}
+        items={[
+          {
+            id: "clip-1",
+            trackId: "video-1",
+            label: "Opening shot",
+            startSeconds: 5,
+            durationSeconds: 8,
+            selected: true,
+          },
+        ]}
+        onItemSelect={() => undefined}
+        onSeek={() => undefined}
+        playheadSeconds={7}
+        tracks={[{ id: "video-1", label: "V1", kind: "video" }]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Trim in Opening shot" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Select Opening shot" })).toBeTruthy();
+
+    view.rerender(
+      <TimelineSurface
+        durationSeconds={60}
+        itemGesturesEnabled
+        items={[
+          {
+            id: "clip-1",
+            trackId: "video-1",
+            label: "Opening shot",
+            startSeconds: 5,
+            durationSeconds: 8,
+            selected: true,
+          },
+        ]}
+        onItemMove={() => undefined}
+        onItemSelect={() => undefined}
+        onItemTrimEnd={() => undefined}
+        onItemTrimStart={() => undefined}
+        onSeek={() => undefined}
+        playheadSeconds={7}
+        tracks={[{ id: "video-1", label: "V1", kind: "video" }]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Move Opening shot" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trim in Opening shot" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trim out Opening shot" })).toBeTruthy();
+  });
+
+  it("reports move and trim targets in presentation seconds and cancels on Escape", () => {
+    const onItemMove = vi.fn();
+    const onItemTrimStart = vi.fn();
+    const onItemTrimEnd = vi.fn();
+    const onItemSelect = vi.fn();
+    render(
+      <TimelineSurface
+        durationSeconds={100}
+        itemGesturesEnabled
+        items={[
+          {
+            id: "clip-1",
+            trackId: "video-1",
+            label: "Opening shot",
+            startSeconds: 10,
+            durationSeconds: 20,
+            selected: true,
+            linked: true,
+          },
+        ]}
+        onItemMove={onItemMove}
+        onItemSelect={onItemSelect}
+        onItemTrimEnd={onItemTrimEnd}
+        onItemTrimStart={onItemTrimStart}
+        onSeek={() => undefined}
+        playheadSeconds={12}
+        tracks={[{ id: "video-1", label: "V1", kind: "video" }]}
+      />,
+    );
+
+    const lane = document.querySelector("[data-timeline-lane='video-1']");
+    expect(lane).toBeTruthy();
+    vi.spyOn(lane as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      bottom: 40,
+      right: 1000,
+      width: 1000,
+      height: 40,
+      toJSON: () => ({}),
+    });
+
+    const body = screen.getByRole("button", { name: "Move Opening shot" });
+    fireEvent.pointerDown(body, { pointerId: 1, button: 0, clientX: 100, clientY: 10 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 250, clientY: 10 });
+    fireEvent.pointerUp(body, { pointerId: 1, clientX: 250, clientY: 10 });
+    // Native browsers synthesize click after pointer-up; it must not reselect mid-commit.
+    fireEvent.click(body);
+    expect(onItemMove).toHaveBeenCalledTimes(1);
+    expect(onItemMove).toHaveBeenCalledWith("clip-1", 25);
+    expect(onItemSelect).not.toHaveBeenCalled();
+
+    const trimIn = screen.getByRole("button", { name: "Trim in Opening shot" });
+    fireEvent.pointerDown(trimIn, { pointerId: 2, button: 0, clientX: 100, clientY: 10 });
+    fireEvent.pointerMove(trimIn, { pointerId: 2, clientX: 150, clientY: 10 });
+    fireEvent.pointerUp(trimIn, { pointerId: 2, clientX: 150, clientY: 10 });
+    expect(onItemTrimStart).toHaveBeenCalledWith("clip-1", 15);
+
+    const trimOut = screen.getByRole("button", { name: "Trim out Opening shot" });
+    fireEvent.pointerDown(trimOut, { pointerId: 3, button: 0, clientX: 300, clientY: 10 });
+    fireEvent.pointerMove(trimOut, { pointerId: 3, clientX: 250, clientY: 10 });
+    fireEvent.pointerUp(trimOut, { pointerId: 3, clientX: 250, clientY: 10 });
+    expect(onItemTrimEnd).toHaveBeenCalledWith("clip-1", 25);
+
+    onItemMove.mockClear();
+    fireEvent.pointerDown(body, { pointerId: 4, button: 0, clientX: 100, clientY: 10 });
+    fireEvent.pointerMove(body, { pointerId: 4, clientX: 300, clientY: 10 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(body, { pointerId: 4, clientX: 300, clientY: 10 });
+    fireEvent.click(body);
+    expect(onItemMove).not.toHaveBeenCalled();
+    expect(onItemSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps a compact control strip near the canvas without consumer styling props", () => {
+    render(
+      <ControlStrip
+        hint="Choose scope and Alignment"
+        label="Timeline selection policy"
+        summary="SELECTED · V1 · Timeline 00:00 → 00:02.10"
+      >
+        <button type="button">Linked A/V</button>
+        <button type="button">Preserve</button>
+      </ControlStrip>,
+    );
+
+    const strip = screen.getByRole("region", { name: "Timeline selection policy" });
+    expect(within(strip).getByText("SELECTED · V1 · Timeline 00:00 → 00:02.10")).toBeTruthy();
+    expect(within(strip).getByText("Choose scope and Alignment")).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Linked A/V" })).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Preserve" })).toBeTruthy();
+  });
+
+  it("renders the policy accessory inside the same Timeline editor unit as the canvas", () => {
+    render(
+      <TimelineSurface
+        accessory={
+          <ControlStrip label="Timeline selection policy" summary="SELECTED · V1">
+            <button type="button">Linked A/V</button>
+            <button type="button">Preserve</button>
+          </ControlStrip>
+        }
+        durationSeconds={60}
+        items={[
+          {
+            id: "clip-1",
+            trackId: "video-1",
+            label: "Opening shot",
+            startSeconds: 0,
+            durationSeconds: 2.1,
+            selected: true,
+          },
+        ]}
+        onItemSelect={() => undefined}
+        onSeek={() => undefined}
+        playheadSeconds={0}
+        tracks={[
+          { id: "video-1", label: "V1", kind: "video" },
+          { id: "audio-1", label: "A1", kind: "audio" },
+        ]}
+      />,
+    );
+
+    const editor = screen.getByRole("region", { name: "Timeline editor" });
+    const canvas = within(editor).getByRole("region", { name: "Timeline canvas" });
+    const accessory = editor.querySelector("[data-timeline-accessory]");
+    expect(canvas.hasAttribute("data-timeline-canvas")).toBe(true);
+    expect(accessory).toBeTruthy();
+    expect(accessory?.parentElement).toBe(editor);
+    expect(canvas.parentElement).toBe(editor);
+    expect(within(editor).getByRole("region", { name: "Timeline selection policy" })).toBeTruthy();
+    expect(within(editor).getByText("V1")).toBeTruthy();
+    expect(within(editor).getByRole("button", { name: "Linked A/V" })).toBeTruthy();
   });
 });

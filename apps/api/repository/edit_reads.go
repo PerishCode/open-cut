@@ -94,6 +94,13 @@ FROM edit_proposals WHERE id = ? AND project_id = ?`,
 	if err := decodeEditJSON(allocationJSON, &proposal.Allocation); err != nil {
 		return domain.EditProposal{}, err
 	}
+	// Allocation is a non-nullable product collection. Older proposals may have
+	// persisted JSON null before the application boundary enforced the empty
+	// collection invariant; normalize them when read so replay/HTTP never leaks
+	// a nullable wire shape.
+	if proposal.Allocation == nil {
+		proposal.Allocation = []domain.LocalAllocation{}
+	}
 	if err := decodeEditJSON(operationsJSON, &proposal.Operations); err != nil {
 		return domain.EditProposal{}, err
 	}
