@@ -39,8 +39,8 @@ func TestCacheKeysSeparateArchivesFromTheBuiltClosure(t *testing.T) {
 
 	if elsewhere := cacheKeys(t, "environment-two"); elsewhere.SourceKey != base.SourceKey {
 		t.Fatal("a different build environment must not discard the pinned archives")
-	} else if elsewhere.ClosureKey == base.ClosureKey {
-		t.Fatal("a different build environment must discard the built closure")
+	} else if elsewhere.CBuildKey == base.CBuildKey || elsewhere.ClosureKey == base.ClosureKey {
+		t.Fatal("a different build environment must discard compiled artifacts")
 	}
 
 	victim := filepath.Join(root, "internal", "renderengine", "oracle.go")
@@ -68,8 +68,12 @@ func TestCacheKeysAreStableAndPrefixed(t *testing.T) {
 		t.Fatalf("cache keys are not stable: %+v vs %+v", first, again)
 	}
 	if !strings.HasPrefix(first.SourceKey, first.SourcePrefix) ||
+		!strings.HasPrefix(first.CBuildKey, first.CBuildPrefix) ||
 		!strings.HasPrefix(first.ClosureKey, first.ClosurePrefix) {
 		t.Fatalf("cache keys must extend their restore prefixes: %+v", first)
+	}
+	if !strings.HasPrefix(first.CBuildPrefix, "media-cbuild-v2-") {
+		t.Fatalf("C build cache epoch was not advanced: %+v", first)
 	}
 	if !strings.Contains(first.SourcePrefix, target.Host().String()) {
 		t.Fatalf("cache prefixes must be target scoped: %+v", first)

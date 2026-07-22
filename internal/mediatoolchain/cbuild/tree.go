@@ -12,7 +12,6 @@ import (
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/utils/environment"
 	"github.com/PerishCode/open-cut/utils/target"
-	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 // Products is everything the rest of the build needs from the C
@@ -68,34 +67,12 @@ func EnsureTree(ctx context.Context, options Options) (Products, error) {
 	archives, buildTarget := options.Archives, options.Target
 	stdout, stderr := options.Stdout, options.Stderr
 	buildRoot := filepath.Join(workspace, "build")
-	compiler, err := tool.Resolve("cc")
+	tools, compilerVersion, err := resolveBuildTools(ctx)
 	if err != nil {
 		return Products{}, err
 	}
-	shell, err := tool.Resolve("sh")
-	if err != nil {
-		return Products{}, err
-	}
-	makeTool, err := tool.Resolve("make")
-	if err != nil {
-		return Products{}, err
-	}
-	cxx, err := tool.Resolve("c++")
-	if err != nil {
-		return Products{}, err
-	}
-	archiver, err := tool.Resolve("ar")
-	if err != nil {
-		return Products{}, err
-	}
-	cmake, err := tool.Resolve("cmake")
-	if err != nil {
-		return Products{}, err
-	}
-	CompilerVersion, err := inspectBuildTools(ctx, compiler, cxx, archiver, makeTool, cmake)
-	if err != nil {
-		return Products{}, err
-	}
+	compiler, cxx, archiver := tools.compiler, tools.cxx, tools.archiver
+	makeTool, shell := tools.makeTool, tools.shell
 	// The closure is asked of the compiler, not kept by hand. Hashing the
 	// whole parent package was safe but blunt: an edit to manifest assembly,
 	// conformance evidence or the renderer - none of which the C compiler ever
@@ -112,7 +89,7 @@ func EnsureTree(ctx context.Context, options Options) (Products, error) {
 	}
 	identity := cbuildIdentity{
 		ToolchainID: "ffmpeg", Version: options.ToolchainVersion, Target: buildTarget.String(),
-		CompilerVersion: CompilerVersion, BuildLogicSHA256: buildLogic,
+		CompilerVersion: compilerVersion, BuildLogicSHA256: buildLogic,
 	}
 	sourceRoot := filepath.Join(buildRoot, "ffmpeg-"+FFmpegSourceVersion)
 	dependencyRoot := filepath.Join(buildRoot, "dependencies")
@@ -251,7 +228,7 @@ func EnsureTree(ctx context.Context, options Options) (Products, error) {
 		Schema: cbuildStampSchema, Identity: identity,
 		Configuration: recordedConfiguration, LibVPXConfiguration: recordedLibVPXConfiguration,
 		OpusConfiguration: recordedOpusConfiguration,
-		NativeText:        nativeTextRecipe, CompilerVersion: CompilerVersion,
+		NativeText:        nativeTextRecipe, CompilerVersion: compilerVersion,
 	}
 	if err := writeCBuildStamp(buildRoot, stamp); err != nil {
 		return Products{}, fmt.Errorf("record C build stamp: %w", err)
@@ -263,7 +240,7 @@ func EnsureTree(ctx context.Context, options Options) (Products, error) {
 		Probe:           builtProbe, FrameDecoder: builtFrameDecoder,
 		Configuration: recordedConfiguration, LibVPXConfiguration: recordedLibVPXConfiguration,
 		OpusConfiguration: recordedOpusConfiguration,
-		NativeText:        nativeTextRecipe, CompilerVersion: CompilerVersion,
+		NativeText:        nativeTextRecipe, CompilerVersion: compilerVersion,
 		Parallelism: parallelism,
 	}, nil
 }

@@ -211,20 +211,18 @@ jobs:
         uses: actions/cache/restore@v4
         continue-on-error: true
         with:
-          # The whole compiled tree, minus the renderer outputs it exists to let
-          # us rebuild. It is around 500 MB uncompressed and 150 MB stored,
-          # mostly object files nothing reads again - but enumerating just the
-          # files reuse consumes was tried and is worse: the list is long, it
-          # spans licence and conformance material as well as libraries, and it
-          # goes stale the first time a stage learns to read one more file. The
-          # exhaustive check that decides reuse lives in Go, where it can fail
-          # closed; the cache only has to carry enough for that check to pass.
+          # The immutable cache key has a stable build-identity prefix and a
+          # unique producer generation. Restore takes the newest generation;
+          # only a tree that EnsureTree actually rebuilt is saved below. A bad
+          # generation can therefore be replaced instead of poisoning one
+          # permanent exact key, and an uninspected broad fallback can never be
+          # promoted under a new identity.
           path: |
             .tmp/oc-control/media-toolchain/*/build
             !.tmp/oc-control/media-toolchain/*/build/renderer-helper
             !.tmp/oc-control/media-toolchain/*/build/renderer-relink-kit
-          key: ${{ steps.media_cache.outputs.cbuild-key }}
-          restore-keys: ${{ steps.media_cache.outputs.cbuild-prefix }}
+          key: ${{ steps.media_cache.outputs.cbuild-key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.media_cache.outputs.cbuild-key }}-
       - name: Restore verified media toolchain closure
         if: github.event_name != 'release' && github.event_name != 'schedule'
         id: media_closure_restore
@@ -256,6 +254,12 @@ jobs:
           set -euo pipefail
           mkdir -p "$TIMING_ROOT"
           "$CONTROL" pack "$PLATFORM" --arch "$ARCH" --version "$VERSION" --output "$BUNDLE" --timing-report "$TIMING_ROOT/pack.json"
+      - name: Read C-tree build decision
+        id: media_build
+        shell: bash
+        run: |
+          c_build_tree="$("$CONTROL" timing decision --report "$TIMING_ROOT/media-toolchain.json" --name c-build-tree)"
+          echo "c-build-tree=$c_build_tree" >> "$GITHUB_OUTPUT"
       - name: Publish release bundle
         shell: bash
         run: |
@@ -290,7 +294,7 @@ jobs:
             --cache "media-c-build,${{ steps.media_cbuild_restore.outputs.cache-primary-key }},${{ steps.media_cbuild_restore.outputs.cache-matched-key }},${{ steps.media_cbuild_restore.outputs.cache-hit }}" \
             --cache "media-closure,${{ steps.media_closure_restore.outputs.cache-primary-key }},${{ steps.media_closure_restore.outputs.cache-matched-key }},${{ steps.media_closure_restore.outputs.cache-hit }}"
       - name: Save pinned media source archives
-        if: ${{ success() && github.event_name == 'push' }}
+        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'pull_request') && steps.media_source_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
@@ -299,25 +303,21 @@ jobs:
             .tmp/oc-control/whisper-toolchain/*/source
           key: ${{ steps.media_cache.outputs.source-key }}
       - name: Save compiled media C tree
-        if: ${{ success() && github.event_name == 'push' && steps.media_cbuild_restore.outputs.cache-hit != 'true' }}
+        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'pull_request') && steps.media_build.outputs.c-build-tree == 'rebuilt' }}
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
-          # The whole compiled tree, minus the renderer outputs it exists to let
-          # us rebuild. It is around 500 MB uncompressed and 150 MB stored,
-          # mostly object files nothing reads again - but enumerating just the
-          # files reuse consumes was tried and is worse: the list is long, it
-          # spans licence and conformance material as well as libraries, and it
-          # goes stale the first time a stage learns to read one more file. The
-          # exhaustive check that decides reuse lives in Go, where it can fail
-          # closed; the cache only has to carry enough for that check to pass.
+          # Save the exact generation requested by the restore step, but only
+          # after the program reports that it produced a current tree. Reused
+          # trees already have a validated producer generation; not-inspected
+          # trees must never be promoted.
           path: |
             .tmp/oc-control/media-toolchain/*/build
             !.tmp/oc-control/media-toolchain/*/build/renderer-helper
             !.tmp/oc-control/media-toolchain/*/build/renderer-relink-kit
-          key: ${{ steps.media_cache.outputs.cbuild-key }}
+          key: ${{ steps.media_cbuild_restore.outputs.cache-primary-key }}
       - name: Save verified media toolchain closure
-        if: ${{ success() && github.event_name == 'push' && steps.media_closure_restore.outputs.cache-hit != 'true' }}
+        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'pull_request') && steps.media_closure_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         continue-on-error: true
         with:

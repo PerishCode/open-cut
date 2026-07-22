@@ -225,6 +225,25 @@ restore-prefix fallback, and a miss; the media reports independently show
 whether the restored closure and compiled C tree were actually reused. Compare
 the same target and cache cohort before attributing a duration change to code.
 
+The CI C-tree cache is a sequence of validated producer generations below one
+exact build-identity prefix. A restored generation is only a reuse hint:
+`EnsureTree` still checks the embedded compiler/build-logic stamp and every
+required output. CI saves a new generation only when the media timing report
+states `c-build-tree=rebuilt`; a published-closure fast path records
+`not-inspected` and can never promote an unchecked fallback tree. Read either
+decision without parsing report JSON by hand:
+
+```sh
+oc-control timing decision \
+  --report .tmp/oc-control/timing/mac-arm64/media-toolchain.json \
+  --name c-build-tree
+```
+
+Pull-request caches are visible to later commits in the same pull request but
+are not promoted to `main`. This removes repeated qualification work while a PR
+is being repaired; the first post-merge run still verifies and publishes the
+corresponding main-scoped artifacts.
+
 Generated workspace cleanup is deliberately repository-scoped:
 
 ```sh

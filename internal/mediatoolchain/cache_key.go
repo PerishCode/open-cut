@@ -13,10 +13,11 @@ import (
 	"github.com/PerishCode/open-cut/utils/tool"
 )
 
-// CacheKeys names the two reuse scopes a build environment can restore
+// CacheKeys names the three reuse scopes a build environment can restore
 // independently. They are separate because their inputs are: which archives to
-// fetch is decided by the pinned catalog alone, while the built closure also
-// embeds the renderer's compiled source and the toolchain that produced it.
+// fetch is decided by the pinned catalog alone; the C tree adds build logic and
+// the exact native tool identity; the published closure also embeds renderer
+// source and the Go toolchain that produced it.
 // One shared key would re-download the pinned fonts - most of half a gigabyte,
 // and stable for months - for every renderer edit.
 type CacheKeys struct {
@@ -31,16 +32,16 @@ type CacheKeys struct {
 }
 
 // CacheKeyOptions carries the environment facts a repository checkout cannot
-// know. Environment identifies the host image the C toolchain is compiled
-// against; a build environment that upgrades its compilers produces different
-// bytes from identical sources, so it belongs in the closure key.
+// know. Environment identifies the host image the native artifacts are compiled
+// against; a build environment upgrade can produce different bytes from
+// identical sources, so it belongs in both compiled-artifact keys.
 type CacheKeyOptions struct {
 	RepositoryRoot string
 	Target         target.Target
 	Environment    string
 }
 
-// ComputeCacheKeys derives both keys from the same authorities the build
+// ComputeCacheKeys derives all keys from the same authorities the build
 // itself uses, so a cache key cannot drift away from what it is supposed to
 // describe. The renderer's contribution is its real dependency closure, asked
 // of the Go toolchain rather than approximated by a list of directories.
@@ -75,6 +76,10 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	if err != nil {
 		return CacheKeys{}, err
 	}
+	buildEnvironment, err := cbuild.BuildEnvironmentIdentity(ctx)
+	if err != nil {
+		return CacheKeys{}, err
+	}
 	renderer, err := RendererSourceFingerprint(ctx, repositoryRoot)
 	if err != nil {
 		return CacheKeys{}, err
@@ -92,14 +97,16 @@ func ComputeCacheKeys(ctx context.Context, options CacheKeyOptions) (CacheKeys, 
 	// The compiled C tree sits between the two: the renderer cannot affect it,
 	// but the build environment can, because identical sources compiled against
 	// a different system compiler are different objects.
-	cbuildPrefix := "media-cbuild-v1-" + options.Target.String() + "-"
+	cbuildPrefix := "media-cbuild-v2-" + options.Target.String() + "-"
 	closurePrefix := "media-closure-v1-" + options.Target.String() + "-"
 	return CacheKeys{
 		Schema: 1, Target: options.Target.String(),
-		SourcePrefix:  sourcePrefix,
-		SourceKey:     sourcePrefix + shortDigest(toolchainVersion, catalog),
-		CBuildPrefix:  cbuildPrefix,
-		CBuildKey:     cbuildPrefix + shortDigest(toolchainVersion, cbuildLogic, options.Environment),
+		SourcePrefix: sourcePrefix,
+		SourceKey:    sourcePrefix + shortDigest(toolchainVersion, catalog),
+		CBuildPrefix: cbuildPrefix,
+		CBuildKey: cbuildPrefix + shortDigest(
+			toolchainVersion, cbuildLogic, buildEnvironment, options.Environment,
+		),
 		ClosurePrefix: closurePrefix,
 		ClosureKey: closurePrefix + shortDigest(
 			toolchainVersion, cbuildLogic, renderer, goVersion, options.Environment,

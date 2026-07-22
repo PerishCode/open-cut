@@ -63,6 +63,21 @@ func TestReportRoundTripAndMarkdown(t *testing.T) {
 	}
 }
 
+func TestDecisionValueRequiresOneExactDecision(t *testing.T) {
+	report := Report{Decisions: []Decision{{Name: "c-build-tree", Value: "rebuilt"}}}
+	value, err := DecisionValue(report, "c-build-tree")
+	if err != nil || value != "rebuilt" {
+		t.Fatalf("value=%q error=%v", value, err)
+	}
+	if _, err := DecisionValue(report, "missing"); err == nil {
+		t.Fatal("missing decision was accepted")
+	}
+	report.Decisions = append(report.Decisions, Decision{Name: "c-build-tree", Value: "reused"})
+	if _, err := DecisionValue(report, "c-build-tree"); err == nil {
+		t.Fatal("duplicate decision was accepted")
+	}
+}
+
 func TestStepClosesTheActivePhaseAndFailureClosesTheLast(t *testing.T) {
 	now := time.Unix(200, 0)
 	recorder := newRecorder("build", nil, func() time.Time {

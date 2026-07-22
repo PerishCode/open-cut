@@ -166,6 +166,32 @@ func Read(path string) (Report, error) {
 	return report, nil
 }
 
+// DecisionValue returns one unambiguous build decision for automation. A
+// missing or duplicate decision fails closed: callers must never guess whether
+// an expensive artifact was actually inspected, reused, or rebuilt.
+func DecisionValue(report Report, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("timing decision name is required")
+	}
+	value := ""
+	found := false
+	for _, decision := range report.Decisions {
+		if decision.Name != name {
+			continue
+		}
+		if found {
+			return "", fmt.Errorf("timing decision %q is ambiguous", name)
+		}
+		found = true
+		value = decision.Value
+	}
+	if !found {
+		return "", fmt.Errorf("timing decision %q is unavailable", name)
+	}
+	return value, nil
+}
+
 func Validate(report Report) error {
 	if report.Schema != Schema || strings.TrimSpace(report.Operation) == "" ||
 		(report.Outcome != OutcomeSucceeded && report.Outcome != OutcomeFailed) || report.DurationMS < 0 {

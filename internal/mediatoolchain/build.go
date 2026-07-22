@@ -92,6 +92,10 @@ func Build(ctx context.Context, options BuildOptions) (result BuildResult, resul
 	}
 	recorder.Decide("published-closure", closureDecision, reuseReason)
 	if reusable {
+		recorder.Decide(
+			"c-build-tree", "not-inspected",
+			"published closure reused before the C-tree cache was consulted",
+		)
 		probe := verified.Capabilities[CapabilityProbeV1].Entry
 		decoder := verified.Capabilities[CapabilityFrameRGBV1].Entry
 		proxy := verified.Capabilities[CapabilitySourceProxyV1].Entry

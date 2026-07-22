@@ -9,10 +9,10 @@
 # what the build actually reads, and a stale artifact would be restored with a
 # key that claims it is current.
 #
-# ImageOS and ImageVersion identify the hosted runner image. Identical sources
-# compiled against a different system compiler produce different bytes, so the
-# image belongs in the closure key; a runner image upgrade then rebuilds
-# exactly once, on the first job that sees it.
+# ImageOS and ImageVersion identify the hosted runner image. The C-tree key also
+# includes the exact native tool identity persisted in its validation stamp;
+# the image identity remains a fail-closed boundary for other ambient system
+# inputs. A runner image upgrade then rebuilds exactly once per target.
 set -euo pipefail
 
 if [ -z "${CONTROL:-}" ]; then

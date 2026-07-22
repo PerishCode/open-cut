@@ -96,6 +96,32 @@ func TestTimingCompareRendersPhaseDelta(t *testing.T) {
 	}
 }
 
+func TestTimingDecisionReadsOneExactValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "media.json")
+	if err := timingreport.Write(path, timingreport.Report{
+		Schema: timingreport.Schema, Operation: "media-toolchain-build", Outcome: timingreport.OutcomeSucceeded,
+		Decisions: []timingreport.Decision{{Name: "c-build-tree", Value: "rebuilt"}},
+		Phases:    []timingreport.Phase{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{
+		"timing", "decision", "--report", path, "--name", "c-build-tree",
+	}, &stdout, &stderr)
+	if code != 0 || stdout.String() != "rebuilt\n" || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = Run(context.Background(), []string{
+		"timing", "decision", "--report", path, "--name", "missing",
+	}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "unavailable") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestTimingCacheReportClassifiesExactFallbackAndMiss(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache.json")
 	var stdout, stderr bytes.Buffer
