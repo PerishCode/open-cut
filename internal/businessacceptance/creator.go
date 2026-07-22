@@ -69,11 +69,8 @@ func (creator Creator) ApprovePairing(ctx context.Context) error {
 	if err := creator.CDP.Call(ctx, "Page.reload", map[string]any{"ignoreCache": true}, nil); err != nil {
 		return err
 	}
-	if err := creator.openTab(ctx, "Agent"); err != nil {
-		return fmt.Errorf("open Creator Agent panel: %w", err)
-	}
 	if err := creator.wait(ctx, buttonExpression("Approve CLI", false)); err != nil {
-		return fmt.Errorf("wait for pending CLI pairing: %w", err)
+		return fmt.Errorf("wait for pending CLI pairing in the persistent Agent rail: %w", err)
 	}
 	if err := creator.evaluateBoolean(ctx, buttonExpression("Approve CLI", true)); err != nil {
 		return fmt.Errorf("approve CLI pairing through Creator: %w", err)
