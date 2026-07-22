@@ -39,7 +39,9 @@ payload/app/
   resources/payload/sidecars/api/
     dist/sidecar/api-sidecar.exe
     dist/sidecar/media-tools.json          # API-local closed tool registry
+    dist/sidecar/media-renderer-relink.qualification.json
     dist/sidecar/whisper-tools.json        # API-local transcription closure
+    dist/sidecar/whisper.qualification.json
     dist/sidecar/product-resources.json    # authenticated optional-resource catalog
     dist/sidecar/media/<platform tools>    # pinned probe/decode/render/transcribe tools
     dist/sidecar/media/resources/          # small qualification-only resources
@@ -75,6 +77,13 @@ suite identity includes the target and backend, two targets running different
 backends can never claim the same qualification. Every public target still ships
 a qualified engine; only the backend differs.
 
+The Whisper build writes its qualification receipt only after the real model
+fixture has reproduced stable semantic evidence and rejected the malformed
+model. Packaging accepts it only for the exact engine/model/evidence closure,
+target/backend, suite, recipe, and release profile. It still launches the
+deployed executable and validates its bounded help surface; a receipt miss
+replays the full semantic qualification before replacement.
+
 The audio baseline builds libopus fixed-point with assembly, RTCD, and
 intrinsics disabled. FFmpeg retains the libopus float symbols only for static
 link compatibility; renderer decode selects `libopus` with requested S16
@@ -101,9 +110,15 @@ build-recipe digest; application source constants describe only protocol
 compatibility and cannot assert that a payload build exists. The route,
 expected renderer identity, and scheduler executor are installed as one
 decision only after the whole closure verifies.
-Pack/release qualification reruns the declared suite and requires its observed
-evidence to equal the catalog notice. A suite implementation change therefore
-changes its suite digest and cannot silently reuse old evidence.
+Pack/release qualification reruns the declared media suites and requires their
+observed evidence to equal the catalog notice. A suite implementation change
+therefore changes its suite digest and cannot silently reuse old evidence. An
+owner-defined expensive qualification may instead reuse a content-addressed
+receipt produced only after a successful target-local replay. The receipt binds
+the exact target, recipe, capability closure/suite identity and qualification
+profile; missing, malformed, linked, stale, or mismatched receipts replay the
+real check before atomic replacement. Receipt reuse never replaces deployed
+byte-closure verification, release-baseline policy, or bounded process smoke.
 
 The first renderer closure carries `open-cut-caption-font-v1` as a mandatory
 payload resource rather than an on-demand ProductResource. Its canonical file
@@ -143,9 +158,12 @@ change EGC boundaries for an already identified renderer.
 The renderer links those libraries only through its bounded private C ABI. Its
 authenticated target closure includes the exact corresponding source,
 non-library target link inputs, a normalized link manifest, and rebuild/relink
-instructions. `media-tools check` must perform a real relink and execute the
-resulting bounded renderer smoke fixture; checking that material merely exists
-is insufficient. Baseline and modified-library relinks each use a fresh
+instructions. A target-local build must perform a real relink and execute the
+resulting bounded renderer smoke fixture before it may write the exact relink
+qualification receipt. `media-tools check` accepts that receipt only for the
+same contained renderer/relink closure and qualification contract; otherwise it
+replays the real relink and replaces the receipt. Checking that material merely
+exists is insufficient. Baseline and modified-library relinks each use a fresh
 kit-owned Go build cache; ambient cache entries cannot qualify corresponding
 source, and generated cache bytes are removed before the relink kit is archived.
 The relink output need not equal the release binary byte for byte, but it must
@@ -248,5 +266,6 @@ The initial `probe-v1` conformance gate generates its fixture from bounded code,
 not a committed media binary or ambient encoder. It requires the packaged probe
 to identify one exact 1-second AVI containing 16x16 raw video and 8 kHz stereo
 PCM, then requires rejection of a truncated RIFF. The same gate runs when a
-source build is first staged, whenever a validated build is reused, and from the
-deployed app-relative artifact check during packaging.
+source build is first staged and from the deployed app-relative artifact check
+during packaging; it is deliberately retained as a cheap per-deployment check
+when an expensive qualification receipt is reused.

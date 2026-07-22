@@ -111,12 +111,17 @@ func checkMediaTools(ctx context.Context) (resultErr error) {
 		return fmt.Errorf("verify API production media baseline: %w", err)
 	}
 
-	finish = recorder.Begin("verify-renderer-relink")
-	err = mediatoolchain.VerifyRendererRelink(ctx, verified)
+	finish = recorder.Begin("ensure-renderer-relink-qualification")
+	rendererQualificationReused, err := mediatoolchain.EnsureRendererRelinkQualification(ctx, verified)
 	finish(err)
 	if err != nil {
-		return fmt.Errorf("verify API renderer relink: %w", err)
+		return fmt.Errorf("qualify API renderer relink: %w", err)
 	}
+	rendererQualificationDecision := "replayed"
+	if rendererQualificationReused {
+		rendererQualificationDecision = "reused"
+	}
+	recorder.Decide("renderer-relink-qualification", rendererQualificationDecision, "")
 
 	finish = recorder.Begin("verify-base-media-capabilities")
 	err = mediatoolchain.VerifyBaseCapabilities(ctx, verified)
@@ -147,11 +152,23 @@ func checkMediaTools(ctx context.Context) (resultErr error) {
 		return fmt.Errorf("verify API production transcription baseline: %w", err)
 	}
 
-	finish = recorder.Begin("verify-whisper-capabilities")
-	err = whispertoolchain.VerifyCapabilities(ctx, whisperClosure)
+	finish = recorder.Begin("ensure-whisper-qualification")
+	whisperQualificationReused, err := whispertoolchain.EnsureQualification(ctx, whisperClosure)
 	finish(err)
 	if err != nil {
-		return fmt.Errorf("verify API whisper capabilities: %w", err)
+		return fmt.Errorf("qualify API whisper capabilities: %w", err)
+	}
+	whisperQualificationDecision := "replayed"
+	if whisperQualificationReused {
+		whisperQualificationDecision = "reused"
+	}
+	recorder.Decide("whisper-qualification", whisperQualificationDecision, "")
+
+	finish = recorder.Begin("verify-whisper-smoke")
+	err = whispertoolchain.VerifySmoke(ctx, whisperClosure)
+	finish(err)
+	if err != nil {
+		return fmt.Errorf("verify API whisper deployment smoke: %w", err)
 	}
 
 	finish = recorder.Begin("load-product-resources")

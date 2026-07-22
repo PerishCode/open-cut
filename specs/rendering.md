@@ -474,10 +474,13 @@ counts, pixel/audio reference oracles, and verified media facts, but does not
 require equal encoded bytes. The signed catalog records the conformance profile
 and exact suite/evidence identity. Evidence is a contained, digest-bound notice
 whose target, dependency pins, semantic observations, and repeated byte digest
-must reproduce during release qualification. API startup only verifies the
-authenticated catalog and exact contained byte closure; it does not execute the
-helper, relink native inputs, or place any conformance fixture on the cold start
-path. Bounded smoke execution belongs to build, check, pack, release, and
+must reproduce during target-local qualification. A content-addressed receipt
+may carry that successful expensive qualification across packaging runs only
+for the exact same closure and contract; deployed renderer matrix smoke still
+executes and any receipt mismatch replays the full owner check. API startup
+only verifies the authenticated catalog and exact contained byte closure; it
+does not execute the helper, relink native inputs, or place any conformance
+fixture on the cold start path. Bounded smoke execution belongs to build, check, pack, release, and
 post-install delivery-harness qualification; the user installer only verifies
 the signed manifest and contained bytes.
 

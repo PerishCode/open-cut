@@ -227,6 +227,14 @@ the same target and cache cohort before attributing a duration change to code.
 An app artifact check that opts into generic timing also emits
 `artifact-check-<app>-<index>.json`; the app owns its phases while the packager
 only provides the output path and rejects a missing or invalid declared report.
+Media builds also carry content-addressed qualification receipts beside their
+manifests. A receipt can suppress only the expensive owner-defined replay it
+names: deployed bytes, release baselines, base/renderer conformance, and a
+Whisper process smoke are still checked. A missing, malformed, or mismatched
+receipt causes a real qualification replay and atomic receipt replacement.
+The media, Whisper, and app artifact-check reports expose this as
+`renderer-relink-qualification` / `whisper-qualification` decisions with
+`reused`, `replayed`, or producer-side `produced` values.
 
 The CI C-tree cache is a sequence of validated producer generations below one
 exact build-identity prefix. A restored generation is only a reuse hint:

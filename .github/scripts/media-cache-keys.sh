@@ -2,8 +2,8 @@
 # Publishes the media-toolchain reuse keys for this job.
 #
 # The keys are derived by `oc-control media-cache-key`, which asks the same
-# authorities the build itself consults - the pinned catalog and the renderer's
-# real dependency closure as reported by the Go toolchain. Deriving them here
+# authorities the build itself consults - both pinned catalogs, qualification
+# contracts, and the renderer/Whisper dependency closures. Deriving them here
 # from a hand-written list of paths would recreate exactly the drift the
 # closure fingerprint exists to prevent: the list would quietly stop describing
 # what the build actually reads, and a stale artifact would be restored with a

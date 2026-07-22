@@ -97,6 +97,16 @@ func Build(ctx context.Context, options BuildOptions) (result BuildResult, resul
 	}
 	recorder.Decide("published-closure", closureDecision, reuseReason)
 	if reusable {
+		recorder.Step("ensure-whisper-qualification")
+		qualificationReused, err := EnsureQualification(ctx, reused)
+		if err != nil {
+			return BuildResult{}, fmt.Errorf("qualify reused whisper closure: %w", err)
+		}
+		qualificationDecision := "replayed"
+		if qualificationReused {
+			qualificationDecision = "reused"
+		}
+		recorder.Decide("whisper-qualification", qualificationDecision, "")
 		capability := reused.Capabilities[CapabilityLocalTranscriptionV1]
 		return BuildResult{
 			Schema: ManifestSchema, Target: options.Target.String(), Version: reused.Manifest.Version,
@@ -258,6 +268,18 @@ func Build(ctx context.Context, options BuildOptions) (result BuildResult, resul
 	if err := atomicfile.WriteJSON(manifestPath, manifest, 0o600); err != nil {
 		return BuildResult{}, err
 	}
+	recorder.Step("write-whisper-qualification")
+	staged, err := Load(stageRoot, options.Target)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("verify staged whisper closure: %w", err)
+	}
+	if err := VerifyReleaseBaseline(staged); err != nil {
+		return BuildResult{}, fmt.Errorf("verify staged whisper release baseline: %w", err)
+	}
+	if err := writeQualificationReceipt(staged); err != nil {
+		return BuildResult{}, fmt.Errorf("write staged whisper qualification: %w", err)
+	}
+	recorder.Decide("whisper-qualification", "produced", "")
 	recorder.Step("publish-closure")
 	if err := publishStage(stageRoot, artifactRoot); err != nil {
 		return BuildResult{}, err
@@ -425,6 +447,7 @@ func publishStage(stageRoot, artifactRoot string) error {
 	// closure can never be paired with a stale record of how it was made.
 	for _, owned := range []string{
 		"whisper", filepath.Join("licenses", "whisper"), ManifestName, buildFingerprintName,
+		QualificationReceiptName,
 	} {
 		if err := os.RemoveAll(filepath.Join(artifactRoot, owned)); err != nil {
 			return err

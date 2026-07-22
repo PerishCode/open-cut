@@ -75,7 +75,35 @@ func TestCacheKeysAreStableAndPrefixed(t *testing.T) {
 	if !strings.HasPrefix(first.CBuildPrefix, "media-cbuild-v2-") {
 		t.Fatalf("C build cache epoch was not advanced: %+v", first)
 	}
+	if !strings.HasPrefix(first.SourcePrefix, "media-sources-v1-") ||
+		!strings.HasPrefix(first.ClosurePrefix, "media-closure-v1-") {
+		t.Fatalf("cache prefixes changed unexpectedly: %+v", first)
+	}
 	if !strings.Contains(first.SourcePrefix, target.Host().String()) {
 		t.Fatalf("cache prefixes must be target scoped: %+v", first)
+	}
+}
+
+func TestWhisperLogicChangesOnlyInvalidateTheCoLocatedClosure(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := cacheKeys(t, "environment-one")
+	victim := filepath.Join(root, "internal", "whispertoolchain", "qualification.go")
+	original, err := os.ReadFile(victim)
+	if err != nil {
+		t.Skipf("whisper source probe unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = os.WriteFile(victim, original, 0o644) })
+	if err := os.WriteFile(victim, append(original, []byte("\n// cache key probe\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	edited := cacheKeys(t, "environment-one")
+	if edited.SourceKey != base.SourceKey || edited.CBuildKey != base.CBuildKey {
+		t.Fatal("a whisper logic edit must not discard source pins or the codec C tree")
+	}
+	if edited.ClosureKey == base.ClosureKey {
+		t.Fatal("a whisper logic edit must discard the co-located published closure cache")
 	}
 }
