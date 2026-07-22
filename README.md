@@ -239,6 +239,11 @@ oc-control timing decision \
   --name c-build-tree
 ```
 
+Pull-request caches are visible to later commits in the same pull request but
+are not promoted to `main`. This removes repeated qualification work while a PR
+is being repaired; the first post-merge run still verifies and publishes the
+corresponding main-scoped artifacts.
+
 Generated workspace cleanup is deliberately repository-scoped:
 
 ```sh
