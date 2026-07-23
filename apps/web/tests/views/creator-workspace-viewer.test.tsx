@@ -23,13 +23,15 @@ const resourceId = durableID("018f0a60-7b80-7a01-8000-000000000005");
 describe("SequencePreviewSurface", () => {
   afterEach(() => cleanup());
 
-  it("keeps exact sequence transport persistently visible over the media actuator", async () => {
+  it("keeps exact sequence transport persistently visible outside the media content", async () => {
     const controller = sequenceController();
     const view = render(<SequencePreviewSurface controller={controller} snapshot={readySnapshot()} />);
 
     const transport = screen.getByRole("region", { name: "Sequence transport" });
+    const player = screen.getByLabelText("Main Sequence revision 14");
+    expect(player.nextElementSibling?.contains(transport)).toBe(true);
     expect(within(transport).getByText("SEQUENCE r14 · 00:08.00 / 00:09.00")).toBeTruthy();
-    expect(screen.getByLabelText("Main Sequence revision 14").getAttribute("controls")).toBeNull();
+    expect(player.getAttribute("controls")).toBeNull();
 
     fireEvent.click(within(transport).getByRole("button", { name: "Go to start" }));
     fireEvent.click(within(transport).getByRole("button", { name: "Previous frame" }));

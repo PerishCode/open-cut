@@ -53,7 +53,8 @@ describe("atomic components", () => {
     const player = screen.getByLabelText("Source preview");
     expect(player.tagName).toBe("VIDEO");
     expect(player.getAttribute("src")).toBe("/api/media/opaque");
-    expect(screen.getByText("Persistent transport")).toBeTruthy();
+    const transport = screen.getByText("Persistent transport");
+    expect(player.nextElementSibling?.contains(transport)).toBe(true);
     const actuator = onActuator.mock.calls.at(-1)?.[0];
     actuator.seekToSeconds(1.25);
     expect(actuator.readCurrentTimeSeconds()).toBe(1.25);
