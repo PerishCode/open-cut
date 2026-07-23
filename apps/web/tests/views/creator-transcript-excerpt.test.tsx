@@ -96,9 +96,33 @@ describe("CreatorTranscriptExcerpt", () => {
       parentId: ids.root,
       parentRevision: "5",
       afterNodeId: ids.excerpt,
-      label: "after inserted SourceExcerpt",
+      label: "after inserted excerpt",
     });
-    expect(screen.getByText("SourceExcerpt committed · durable Undo is available in Workspace history")).toBeTruthy();
+    expect(screen.getByText("Excerpt added to Story")).toBeTruthy();
+    expect(onReload.mock.invocationCallOrder[0]).toBeLessThan(onInserted.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it("keeps a committed insertion successful when the follow-up Story refresh fails", async () => {
+    vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000711") });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(commitReceipt())),
+    );
+    const onInserted = vi.fn();
+    renderExcerpt({
+      onInserted,
+      onReload: vi.fn(async () => {
+        throw new Error("refresh unavailable");
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Select token 1 · Hello" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
+
+    expect(await screen.findByText("Excerpt added to Story · refresh reads to view it")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry identical excerpt insertion" })).toBeNull();
+    expect(onInserted).not.toHaveBeenCalled();
   });
 
   it("blocks a selection that cuts through a current correction", () => {

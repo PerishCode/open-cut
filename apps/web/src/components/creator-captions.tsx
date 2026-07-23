@@ -76,9 +76,9 @@ export function CreatorCaptions({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">CAPTION DRAFT · SOURCEEXCERPT DERIVATION</Text>
-      <Text>Choose one exact SourceExcerpt, one committed Clip instance, and one Caption Track.</Text>
-      {!snapshot.source ? <Text>Select “Create captions” on a SourceExcerpt in Narrative to begin.</Text> : null}
+      <Text tone="eyebrow">CAPTION DRAFT · STORY EXCERPT</Text>
+      <Text>Choose one exact Story excerpt, one committed Clip instance, and one Caption Track.</Text>
+      {!snapshot.source ? <Text>Select “Create captions” on an excerpt in Story to begin.</Text> : null}
       {snapshot.source ? (
         <Stack spacing="compact">
           <Text tone="eyebrow">
@@ -86,7 +86,7 @@ export function CreatorCaptions({
           </Text>
           <Text>{snapshot.source.sourceExcerpt.effectiveText}</Text>
           {snapshot.source.evidenceStatus === "stale" ? (
-            <Status state="unavailable">SourceExcerpt evidence is stale · repair evidence before re-deriving</Status>
+            <Status state="unavailable">Excerpt evidence is stale · repair it before creating captions</Status>
           ) : null}
         </Stack>
       ) : null}
@@ -102,7 +102,7 @@ export function CreatorCaptions({
         </Button>
       ))}
       {snapshot.source && snapshot.clipCandidates.length === 0 ? (
-        <Text>No enabled committed Clip contains this SourceExcerpt range.</Text>
+        <Text>No enabled committed Clip contains this excerpt range.</Text>
       ) : null}
 
       {snapshot.source && snapshot.trackCandidates.length > 1 ? (

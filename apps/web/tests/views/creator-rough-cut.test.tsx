@@ -75,14 +75,16 @@ describe("Creator rough cut", () => {
         onSelect={() => undefined}
         projectId={durableID(ids.project)}
         projectRevision={revisionString("8")}
+        recentlyAddedNodeId={durableID(ids.excerpt)}
         sequenceId={durableID(ids.sequence)}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Add exact SourceExcerpt to rough cut" }));
+    expect(screen.getByText("Added from Transcript")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add excerpt to rough cut" }));
 
     expect(onAddToRoughCut).toHaveBeenCalledWith(sourceExcerpt(), "exact");
-    fireEvent.click(screen.getByRole("button", { name: "Create captions from exact SourceExcerpt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create captions from excerpt" }));
     expect(onCreateCaptions).toHaveBeenCalledWith(sourceExcerpt(), "exact");
   });
 

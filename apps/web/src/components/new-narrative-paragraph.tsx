@@ -186,7 +186,7 @@ function draftStatusState(phase: NewNarrativeDraftPhase): "ready" | "pending" | 
 }
 
 function draftStatusText(phase: NewNarrativeDraftPhase): string {
-  if (phase === "clean") return "Committed";
+  if (phase === "clean") return "Ready to write";
   if (phase === "dirty") return "Unsaved · checkpoints after 750 ms";
   if (phase === "saving") return "Saving checkpoint…";
   if (phase === "saving-dirty") return "Saving older checkpoint · newer text remains unsaved";

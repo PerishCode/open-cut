@@ -40,7 +40,7 @@ import { CreatorAgentPane } from "./creator-agent-pane.js";
 import { CreatorCaptions } from "./creator-captions.js";
 import { CreatorExport } from "./creator-export.js";
 import { CreatorHistory } from "./creator-history.js";
-import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
+import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-narrative-anchor.js";
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import {
   type CreatorRoughCutOccurrence,
@@ -101,8 +101,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [transcript, setTranscript] = useState<TranscriptState>({ status: "idle" });
   const [viewerMode, setViewerMode] = useState<"sequence" | "source">("sequence");
   const [workspaceSelection, setWorkspaceSelection] = useState<WorkspaceSelection>(emptyWorkspaceSelection);
-  const [narrativeAnchor, setNarrativeAnchor] = useState<NarrativeInsertionAnchor>();
-  const [narrativeSelectionEpoch, setNarrativeSelectionEpoch] = useState(0);
+  const narrativeHandoff = useNarrativeHandoff();
   const [roughCutOccurrences, setRoughCutOccurrences] = useState<RoughCutQueue>([]);
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
@@ -189,7 +188,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const refreshRestoredWorkspace = useCallback(async () => {
     setHistoryRefreshEpoch((current) => current + 1);
     setWorkspaceSelection(emptyWorkspaceSelection);
-    setNarrativeAnchor(undefined);
+    narrativeHandoff.reset();
     setRoughCutOccurrences([]);
     setRoughCutTimelineStart(undefined);
     setCaptionSource(undefined);
@@ -198,7 +197,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       sequenceViewer.setAvailableRevision(restored.sequence.sequenceRevision);
       sequenceViewer.adoptRevision(restored.sequence.sequenceRevision);
     }
-  }, [refreshCommittedWorkspace, sequenceViewer]);
+  }, [narrativeHandoff, refreshCommittedWorkspace, sequenceViewer]);
 
   useEffect(() => {
     void loadProductAvailability();
@@ -236,7 +235,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       : undefined;
   const rootLastNode = ready?.narrative.nodes.at(-1);
   const activeNarrativeAnchor: NarrativeInsertionAnchor | undefined =
-    narrativeAnchor ??
+    narrativeHandoff.anchor ??
     (ready
       ? {
           parentId: ready.narrative.parent.id,
@@ -518,6 +517,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 <Stack spacing="compact">
                   {ready ? (
                     <CreatorNarrativeWriter
+                      activeSectionPath={narrativeHandoff.sectionPath}
                       narrative={ready.narrative}
                       onAddToRoughCut={(sourceExcerpt, evidenceStatus) => {
                         setRoughCutTimelineStart((current) => current ?? sequencePreview.playhead);
@@ -540,13 +540,13 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       }
                       onReload={refreshCommittedWorkspace}
                       onCommitReceipt={recordCreativeCommit}
-                      onSelect={(node, anchor) => {
-                        setNarrativeAnchor(anchor);
-                        setNarrativeSelectionEpoch((current) => current + 1);
+                      onSelect={(node, anchor, sectionPath) => {
+                        narrativeHandoff.select(anchor, sectionPath);
                         selectContext(narrativeContext(node));
                       }}
                       projectId={project.id}
                       projectRevision={ready.overview.project.revision}
+                      recentlyAddedNodeId={narrativeHandoff.recentlyAddedNodeId}
                       sequenceId={ready.overview.project.mainSequenceId}
                     />
                   ) : null}
@@ -572,12 +572,12 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                             sequenceId: ready.overview.project.mainSequenceId,
                             projectRevision: ready.overview.project.revision,
                             anchor: activeNarrativeAnchor,
-                            selectionEpoch: narrativeSelectionEpoch,
+                            selectionEpoch: narrativeHandoff.selectionEpoch,
                             onCommitReceipt: recordCreativeCommit,
                             onReload: refreshCommittedWorkspace,
                             onInserted: (anchor) => {
-                              setNarrativeAnchor(anchor);
-                              setNarrativeSelectionEpoch((current) => current + 1);
+                              narrativeHandoff.reveal(anchor);
+                              setSourcePanel("source-story");
                             },
                           }
                         : undefined
@@ -633,7 +633,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 <Stack spacing="compact">
                   {ready && roughCutOccurrences.length === 0 ? (
                     <EmptyState
-                      hint="In Write, send a source excerpt to the rough cut — queued occurrences appear here for one atomic apply."
+                      hint="In Story, add an excerpt to the rough cut — queued excerpts appear here for one atomic apply."
                       title="No rough cut queued"
                     />
                   ) : null}

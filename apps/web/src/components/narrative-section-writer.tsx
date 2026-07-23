@@ -27,6 +27,7 @@ type ChildState =
   | Readonly<{ status: "error"; error: Error }>;
 
 export function CreatorNarrativeSection({
+  autoExpand = false,
   autoFocus,
   canMoveDown,
   canMoveUp,
@@ -46,6 +47,7 @@ export function CreatorNarrativeSection({
   sequenceId,
   write,
 }: Readonly<{
+  autoExpand?: boolean;
   autoFocus: boolean;
   canMoveDown: boolean;
   canMoveUp: boolean;
@@ -66,7 +68,7 @@ export function CreatorNarrativeSection({
   write: EditingPorts["write"];
 }>) {
   const [draft, setDraft] = useState<SectionDraft>({ title: section.title, phase: "clean" });
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(autoExpand);
   const [focusChildParagraph, setFocusChildParagraph] = useState(false);
   const [children, setChildren] = useState<ChildState>({ status: "idle" });
   const titleRef = useRef(section.title);
@@ -102,6 +104,12 @@ export function CreatorNarrativeSection({
       setChildren({ status: "error", error: asError(value) });
     }
   }, [documentId, projectId, read, section.id]);
+
+  useEffect(() => {
+    if (!autoExpand) return;
+    setExpanded(true);
+    void loadChildren();
+  }, [autoExpand, loadChildren]);
 
   const reloadChildren = useCallback(async () => {
     await onReload();
