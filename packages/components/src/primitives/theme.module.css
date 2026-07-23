@@ -464,6 +464,13 @@
   line-height: 1.7;
 }
 
+.resourceCardBody > .body {
+  max-width: none;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .status {
   display: inline-flex;
   align-items: center;
