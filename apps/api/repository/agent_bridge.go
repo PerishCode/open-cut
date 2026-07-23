@@ -87,7 +87,7 @@ INSERT INTO agent_bridge_runs (run_id, adapter_id, created_at) VALUES (?, ?, ?)`
 	message := application.AgentConversationMessage{
 		ID: record.MessageID, ProjectID: record.ProjectID, RunID: record.RunID, TurnID: record.TurnID,
 		Ordinal: 1, Role: application.AgentConversationCreator, Text: record.Intent,
-		Attachments: append([]application.AgentContextAttachment(nil), record.Attachments...), CreatedAt: record.CreatedAt.UTC(),
+		Attachments: append([]application.AgentContextAttachment{}, record.Attachments...), CreatedAt: record.CreatedAt.UTC(),
 	}
 	if err := insertAgentConversationMessage(ctx, tx, message); err != nil {
 		return application.AgentBridgeResult{}, err
@@ -211,7 +211,7 @@ WHERE id = ? AND project_id = ?`, record.TurnID.String(), string(nextStatus), no
 	message := application.AgentConversationMessage{
 		ID: record.MessageID, ProjectID: record.ProjectID, RunID: record.RunID, TurnID: record.TurnID,
 		Ordinal: ordinal, Role: application.AgentConversationCreator, Text: record.Message,
-		Attachments: append([]application.AgentContextAttachment(nil), record.Attachments...), CreatedAt: record.CreatedAt.UTC(),
+		Attachments: append([]application.AgentContextAttachment{}, record.Attachments...), CreatedAt: record.CreatedAt.UTC(),
 	}
 	if err := insertAgentConversationMessage(ctx, tx, message); err != nil {
 		return application.AgentBridgeResult{}, err

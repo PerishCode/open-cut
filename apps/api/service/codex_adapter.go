@@ -129,6 +129,10 @@ func codexTurnArguments(turn AgentAdapterTurn, stableCLIDirectory string) ([]str
 		appState["OPEN_CUT_SEQUENCE_ID"] = turn.SequenceID.String()
 	}
 	overrides := []string{
+		"approval_policy=\"never\"",
+		"allow_login_shell=false",
+		"default_permissions=\"open-cut-agent\"",
+		"permissions.open-cut-agent=" + codexPermissionProfile(stableCLIDirectory),
 		"shell_environment_policy.inherit=\"none\"",
 		"shell_environment_policy.ignore_default_excludes=false",
 		"shell_environment_policy.set=" + tomlInlineStringMap(appState),
@@ -140,7 +144,14 @@ func codexTurnArguments(turn AgentAdapterTurn, stableCLIDirectory string) ([]str
 		args = append(args, "resume")
 		prompt = turn.Prompt
 	}
-	args = append(args, "--json", "--strict-config", "--skip-git-repo-check")
+	args = append(
+		args,
+		"--json",
+		"--strict-config",
+		"--skip-git-repo-check",
+		"--ignore-user-config",
+		"--ignore-rules",
+	)
 	if turn.NativeSessionID != "" {
 		args = append(args, "--all")
 	}
@@ -152,6 +163,13 @@ func codexTurnArguments(turn AgentAdapterTurn, stableCLIDirectory string) ([]str
 	}
 	args = append(args, "-")
 	return args, prompt
+}
+
+func codexPermissionProfile(stableCLIDirectory string) string {
+	return `{filesystem={":minimal"="read",` + strconv.Quote(stableCLIDirectory) +
+		`="read",":workspace_roots"={"."="write"}},network={enabled=true,mode="limited",` +
+		`domains={"127.0.0.1"="allow","localhost"="allow"},allow_upstream_proxy=false,` +
+		`allow_local_binding=false}}`
 }
 
 func tomlInlineStringMap(values map[string]string) string {
@@ -171,7 +189,8 @@ func codexHostEnvironment(base []string, privateHome, stableCLIDirectory string)
 	allowed := map[string]bool{
 		"HOME": true, "USER": true, "LOGNAME": true, "LANG": true, "LC_ALL": true, "LC_CTYPE": true,
 		"TMPDIR": true, "TMP": true, "TEMP": true, "SYSTEMROOT": true, "WINDIR": true,
-		"COMSPEC": true, "PATHEXT": true, "HTTPS_PROXY": true, "HTTP_PROXY": true,
+		"COMSPEC": true, "PATHEXT": true, "USERPROFILE": true, "HOMEDRIVE": true, "HOMEPATH": true,
+		"CODEX_HOME": true, "HTTPS_PROXY": true, "HTTP_PROXY": true,
 		"ALL_PROXY": true, "NO_PROXY": true, "SSL_CERT_FILE": true, "SSL_CERT_DIR": true,
 	}
 	values := make(map[string]string)
@@ -182,7 +201,7 @@ func codexHostEnvironment(base []string, privateHome, stableCLIDirectory string)
 			values[canonical] = canonical + "=" + value
 		}
 	}
-	values["CODEX_HOME"] = "CODEX_HOME=" + privateHome
+	values["CODEX_SQLITE_HOME"] = "CODEX_SQLITE_HOME=" + privateHome
 	values["PATH"] = "PATH=" + stableCLIDirectory
 	keys := make([]string, 0, len(values))
 	for key := range values {

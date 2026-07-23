@@ -158,15 +158,17 @@ effective AppState wait policy as its only bound, and returns the current Run on
 activity, terminal state, or timeout. It never launches, resumes, completes, or
 cancels a native or durable Turn.
 
-The adapter may retain a Run-scoped private native home derived from API datadir
-while an active Project has a non-terminal Run. That home is disposable cache,
-not Run or Project state, and its loss never invalidates a receipt. Terminal Run
+The adapter may retain a Run-scoped private native state directory derived from
+API datadir while an active Project has a non-terminal Run. Codex receives it as
+`CODEX_SQLITE_HOME` while its own credential home remains authoritative and its
+user config/rules are ignored. That state directory is disposable cache, not Run
+or Project state, and its loss never invalidates a receipt. Terminal Run
 transition and Project archive/tombstone/purge collect it while keeping the safe
 ConversationLedger until Project purge.
 
 `nativeSessionId` and resolved adapter paths are repository-private bridge
 metadata. Agent-facing Run reads expose product generation/status only;
-Creator-only adapter diagnostics may expose a safe adapter ID, qualified version,
+Creator-only adapter diagnostics may expose a safe adapter ID, observed version,
 prompt version, and closed availability state.
 
 ## MediaJob

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -99,7 +98,13 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 		if err := observer.ObserveAgentPresentation(ctx, service.AgentPresentationEvent{Kind: service.AgentPresentationToolStarted, Tool: service.AgentPresentationCommand}); err != nil {
 			return err
 		}
-		return observer.ObserveAgentMessage(ctx, "Drafted the opening through the product CLI.")
+		if err := observer.ObserveAgentMessage(ctx, "Drafted the opening through the product CLI."); err != nil {
+			return err
+		}
+		return observer.ObserveAgentPresentation(
+			ctx,
+			service.AgentPresentationEvent{Kind: service.AgentPresentationTurnCompleted},
+		)
 	}}
 	runtime := newAgentBridgeRuntimeForTest(t, bridges, store, adapter, publisher)
 	requestID, _ := domain.ParseRequestID("gesture:agent:begin:1")
@@ -114,6 +119,17 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 	waitForAgentBridge(t, runtime, projectID, result.Run.ID, func(run application.AgentBridgeRun) bool {
 		return run.Status == application.AgentRunPaused && run.CurrentTurn.Status == application.AgentTurnCompleted
 	})
+	publisher.mu.Lock()
+	presentation := append([]service.AgentPresentationEvent(nil), publisher.events...)
+	publisher.mu.Unlock()
+	if len(presentation) != 2 ||
+		presentation[0] != (service.AgentPresentationEvent{
+			Kind: service.AgentPresentationToolStarted,
+			Tool: service.AgentPresentationCommand,
+		}) ||
+		presentation[1] != (service.AgentPresentationEvent{Kind: service.AgentPresentationTurnCompleted}) {
+		t.Fatalf("presentation=%+v", presentation)
+	}
 	page, err := runtime.Conversation(creatorContext(t), projectID, result.Run.ID, application.AgentConversationListInput{Limit: 50})
 	if err != nil {
 		t.Fatal(err)
@@ -667,7 +683,8 @@ func TestAgentBridgeHTTPIsCreatorOnlyAndNeverExposesAdapterInternals(t *testing.
 	}
 	encoded := response.Body.String()
 	if strings.Contains(encoded, "never-public") || strings.Contains(encoded, "nativeSession") ||
-		strings.Contains(encoded, "codex-cli-v1") || strings.Contains(encoded, "adapter") {
+		strings.Contains(encoded, "codex-cli-v1") || strings.Contains(encoded, "adapter") ||
+		!strings.Contains(encoded, `"attachments":[]`) {
 		t.Fatalf("begin leaked adapter internals: %s", encoded)
 	}
 	var result application.AgentBridgeResult
@@ -720,78 +737,4 @@ func TestAgentBridgeHTTPIsCreatorOnlyAndNeverExposesAdapterInternals(t *testing.
 		!strings.Contains(string(document), `"x-open-cut-surface":"first-party-creator"`) {
 		t.Fatalf("OpenAPI is missing Creator AgentBridge routes")
 	}
-}
-
-func newSQLiteAgentBridgeProject(
-	t *testing.T,
-) (*repository.SQLiteProjects, *application.Projects, domain.ProjectID) {
-	t.Helper()
-	store, err := repository.OpenSQLiteProjects(context.Background(), filepath.Join(t.TempDir(), "api"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	projects, err := application.NewProjects(
-		store, application.UUIDv7IdentityGenerator{}, application.ClockFunc(time.Now),
-	)
-	if err != nil {
-		store.Close()
-		t.Fatal(err)
-	}
-	requestID, _ := domain.ParseRequestID("gesture:create:agent-bridge")
-	created, err := projects.Create(creatorContext(t), application.CreateProjectInput{
-		RequestID: requestID, Name: "Agent bridge project",
-	})
-	if err != nil {
-		store.Close()
-		t.Fatal(err)
-	}
-	return store, projects, created.Project.Project.ID
-}
-
-func newAgentBridgesForTest(t *testing.T, store application.AgentBridgeRepository) *application.AgentBridges {
-	t.Helper()
-	bridges, err := application.NewAgentBridges(
-		store, application.UUIDv7IdentityGenerator{}, application.ClockFunc(time.Now),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return bridges
-}
-
-func newAgentBridgeRuntimeForTest(
-	t *testing.T,
-	bridges *application.AgentBridges,
-	store application.AgentBridgeRepository,
-	adapter service.AgentTurnAdapter,
-	publisher service.AgentPresentationBus,
-) *service.AgentBridgeService {
-	t.Helper()
-	runtime, err := service.NewAgentBridgeService(
-		context.Background(), bridges, store, adapter, publisher, application.ClockFunc(time.Now),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return runtime
-}
-
-func waitForAgentBridge(
-	t *testing.T,
-	runtime *service.AgentBridgeService,
-	projectID domain.ProjectID,
-	runID domain.RunID,
-	done func(application.AgentBridgeRun) bool,
-) application.AgentBridgeRun {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		run, err := runtime.Show(creatorContext(t), projectID, runID)
-		if err == nil && done(run) {
-			return run
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("AgentBridge did not reach expected state")
-	return application.AgentBridgeRun{}
 }

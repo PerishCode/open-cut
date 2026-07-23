@@ -29,6 +29,7 @@ type recordingAgentProcessRunner struct {
 
 type scriptedAgentProbe struct {
 	loginError error
+	execHelp   []byte
 	versions   map[string]string
 	seen       []service.AgentProbeInvocation
 }
@@ -46,10 +47,13 @@ func (probe *scriptedAgentProbe) Run(
 			version = probe.versions[filepath.Base(invocation.Executable)]
 		}
 		return []byte(version), nil
+	case command == "exec --help":
+		if probe.execHelp != nil {
+			return probe.execHelp, nil
+		}
+		return []byte("--ignore-user-config\n--ignore-rules\n"), nil
 	case strings.HasPrefix(command, "debug prompt-input "):
 		return []byte(`[]`), nil
-	case strings.HasPrefix(command, "execpolicy check "):
-		return []byte(`{"decision":"allow"}`), nil
 	case command == "login status":
 		return []byte("Logged in using ChatGPT"), probe.loginError
 	default:
@@ -172,7 +176,10 @@ func TestCodexCLIAdapterKeepsPromptOnStdinAndInjectsOnlyClosedAppState(t *testin
 	adapter, err := service.NewCodexCLIAdapter(service.CodexCLIAdapterConfig{
 		Executable: filepath.Join(root, "bin", "codex"), Version: "codex-cli 0.144.4",
 		DataDir: filepath.Join(root, "api"), StableCLIExecutable: filepath.Join(root, "stable-cli", "open-cut"),
-		Environment: []string{"HOME=" + root, "PATH=/untrusted", "OPENAI_API_KEY=must-not-pass", "LANG=en_US.UTF-8"},
+		Environment: []string{
+			"HOME=" + root, "CODEX_HOME=" + filepath.Join(root, "ambient-codex"),
+			"PATH=/untrusted", "OPENAI_API_KEY=must-not-pass", "LANG=en_US.UTF-8",
+		},
 	}, runner)
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +207,12 @@ func TestCodexCLIAdapterKeepsPromptOnStdinAndInjectsOnlyClosedAppState(t *testin
 		}
 	}
 	for _, required := range []string{
-		"exec", "--json", "--strict-config", "--skip-git-repo-check", "web_search=\"disabled\"",
+		"exec", "--json", "--strict-config", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
+		`approval_policy="never"`, `allow_login_shell=false`, `default_permissions="open-cut-agent"`,
+		`":minimal"="read"`, `":workspace_roots"={"."="write"}`, `network={enabled=true,mode="limited"`,
+		`domains={"127.0.0.1"="allow","localhost"="allow"}`, `allow_upstream_proxy=false`,
+		`allow_local_binding=false`,
+		"web_search=\"disabled\"",
 		"OPEN_CUT_PROJECT_ID", projectID.String(), "OPEN_CUT_SEQUENCE_ID", sequenceID.String(),
 		"OPEN_CUT_RUN_ID", runID.String(), "OPEN_CUT_TURN_ID", turnID.String(), "OPEN_CUT_OUTPUT", "OPEN_CUT_WAIT_MS",
 	} {
@@ -210,9 +222,10 @@ func TestCodexCLIAdapterKeepsPromptOnStdinAndInjectsOnlyClosedAppState(t *testin
 	}
 	environment := strings.Join(runner.invocation.Env, "\n")
 	if strings.Contains(environment, "OPENAI_API_KEY") || strings.Contains(environment, "/untrusted") ||
-		!strings.Contains(environment, "CODEX_HOME="+filepath.Join(
+		!strings.Contains(environment, "CODEX_SQLITE_HOME="+filepath.Join(
 			root, "api", "agent", "codex-cli-v1", "runs", runID.String(), "home",
 		)) ||
+		!strings.Contains(environment, "CODEX_HOME="+filepath.Join(root, "ambient-codex")) ||
 		!strings.Contains(environment, "PATH="+filepath.Join(root, "stable-cli")) {
 		t.Fatalf("environment=%q", environment)
 	}
@@ -345,35 +358,14 @@ func TestCodexRuntimeStoreDerivesPrivateRunHomeAndTurnScratch(t *testing.T) {
 	if paths.Home != wantHome || paths.Scratch != wantScratch {
 		t.Fatalf("paths=%+v", paths)
 	}
-	config, err := os.ReadFile(filepath.Join(paths.Home, "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	rules, err := os.ReadFile(filepath.Join(paths.Home, "rules", "open-cut.rules"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, required := range []string{
-		`default_permissions = "open-cut-agent"`, `cli_auth_credentials_store = "keyring"`,
-		`[permissions.open-cut-agent.filesystem]`, `":minimal" = "read"`,
-		`[permissions.open-cut-agent.filesystem.":workspace_roots"]`, `enabled = false`,
-	} {
-		if !strings.Contains(string(config), required) {
-			t.Fatalf("config missing %q:\n%s", required, config)
+	for _, name := range []string{"auth.json", "config.toml", "rules"} {
+		if _, err := os.Stat(filepath.Join(paths.Home, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("private state must not contain %s: %v", name, err)
 		}
 	}
-	if strings.Contains(string(config), "danger-full-access") || strings.Contains(string(config), "auth.json") ||
-		!strings.Contains(string(rules), `pattern = ["open-cut"]`) {
-		t.Fatalf("unsafe runtime config=%q rules=%q", config, rules)
-	}
-	if _, err := os.Stat(filepath.Join(paths.Home, "auth.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("private home must not contain file credentials: %v", err)
-	}
-	for _, path := range []string{filepath.Join(paths.Home, "config.toml"), filepath.Join(paths.Home, "rules", "open-cut.rules")} {
-		info, err := os.Stat(path)
-		if err != nil || info.Mode().Perm() != 0o600 {
-			t.Fatalf("private file %s mode=%v err=%v", path, info.Mode().Perm(), err)
-		}
+	info, err := os.Stat(paths.Home)
+	if err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("private state mode=%v err=%v", info.Mode().Perm(), err)
 	}
 	if err := store.CollectTurn(runID, turnID); err != nil {
 		t.Fatal(err)
@@ -392,33 +384,36 @@ func TestCodexRuntimeStoreDerivesPrivateRunHomeAndTurnScratch(t *testing.T) {
 	}
 }
 
-func TestCodexLocatorUsesFirstFullyQualifiedCandidateAndKeyringHome(t *testing.T) {
+func TestCodexLocatorUsesFirstCapabilityQualifiedCandidateAndAmbientAuth(t *testing.T) {
 	parallelAPITest(t)
 	root := t.TempDir()
 	first := executableFixture(t, filepath.Join(root, "first-codex"))
 	second := executableFixture(t, filepath.Join(root, "second-codex"))
 	stableCLI := executableFixture(t, filepath.Join(root, "stable", "open-cut"))
 	probe := &scriptedAgentProbe{versions: map[string]string{
-		filepath.Base(first): "codex-cli 0.143.9", filepath.Base(second): "codex-cli 0.144.4",
+		filepath.Base(first): "codex-cli 0.145.0", filepath.Base(second): "codex-cli 0.144.4",
 	}}
 	config, err := service.LocateCodexCLI(context.Background(), service.CodexLocatorConfig{
 		DataDir: filepath.Join(root, "api"), StableCLIExecutable: stableCLI,
-		Candidates: []string{first, second}, Environment: []string{"HOME=" + root},
+		Candidates: []string{first, second}, Environment: []string{
+			"HOME=" + root, "CODEX_HOME=" + filepath.Join(root, "ambient-codex"),
+		},
 	}, probe)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolvedSecond, _ := filepath.EvalSymlinks(second)
-	if config.Executable != resolvedSecond || config.Version != "codex-cli 0.144.4" {
+	resolvedFirst, _ := filepath.EvalSymlinks(first)
+	if config.Executable != resolvedFirst || config.Version != "codex-cli 0.145.0" {
 		t.Fatalf("config=%+v", config)
 	}
 	joined := ""
 	for _, invocation := range probe.seen {
 		joined += strings.Join(invocation.Env, "\n") + "\n"
 	}
-	if !strings.Contains(joined, "CODEX_HOME="+filepath.Join(
+	if !strings.Contains(joined, "CODEX_SQLITE_HOME="+filepath.Join(
 		root, "api", "agent", "codex-cli-v1", "qualification", "home",
-	)) || strings.Contains(joined, "auth.json") {
+	)) || !strings.Contains(joined, "CODEX_HOME="+filepath.Join(root, "ambient-codex")) ||
+		strings.Contains(joined, "auth.json") {
 		t.Fatalf("probe environment=%q", joined)
 	}
 	if _, err := os.Stat(filepath.Join(root, "api", "agent", "codex-cli-v1", "qualification")); !errors.Is(err, os.ErrNotExist) {
@@ -440,12 +435,16 @@ func TestCodexLocatorClassifiesMissingUnauthenticatedAndIncompatible(t *testing.
 		{name: "missing", want: service.ErrAgentAdapterMissing, probe: &scriptedAgentProbe{}},
 		{
 			name: "incompatible", candidates: []string{candidate}, want: service.ErrAgentAdapterIncompatible,
-			probe: &scriptedAgentProbe{versions: map[string]string{filepath.Base(candidate): "codex-cli 0.145.0"}},
+			probe: &scriptedAgentProbe{
+				versions: map[string]string{filepath.Base(candidate): "codex-cli 0.145.0"},
+				execHelp: []byte("--ignore-user-config"),
+			},
 		},
 		{
 			name: "unauthenticated", candidates: []string{candidate}, want: service.ErrAgentAdapterUnauthenticated,
 			probe: &scriptedAgentProbe{
-				versions: map[string]string{filepath.Base(candidate): "codex-cli 0.144.0"}, loginError: service.ErrAgentProbeFailed,
+				versions:   map[string]string{filepath.Base(candidate): "codex-cli prototype-head"},
+				loginError: service.ErrAgentProbeFailed,
 			},
 		},
 	} {
