@@ -236,22 +236,6 @@ func SystemCodexCandidates() []string {
 	return qualifiedAgentCandidates(candidates)
 }
 
-func FindStableOpenCutCLI() (string, error) {
-	value, err := exec.LookPath("open-cut")
-	if err != nil {
-		return "", ErrAgentAdapterIncompatible
-	}
-	resolved, err := resolveAgentCandidate(value)
-	if err != nil {
-		return "", ErrAgentAdapterIncompatible
-	}
-	name := filepath.Base(resolved)
-	if name != "open-cut" && name != "open-cut.exe" {
-		return "", ErrAgentAdapterIncompatible
-	}
-	return resolved, nil
-}
-
 func qualifiedAgentCandidates(values []string) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]struct{})

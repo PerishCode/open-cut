@@ -32,14 +32,16 @@ For one creator request, the bridge:
    explicitly `authorizing` and has no creative Agent actor;
 3. builds the active payload's shipped prompt from fixed policy, creator intent,
    and a bounded product-ID selection summary;
-4. resolves the installed stable `open-cut` from the API process `PATH`, never
-   the active payload's private CLI path;
+4. asks the product-owned adapter resolver for one stable `open-cut`: installed
+   modes validate the platform host's install receipt, while development
+   materializes a private temporary resolver bound to the current product
+   process; neither mode consults the API process `PATH`;
 5. derives one private adapter home from the API datadir and Run ID, plus one
    per-turn scratch directory from the Run and Turn IDs; neither contains a
    project database, original media, data directory link, credential, or
    internal endpoint;
-6. constructs an allowlisted child environment and prepends the stable resolver
-   directory to `PATH`;
+6. constructs an allowlisted child environment inside the adapter and sets its
+   complete `PATH` to the stable resolver directory;
 7. injects `OPEN_CUT_PROJECT_ID`, optional `OPEN_CUT_SEQUENCE_ID`,
    `OPEN_CUT_RUN_ID`, `OPEN_CUT_TURN_ID`, and machine-output defaults;
 8. starts the configured Agent executable directly without a shell;
@@ -48,6 +50,9 @@ For one creator request, the bridge:
 
 The environment is fixed for that child process and inherited by its CLI
 invocations. It is convenience context, not a credential or hidden tool schema.
+Development resolver context remains a mode-private adapter implementation
+detail: the Agent environment, prompt, help, and command results contain no
+endpoint, signer path, receipt, or resolver path.
 
 One accepted Creator composer submission creates exactly one durable AgentTurn
 generation and at most one productive native turn. A resume probe may fall back

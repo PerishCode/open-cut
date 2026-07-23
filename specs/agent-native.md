@@ -72,7 +72,9 @@ The business context contains optional `projectId`, `sequenceId`, `runId`, and
 `turnId`. The API Agent bridge creates or binds the run and active turn, then
 injects safe context defaults such as `OPEN_CUT_PROJECT_ID`,
 `OPEN_CUT_SEQUENCE_ID`, `OPEN_CUT_RUN_ID`, and `OPEN_CUT_TURN_ID`. It also
-prepends the installed stable resolver directory to `PATH`.
+sets the Turn's complete `PATH` to the adapter-owned stable resolver directory.
+Installed and development resolver providers differ internally, but both expose
+the same `open-cut` command and generated discovery surface to the Agent.
 
 This environment is a frozen launch context, not a mutable global "active
 project." Concurrent windows and Agent runs receive independent values. An argv
