@@ -209,9 +209,9 @@ export function CreatorRoughCutPanel({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">ROUGH CUT DRAFT · EPHEMERAL OCCURRENCE QUEUE</Text>
+      <Text tone="eyebrow">ROUGH CUT DRAFT · EXCERPT QUEUE</Text>
       <Text>
-        Exact playhead {formatTime(timelineStart)} · {occurrences.length} / 128 occurrences
+        Exact playhead {formatTime(timelineStart)} · {occurrences.length} / 128 excerpts
       </Text>
       <Button
         disabled={phase === "applying" || phase === "previewing"}
@@ -239,20 +239,20 @@ export function CreatorRoughCutPanel({
             selection={occurrence.audio}
           />
           <Button disabled={index === 0} onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}>
-            Move occurrence up
+            Move excerpt up
           </Button>
           <Button
             disabled={index === occurrences.length - 1}
             onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
           >
-            Move occurrence down
+            Move excerpt down
           </Button>
           <Button onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}>
-            Remove occurrence
+            Remove excerpt
           </Button>
         </Stack>
       ))}
-      {occurrences.length === 0 ? <Text>Add an exact SourceExcerpt from Narrative to begin.</Text> : null}
+      {occurrences.length === 0 ? <Text>Add an exact excerpt from Story to begin.</Text> : null}
       {blocker ? <Status state="unavailable">{blocker}</Status> : null}
       <Button
         disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
@@ -278,7 +278,7 @@ export function CreatorRoughCutPanel({
       ) : null}
       {phase === "conflict" ? (
         <>
-          <Status state="unavailable">Rough-cut conflict · occurrence queue preserved · preview required</Status>
+          <Status state="unavailable">Rough-cut conflict · excerpt queue preserved · preview required</Status>
           <Button onPress={() => void onReload()}>Refresh committed state</Button>
         </>
       ) : null}
@@ -330,7 +330,7 @@ function RoughCutReview({
             {item.video && item.audio ? "+" : ""}
             {item.audio ? "A" : ""}
           </Text>
-          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `SourceExcerpt ${item.sourceExcerptId}`}</Text>
+          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `Excerpt ${item.sourceExcerptId}`}</Text>
         </Stack>
       ))}
       <Text tone="eyebrow">OUTPUT DIGEST · {review.outputDigest}</Text>
@@ -375,7 +375,7 @@ function firstOccurrenceBlocker(
     const occurrence = occurrences[index];
     if (!occurrence) continue;
     const label = `Occurrence ${index + 1}`;
-    if (occurrence.evidenceStatus !== "exact") return `${label} SourceExcerpt evidence is stale`;
+    if (occurrence.evidenceStatus !== "exact") return `${label} excerpt evidence is stale`;
     const videoCandidates = currentLaneCandidates("video", occurrence, assets, tracks);
     const audioCandidates = currentLaneCandidates("audio", occurrence, assets, tracks);
     if (occurrence.video.state === "unresolved") return `${label} requires an explicit video lane choice`;

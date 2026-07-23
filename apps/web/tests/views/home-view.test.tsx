@@ -549,6 +549,16 @@ describe("HomeView", () => {
     expect(await screen.findByText("Added from Transcript")).toBeTruthy();
     expect(screen.getByText("An alternate recognition.")).toBeTruthy();
     expect(screen.getByText("Ready to write")).toBeTruthy();
+    const addToRoughCut = screen.getAllByRole("button", { name: "Add excerpt to rough cut" }).at(-1);
+    if (!addToRoughCut) throw new Error("inserted Story excerpt has no rough-cut action");
+    fireEvent.click(addToRoughCut);
+    expect(screen.getByRole("tab", { name: "Rough cut" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("ROUGH CUT DRAFT · EXCERPT QUEUE")).toBeTruthy();
+    const createCaptions = screen.getAllByRole("button", { name: "Create captions from excerpt" }).at(-1);
+    if (!createCaptions) throw new Error("inserted Story excerpt has no caption action");
+    fireEvent.click(createCaptions);
+    expect(screen.getByRole("tab", { name: "Captions" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("CAPTION DRAFT · STORY EXCERPT")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     expect(await screen.findByText("SOURCE · VIEWER")).toBeTruthy();
