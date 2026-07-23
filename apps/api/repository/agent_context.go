@@ -64,7 +64,8 @@ WHERE entity.id = ? AND entity.sequence_id = ? AND sequence.project_id = ?`,
 		err := tx.QueryRowContext(ctx, `
 SELECT 1
 FROM transcript_segments AS segment
-JOIN transcript_artifacts AS artifact ON artifact.artifact_id = segment.artifact_id
+JOIN transcript_artifacts AS transcript ON transcript.artifact_id = segment.artifact_id
+JOIN media_artifacts AS artifact ON artifact.id = transcript.artifact_id
 WHERE segment.id = ? AND segment.artifact_id = ? AND artifact.project_id = ?`,
 			attachment.Transcript.SegmentID.String(), attachment.Transcript.ArtifactID.String(), projectID.String()).Scan(&exists)
 		if errors.Is(err, sql.ErrNoRows) {

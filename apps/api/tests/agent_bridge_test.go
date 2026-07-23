@@ -451,6 +451,33 @@ func TestAgentBridgeOwnedRunAllowsOnlyAgentShowAndExplicitComplete(t *testing.T)
 	}
 }
 
+func TestAgentBridgeMissingTranscriptAttachmentIsStale(t *testing.T) {
+	parallelAPITest(t)
+	store, _, projectID := newSQLiteAgentBridgeProject(t)
+	defer store.Close()
+	artifactID, _ := domain.ParseArtifactID("018f0000-0000-7000-8000-000000000101")
+	segmentID, _ := domain.ParseTranscriptSegmentID("018f0000-0000-7000-8000-000000000102")
+	requestID, _ := domain.ParseRequestID("gesture:agent:missing-transcript-context")
+	_, err := newAgentBridgesForTest(t, store).Begin(
+		creatorContext(t),
+		projectID,
+		application.AgentBridgeBeginInput{
+			RequestID: requestID,
+			Message:   "Use the attached transcript segment as reference",
+			Attachments: []application.AgentContextAttachment{{
+				Kind: application.AgentContextTranscriptSegment,
+				Transcript: &application.AgentContextTranscriptRef{
+					ArtifactID: artifactID,
+					SegmentID:  segmentID,
+				},
+			}},
+		},
+	)
+	if !errors.Is(err, application.ErrAgentContextStale) {
+		t.Fatalf("missing transcript context error=%v", err)
+	}
+}
+
 func TestAgentBridgeFreshRecoveryKeepsSafeConversationAndDurableResetNotice(t *testing.T) {
 	parallelAPITest(t)
 	store, _, projectID := newSQLiteAgentBridgeProject(t)
