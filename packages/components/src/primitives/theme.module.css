@@ -593,7 +593,9 @@
 }
 
 .fileField {
+  position: relative;
   display: grid;
+  min-width: 0;
   gap: 10px;
   padding: 18px;
   border: 1px dashed var(--oc-accent-border-dashed);
@@ -612,20 +614,37 @@
   line-height: 1.5;
 }
 
-.fileFieldInput {
-  max-width: 100%;
-  color: var(--oc-ink-dim);
-  font: inherit;
+.fileFieldChoice {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
 }
-
-.fileFieldInput::file-selector-button {
-  margin-right: 10px;
+.fileFieldAction {
   padding: 8px 11px;
   border: 1px solid var(--oc-accent-border-soft);
   background: var(--oc-accent-wash-mild);
   color: var(--oc-accent-ink);
-  cursor: pointer;
-  font: inherit;
+  font: 600 13px / 1 var(--oc-font-mono);
+}
+
+.fileFieldName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--oc-ink-dim);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileFieldInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .fileFieldInput:disabled,

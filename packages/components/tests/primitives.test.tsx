@@ -119,13 +119,17 @@ describe("atomic components", () => {
     const onSelect = vi.fn();
     render(<FileField label="Drop footage or browse" accept="video/*,audio/*" onSelect={onSelect} />);
     const input = screen.getByLabelText("Drop footage or browse");
+    expect(screen.getByText("Choose file")).toBeTruthy();
+    expect(screen.getByText("No file selected")).toBeTruthy();
     const selected = new File(["selected"], "selected.mov", { type: "video/quicktime" });
     fireEvent.change(input, { target: { files: [selected] } });
     expect(onSelect).toHaveBeenLastCalledWith(selected);
+    expect(screen.getByText("selected.mov")).toBeTruthy();
 
     const dropped = new File(["dropped"], "dropped.wav", { type: "audio/wav" });
     fireEvent.drop(screen.getByText("Drop footage or browse"), { dataTransfer: { files: [dropped] } });
     expect(onSelect).toHaveBeenLastCalledWith(dropped);
+    expect(screen.getByText("dropped.wav")).toBeTruthy();
   });
 
   it("keeps Sources, Viewer, Timeline, and Agent as one resizable editor workspace", () => {
