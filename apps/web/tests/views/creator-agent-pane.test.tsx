@@ -232,7 +232,12 @@ describe("CreatorAgentPane", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Turn 1 · completed" }));
-    expect(await screen.findByText("Creative change committed")).toBeTruthy();
+    const outcome = await screen.findByText("Creative change committed");
+    const latestResponse = screen.getByText("Agent response").closest("article");
+    expect(latestResponse).toBeTruthy();
+    expect(latestResponse?.compareDocumentPosition(outcome.closest("article") as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
     expect(screen.queryByText("OUTCOME · #1")).toBeNull();

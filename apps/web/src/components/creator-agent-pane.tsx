@@ -517,15 +517,6 @@ export function CreatorAgentPane({
         ) : (
           <Text>Describe a new writing or editing task.</Text>
         )}
-        {latestOutcome ? (
-          <ResourceCard
-            details={outcomeDetails(latestOutcome)}
-            emphasis="strong"
-            eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
-            status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
-            title={outcomeTitle(latestOutcome)}
-          />
-        ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
         {state.messages.map((entry) => {
           return (
@@ -547,6 +538,15 @@ export function CreatorAgentPane({
             </ResourceCard>
           );
         })}
+        {latestOutcome ? (
+          <ResourceCard
+            details={outcomeDetails(latestOutcome)}
+            emphasis="strong"
+            eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
+            status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
+            title={outcomeTitle(latestOutcome)}
+          />
+        ) : null}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
             {state.loading ? "Loading…" : "Load more conversation"}
