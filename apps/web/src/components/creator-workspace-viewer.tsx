@@ -213,6 +213,32 @@ export function SourcePreviewSurface({
       .then(action)
       .catch((value) => setActionError(value instanceof Error ? value : new Error(String(value))));
   };
+  const onSourceRangeKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    const action =
+      event.key === "ArrowLeft" && !event.shiftKey
+        ? () => controller.step("previous")
+        : event.key === "ArrowRight" && !event.shiftKey
+          ? () => controller.step("next")
+          : key === "i"
+            ? () => controller.captureIn()
+            : key === "o"
+              ? () => controller.captureOut()
+              : undefined;
+    if (!action) return;
+    event.preventDefault();
+    run(action);
+  };
   const preparation = snapshot.preparation;
   const lease = preparation?.lease;
   const range = controller.selectedRange();
@@ -252,8 +278,10 @@ export function SourcePreviewSurface({
             hint={`IN ${formatExact(snapshot.marks.in)} · OUT ${formatExact(snapshot.marks.out)}${
               range ? ` · ${formatExact(range.duration)}` : ""
             }`}
+            keyboardShortcuts="ArrowLeft ArrowRight I O"
             label="Source range controls"
             summary={`SOURCE ${formatExact(snapshot.playhead)} · PROXY ${formatExact(snapshot.proxyPlayhead)}`}
+            onKeyDown={onSourceRangeKeyDown}
           >
             <Button onPress={() => run(() => controller.step("previous"))}>Previous boundary</Button>
             <Button onPress={() => run(() => controller.step("next"))}>Next boundary</Button>
