@@ -150,7 +150,7 @@ func (scheduler *WorkScheduler) RunOne(ctx context.Context) (bool, error) {
 	now := scheduler.clock.Now().UTC()
 	attemptID, err := scheduler.newAttemptID(ctx, now)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("allocate work attempt: %w", err)
 	}
 	claim, err := scheduler.repository.ClaimWorkJob(ctx, ClaimWorkJobInput{
 		AttemptID: attemptID, Executors: append([]WorkExecutorRegistration(nil), scheduler.claims...),
@@ -162,12 +162,15 @@ func (scheduler *WorkScheduler) RunOne(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("claim work job: %w", err)
 	}
 	executor, exists := scheduler.executors[claim.Kind]
 	if !exists || executor.Registration().Version != claim.ExecutorVersion ||
 		executor.Registration().Target != claim.ExecutorTarget {
-		return true, ErrWorkLeaseLost
+		return true, fmt.Errorf(
+			"resolve work job %s (%s): %w",
+			claim.JobID.String(), claim.Kind, ErrWorkLeaseLost,
+		)
 	}
 	executionContext, cancel := context.WithCancel(ctx)
 	heartbeatDone := make(chan error, 1)
@@ -176,9 +179,18 @@ func (scheduler *WorkScheduler) RunOne(ctx context.Context) (bool, error) {
 	cancel()
 	heartbeatErr := <-heartbeatDone
 	if heartbeatErr != nil {
-		return true, heartbeatErr
+		return true, fmt.Errorf(
+			"heartbeat work job %s (%s): %w",
+			claim.JobID.String(), claim.Kind, heartbeatErr,
+		)
 	}
-	return true, executionErr
+	if executionErr != nil {
+		return true, fmt.Errorf(
+			"execute work job %s (%s): %w",
+			claim.JobID.String(), claim.Kind, executionErr,
+		)
+	}
+	return true, nil
 }
 
 func (scheduler *WorkScheduler) heartbeat(
