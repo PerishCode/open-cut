@@ -520,6 +520,7 @@ export function CreatorAgentPane({
         {latestOutcome ? (
           <ResourceCard
             details={outcomeDetails(latestOutcome)}
+            emphasis="strong"
             eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
             status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             title={outcomeTitle(latestOutcome)}
@@ -531,6 +532,7 @@ export function CreatorAgentPane({
             <ResourceCard
               details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
               elementRef={entry.id === latestRevealMessageId ? latestMessageRef : undefined}
+              emphasis={entry.role === "agent" ? "default" : "quiet"}
               eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
               key={entry.id}
               title={messageTitle(entry)}

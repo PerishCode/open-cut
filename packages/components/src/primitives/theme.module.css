@@ -242,6 +242,20 @@
   background: var(--oc-surface-raised);
 }
 
+.resourceCardDefault {
+  background: var(--oc-surface-raised);
+}
+
+.resourceCardQuiet {
+  border-color: var(--oc-hairline);
+  background: transparent;
+}
+
+.resourceCardStrong {
+  background: var(--oc-surface-raised);
+  box-shadow: var(--oc-shadow-card);
+}
+
 .resourceCard[aria-current="true"] {
   border-color: var(--oc-accent-border-focus);
   box-shadow: inset 3px 0 0 var(--oc-accent);

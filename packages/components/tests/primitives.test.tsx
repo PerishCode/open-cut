@@ -192,6 +192,22 @@ describe("atomic components", () => {
     expect(within(card).getByRole("button", { name: "Open source" })).toBeTruthy();
   });
 
+  it("offers closed card emphasis without changing article semantics", () => {
+    render(
+      <>
+        <ResourceCard title="Default card" />
+        <ResourceCard emphasis="quiet" title="Quiet card" />
+        <ResourceCard emphasis="strong" title="Strong card" />
+      </>,
+    );
+
+    const cards = ["Default card", "Quiet card", "Strong card"].map(
+      (title) => screen.getByText(title).closest("article") as HTMLElement,
+    );
+    expect(cards.every((card) => card.tagName === "ARTICLE")).toBe(true);
+    expect(new Set(cards.map((card) => card.className)).size).toBe(3);
+  });
+
   it("keeps panel controls and composer around an independently scrolling feed", () => {
     render(
       <PanelDock footer={<button type="button">Send</button>} header="Agent ready" label="Agent collaboration">
