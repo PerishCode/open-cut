@@ -19,6 +19,7 @@
   --oc-input-wash: var(--oc-media-input);
   --oc-accent: var(--oc-media-accent);
   --oc-accent-ink: var(--oc-media-accent-ink);
+  --oc-accent-contrast: var(--oc-media-accent-contrast);
   --oc-accent-border: var(--oc-media-accent-border);
   --oc-accent-wash: var(--oc-media-accent-wash);
 

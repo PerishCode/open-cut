@@ -1,4 +1,4 @@
-export { Button, type ButtonProps } from "./primitives/button.js";
+export { Button, type ButtonProps, type ButtonVariant } from "./primitives/button.js";
 export { ControlStrip, type ControlStripProps } from "./primitives/control-strip.js";
 export { EditorShell, type EditorShellProps } from "./primitives/editor-shell.js";
 export { EmptyState, type EmptyStateProps } from "./primitives/empty-state.js";

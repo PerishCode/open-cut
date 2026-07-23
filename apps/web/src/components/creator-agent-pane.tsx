@@ -454,14 +454,14 @@ export function CreatorAgentPane({
               void submit();
             }}
           />
-          <Button disabled={!canSubmit || message.trim() === ""} onPress={() => void submit()}>
+          <Button disabled={!canSubmit || message.trim() === ""} variant="primary" onPress={() => void submit()}>
             {state.submitting ? "Submitting…" : state.selected ? "Continue" : "Start task"}
           </Button>
         </Stack>
       }
       header={
         <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
-          <Button disabled={state.loading || state.submitting} onPress={() => void load()}>
+          <Button disabled={state.loading || state.submitting} variant="quiet" onPress={() => void load()}>
             Refresh
           </Button>
           <Button

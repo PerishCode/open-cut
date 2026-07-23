@@ -138,7 +138,9 @@ export function CreatorCaptions({
             </Stack>
           ))}
           {snapshot.phase === "review" ? (
-            <Button onPress={() => void run(() => controller.apply())}>Apply reviewed captions</Button>
+            <Button variant="primary" onPress={() => void run(() => controller.apply())}>
+              Apply reviewed captions
+            </Button>
           ) : null}
         </Stack>
       ) : null}

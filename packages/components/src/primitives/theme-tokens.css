@@ -35,7 +35,9 @@
 
   /* Identity, creative selection, and focus. */
   --oc-accent: #a7cf65;
+  --oc-accent-hover: #b4d879;
   --oc-accent-ink: #c7e99a;
+  --oc-accent-contrast: #17200e;
   --oc-accent-border: rgb(167 207 101 / 42%);
   --oc-accent-border-soft: rgb(167 207 101 / 30%);
   --oc-accent-border-dashed: rgb(167 207 101 / 36%);
@@ -47,6 +49,9 @@
   --oc-accent-halo: rgb(167 207 101 / 14%);
   --oc-accent-pulse: rgb(167 207 101 / 42%);
   --oc-focus-ring: rgb(167 207 101 / 24%);
+  --oc-danger-border: rgb(223 113 113 / 44%);
+  --oc-danger-ink: #f0a1a1;
+  --oc-danger-wash: rgb(223 113 113 / 12%);
 
   /* Status is independent of the brand accent. */
   --oc-status-ready: #72b58a;
@@ -67,6 +72,7 @@
   --oc-media-input: #181c20;
   --oc-media-accent: #a7cf65;
   --oc-media-accent-ink: #c7e99a;
+  --oc-media-accent-contrast: #17200e;
   --oc-media-accent-border: rgb(167 207 101 / 46%);
   --oc-media-accent-wash: rgb(167 207 101 / 12%);
   --oc-media-bed: #000;
@@ -106,7 +112,9 @@
     --oc-hairline-input: rgb(29 34 39 / 21%);
 
     --oc-accent: #5f7f2d;
+    --oc-accent-hover: #526f27;
     --oc-accent-ink: #4c6822;
+    --oc-accent-contrast: #fff;
     --oc-accent-border: rgb(95 127 45 / 40%);
     --oc-accent-border-soft: rgb(95 127 45 / 28%);
     --oc-accent-border-dashed: rgb(95 127 45 / 34%);
@@ -117,6 +125,9 @@
     --oc-accent-wash-mild: rgb(95 127 45 / 8%);
     --oc-accent-halo: rgb(95 127 45 / 13%);
     --oc-focus-ring: rgb(95 127 45 / 22%);
+    --oc-danger-border: rgb(184 77 77 / 40%);
+    --oc-danger-ink: #9f3636;
+    --oc-danger-wash: rgb(184 77 77 / 9%);
 
     --oc-status-ready: #43805c;
     --oc-status-pending: #946c22;

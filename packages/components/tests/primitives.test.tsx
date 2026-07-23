@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  Button,
   ControlStrip,
   EditorShell,
   FileField,
@@ -21,6 +22,32 @@ import {
 describe("atomic components", () => {
   afterEach(() => {
     cleanup();
+  });
+
+  it("exposes a closed visual hierarchy without changing native button behavior", () => {
+    const onPress = vi.fn();
+    render(
+      <>
+        <Button variant="primary" onPress={onPress}>
+          Commit
+        </Button>
+        <Button onPress={onPress}>Review</Button>
+        <Button variant="quiet" onPress={onPress}>
+          Refresh
+        </Button>
+        <Button disabled variant="danger" onPress={onPress}>
+          Delete
+        </Button>
+      </>,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(new Set(buttons.map((button) => button.className)).size).toBe(4);
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onPress).toHaveBeenCalledTimes(3);
   });
 
   it("provides semantic structure without consumer styling props", () => {

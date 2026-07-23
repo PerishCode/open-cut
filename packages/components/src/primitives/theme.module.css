@@ -145,6 +145,7 @@
   --oc-surface-input: var(--oc-surface-media-chrome);
   --oc-accent: var(--oc-media-accent);
   --oc-accent-ink: var(--oc-media-accent-ink);
+  --oc-accent-contrast: var(--oc-media-accent-contrast);
   --oc-accent-border: var(--oc-media-accent-border);
   --oc-accent-wash: var(--oc-media-accent-wash);
   --oc-focus-ring: rgb(167 207 101 / 24%);
@@ -392,6 +393,45 @@
   border-color: var(--oc-hairline-strong);
   background: var(--oc-surface-input);
   color: var(--oc-ink);
+}
+
+.buttonSecondary {
+  background: var(--oc-surface-raised);
+}
+
+.buttonPrimary {
+  border-color: var(--oc-accent);
+  background: var(--oc-accent);
+  color: var(--oc-accent-contrast);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  border-color: var(--oc-accent-hover);
+  background: var(--oc-accent-hover);
+  color: var(--oc-accent-contrast);
+}
+
+.buttonQuiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--oc-ink-mid);
+}
+
+.buttonQuiet:hover:not(:disabled) {
+  border-color: var(--oc-hairline);
+  background: var(--oc-surface-input);
+}
+
+.buttonDanger {
+  border-color: var(--oc-danger-border);
+  background: var(--oc-danger-wash);
+  color: var(--oc-danger-ink);
+}
+
+.buttonDanger:hover:not(:disabled) {
+  border-color: var(--oc-danger-ink);
+  background: var(--oc-danger-wash);
+  color: var(--oc-danger-ink);
 }
 
 .button:focus-visible {
