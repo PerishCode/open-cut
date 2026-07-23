@@ -4,6 +4,7 @@ import { type ReactNode, useCallback, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
+import { formatClock } from "./creator-workspace-presentation.js";
 
 export function SourceViewerLayout({
   asset,
@@ -280,20 +281,6 @@ function StreamSelection({
 
 function formatExact(value: { value: string; scale: number } | undefined): string {
   return value ? `${value.value}/${value.scale}s` : "—";
-}
-
-function formatClock(value: { value: string; scale: number }): string {
-  const scale = BigInt(value.scale);
-  const numerator = BigInt(value.value);
-  const hundredths = numerator <= 0n ? 0n : (numerator * 100n + scale / 2n) / scale;
-  const hours = hundredths / 360_000n;
-  const minutes = (hundredths % 360_000n) / 6_000n;
-  const seconds = (hundredths % 6_000n) / 100n;
-  const fraction = hundredths % 100n;
-  const clock = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${fraction
-    .toString()
-    .padStart(2, "0")}`;
-  return hours > 0 ? `${hours.toString().padStart(2, "0")}:${clock}` : clock;
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {

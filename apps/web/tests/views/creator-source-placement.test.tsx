@@ -66,19 +66,14 @@ describe("Creator source placement", () => {
       sourceViewer,
     });
 
+    expect(screen.getByText("IN −00:02.00 · 1.00s")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Selected · V1 · r5" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Selected · A1 · r6" })).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Capture current Sequence playhead" }));
-    expect(screen.getByText("Destination 4/1s · Sequence r7")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Place selected source at captured playhead" }));
+    expect((screen.getByRole("button", { name: "Place source" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Capture playhead" }));
+    expect(screen.getByText("AT 00:04.00 · r7")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Place at 00:04.00" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Place at 00:04.00" }));
 
     const retry = await screen.findByRole("button", { name: "Retry identical apply" });
     expect(preview).toHaveBeenCalledWith({
@@ -120,8 +115,8 @@ describe("Creator source placement", () => {
       sourceViewer: sourceController(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture current Sequence playhead" }));
-    fireEvent.click(screen.getByRole("button", { name: "Place selected source at captured playhead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Capture playhead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Place at 00:04.00" }));
 
     expect(
       await screen.findByText("Placement committed, but workspace refresh failed: projection offline"),
@@ -141,13 +136,10 @@ describe("Creator source placement", () => {
       sourceViewer: sourceController(false),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture current Sequence playhead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Capture playhead" }));
 
     expect(screen.getByText(/Marked range falls outside selected A\/V coverage/)).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Place selected source at captured playhead" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect((screen.getByRole("button", { name: "Place at 00:04.00" }) as HTMLButtonElement).disabled).toBe(true);
     expect(preview).not.toHaveBeenCalled();
   });
 });

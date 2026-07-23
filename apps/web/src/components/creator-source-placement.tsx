@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Text } from "@open-cut/components";
 import {
   type ApplyCreatorClipPlacementInput,
   type CreatorClipPlacementReview,
@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
+import { formatClock, formatTime } from "./creator-workspace-presentation.js";
 
 type SequenceDestination = Readonly<{
   sequenceRevision: string;
@@ -208,26 +209,34 @@ export function CreatorSourcePlacement({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">PLACE SOURCE</Text>
-      <Text>
-        Source {sourceRange ? `${exact(sourceRange.start)} + ${exact(sourceRange.duration)}` : "requires In and Out"}
-      </Text>
-      <Button onPress={captureDestination}>Capture current Sequence playhead</Button>
-      <Text>
-        Destination{" "}
-        {destination ? `${exact(destination.playhead)} · Sequence r${destination.sequenceRevision}` : "not captured"}
-        {destinationStale ? " · stale" : ""}
-      </Text>
+      <ControlStrip
+        hint={
+          destination
+            ? `AT ${formatClock(destination.playhead)} · r${destination.sequenceRevision}${
+                destinationStale ? " · STALE" : ""
+              }`
+            : "AT · NOT SET"
+        }
+        label="Source placement target"
+        summary={
+          sourceRange
+            ? `IN ${formatClock(sourceRange.start)} · ${formatTime(sourceRange.duration)}s`
+            : "IN / OUT · NOT SET"
+        }
+      >
+        <Button onPress={captureDestination}>Capture playhead</Button>
+      </ControlStrip>
       {selection?.videoStreamId ? (
-        <TrackSelection label="VIDEO TRACK" onChange={setVideoTrackId} selected={videoTrackId} tracks={videoTracks} />
+        <TrackSelection label="VIDEO" onChange={setVideoTrackId} selected={videoTrackId} tracks={videoTracks} />
       ) : null}
       {selection?.audioStreamId ? (
-        <TrackSelection label="AUDIO TRACK" onChange={setAudioTrackId} selected={audioTrackId} tracks={audioTracks} />
+        <TrackSelection label="AUDIO" onChange={setAudioTrackId} selected={audioTrackId} tracks={audioTracks} />
       ) : null}
       {coverageConflict ? (
         <Text>Marked range falls outside selected A/V coverage. Adjust In/Out or clear the incompatible lane.</Text>
       ) : null}
       <Button disabled={busy || !canPlace} onPress={() => void place()}>
-        {busy ? "Placing…" : "Place selected source at captured playhead"}
+        {busy ? "Placing…" : destination ? `Place at ${formatClock(destination.playhead)}` : "Place source"}
       </Button>
       {pendingApply ? (
         <Button disabled={busy} onPress={() => void retryApply()}>
@@ -256,10 +265,16 @@ function TrackSelection({
   selected: DurableID | undefined;
   tracks: readonly Track[];
 }) {
+  const selectedTrack = tracks.find((track) => track.id === selected);
   return (
-    <Stack spacing="compact">
-      <Text tone="eyebrow">{label}</Text>
-      <Button onPress={() => onChange(undefined)}>{selected ? "Clear lane" : "No lane selected"}</Button>
+    <ControlStrip
+      hint={selectedTrack ? `${selectedTrack.label} · r${selectedTrack.revision}` : "NOT SELECTED"}
+      label={`${label} placement lane`}
+      summary={label}
+    >
+      <Button disabled={!selected} onPress={() => onChange(undefined)}>
+        Clear
+      </Button>
       {tracks.map((track) => (
         <Button key={track.id} onPress={() => onChange(track.id)}>
           {selected === track.id ? "Selected · " : ""}
@@ -267,12 +282,8 @@ function TrackSelection({
         </Button>
       ))}
       {tracks.length === 0 ? <Text>Create a compatible Track separately before placement.</Text> : null}
-    </Stack>
+    </ControlStrip>
   );
-}
-
-function exact(value: RationalTime): string {
-  return `${value.value}/${value.scale}s`;
 }
 
 function asError(value: unknown): Error {

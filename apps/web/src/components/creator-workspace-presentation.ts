@@ -116,6 +116,22 @@ export function formatTimeEnd(range: {
   );
 }
 
+export function formatClock(value: { value: string; scale: number }): string {
+  const scale = BigInt(value.scale);
+  const numerator = BigInt(value.value);
+  const negative = numerator < 0n;
+  const absolute = negative ? -numerator : numerator;
+  const hundredths = (absolute * 100n + scale / 2n) / scale;
+  const hours = hundredths / 360_000n;
+  const minutes = (hundredths % 360_000n) / 6_000n;
+  const seconds = (hundredths % 6_000n) / 100n;
+  const fraction = hundredths % 100n;
+  const clock = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${fraction
+    .toString()
+    .padStart(2, "0")}`;
+  return `${negative ? "−" : ""}${hours > 0 ? `${hours.toString().padStart(2, "0")}:` : ""}${clock}`;
+}
+
 export function formatMediaFacts(facts: NonNullable<Asset["facts"]>): string {
   const video = facts.streams.find((stream) => stream.descriptor.video)?.descriptor.video;
   const audio = facts.streams.find((stream) => stream.descriptor.audio)?.descriptor.audio;
