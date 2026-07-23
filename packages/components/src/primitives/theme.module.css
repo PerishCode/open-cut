@@ -97,7 +97,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 42px 1fr;
+  grid-template-rows: 36px 1fr;
 }
 
 .editorSidebar {
@@ -160,7 +160,7 @@
 .editorTimeline {
   display: grid;
   min-height: 0;
-  grid-template-rows: 42px 1fr;
+  grid-template-rows: 36px 1fr;
   background: var(--oc-surface);
 }
 

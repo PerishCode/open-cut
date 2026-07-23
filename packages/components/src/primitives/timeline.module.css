@@ -88,6 +88,12 @@
   opacity: 0.35;
 }
 
+.timelineToolButton:focus-visible {
+  border-color: var(--oc-accent-border-focus-strong);
+  outline: 2px solid var(--oc-accent);
+  outline-offset: 1px;
+}
+
 .timelineViewport {
   overflow: auto;
   min-height: 0;
