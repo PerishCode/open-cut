@@ -81,6 +81,7 @@ describe("Creator rough cut", () => {
     );
 
     expect(screen.getByText("Added from Transcript")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Story node 1 actions" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add excerpt to rough cut" }));
 
     expect(onAddToRoughCut).toHaveBeenCalledWith(sourceExcerpt(), "exact");

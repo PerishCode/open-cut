@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text, TextAreaField } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text, TextAreaField } from "@open-cut/components";
 import {
   type AuthoredText,
   type CommitCreatorEditInput,
@@ -233,25 +233,30 @@ export function CreatorNarrativeWriter({
                   {String(index + 1).padStart(2, "0")} · {narrativeNodeLabel(node)}
                 </Text>
                 <Text>{narrativeNodeText(node)}</Text>
-                <Button onPress={() => selectNode(node)}>
-                  {node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
-                </Button>
-                {node.kind === "source-excerpt" ? (
-                  <Stack spacing="compact">
-                    <Button
-                      disabled={node.evidenceStatus !== "exact" || !onAddToRoughCut}
-                      onPress={() => onAddToRoughCut?.(node.sourceExcerpt, node.evidenceStatus)}
-                    >
-                      Add excerpt to rough cut
-                    </Button>
-                    <Button
-                      disabled={node.evidenceStatus !== "exact" || !onCreateCaptions}
-                      onPress={() => onCreateCaptions?.(node.sourceExcerpt, node.evidenceStatus)}
-                    >
-                      Create captions from excerpt
-                    </Button>
-                  </Stack>
-                ) : null}
+                <ControlStrip
+                  label={`Story node ${index + 1} actions`}
+                  summary={node.kind === "source-excerpt" ? "EXCERPT ACTIONS" : "NODE ACTIONS"}
+                >
+                  <Button onPress={() => selectNode(node)}>
+                    {node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
+                  </Button>
+                  {node.kind === "source-excerpt" ? (
+                    <>
+                      <Button
+                        disabled={node.evidenceStatus !== "exact" || !onAddToRoughCut}
+                        onPress={() => onAddToRoughCut?.(node.sourceExcerpt, node.evidenceStatus)}
+                      >
+                        Add excerpt to rough cut
+                      </Button>
+                      <Button
+                        disabled={node.evidenceStatus !== "exact" || !onCreateCaptions}
+                        onPress={() => onCreateCaptions?.(node.sourceExcerpt, node.evidenceStatus)}
+                      >
+                        Create captions from excerpt
+                      </Button>
+                    </>
+                  ) : null}
+                </ControlStrip>
               </Stack>
             )}
             {emptyAfterNodeId === nodeId ? emptyParagraph : null}
@@ -698,7 +703,7 @@ function NarrativeParagraphEditor({
         value={draft.value}
       />
       <Status state={draftStatusState(draft.phase)}>{draftStatusText(draft.phase)}</Status>
-      <Stack spacing="compact">
+      <ControlStrip label={`Narrative paragraph ${ordinal} structure actions`} summary="PARAGRAPH STRUCTURE">
         <Button disabled={!canMoveUp || draft.phase !== "clean"} onPress={() => void moveParagraph(moveUpAfterNodeId)}>
           Move paragraph up
         </Button>
@@ -711,7 +716,7 @@ function NarrativeParagraphEditor({
         <Button disabled={draft.phase !== "clean"} onPress={() => void removeParagraph()}>
           Remove paragraph
         </Button>
-      </Stack>
+      </ControlStrip>
       {draft.phase === "error" ? (
         <>
           {structuralAttemptRef.current?.visibleValue === draft.value || attemptRef.current?.value === draft.value ? (
