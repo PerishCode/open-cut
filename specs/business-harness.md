@@ -91,7 +91,10 @@ instance invalidation through the real same-origin proxy chain. Sequence UI
 acceptance proves that the persistent transport and Timeline command one shared
 playhead: Timeline seek moves the media actuator, playback observations settle
 to the declared frame grid without accumulated float drift, frame-step is exact,
-and a creative Timeline gesture pauses before planning.
+and a creative Timeline gesture pauses before planning. Export UI acceptance
+projects each durable lineage into one mutually exclusive action state: running
+work cannot inherit delete confirmation from an absent artifact, while ready
+media requires a second gesture before deletion.
 
 These tests may use in-process adapters, but Web still imports product
 communication only from `packages/contracts`. UI test convenience is not an

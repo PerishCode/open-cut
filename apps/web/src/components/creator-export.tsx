@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, ResourceCard, Stack, Status, Text } from "@open-cut/components";
 import {
   type DurableID,
   type ExportSaveResult,
@@ -179,72 +179,113 @@ export function CreatorExport({
   );
 
   const active = history?.lineages.some((lineage) => isActive(lineage)) ?? false;
+  const nextStatus = !hasContent
+    ? { state: "unavailable" as const, label: "Sequence empty" }
+    : !available
+      ? { state: "unavailable" as const, label: "Unavailable" }
+      : active || pending
+        ? { state: "pending" as const, label: active ? "Export in progress" : "Working" }
+        : { state: "ready" as const, label: "Ready" };
   return (
     <Stack spacing="compact">
-      <Button disabled={!available || !hasContent || pending || active} onPress={() => void start()}>
-        {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export"}
-      </Button>
-      {!hasContent ? <Text>Add a clip or caption to the Sequence before exporting.</Text> : null}
-      <Text tone="eyebrow">EXPORT HISTORY</Text>
+      <ControlStrip
+        hint={
+          hasContent
+            ? "WEBM · VP9 / OPUS · CHOOSE DESTINATION AFTER RENDER"
+            : "Add a clip or caption to the Sequence before exporting."
+        }
+        label="Next export"
+        summary={`NEXT · SEQUENCE r${sequenceRevision} · ${suggestedName}`}
+      >
+        <Status state={nextStatus.state}>{nextStatus.label}</Status>
+        <Button disabled={!available || !hasContent || pending || active} onPress={() => void start()}>
+          {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export current revision"}
+        </Button>
+      </ControlStrip>
+      <Text tone="eyebrow">RECENT EXPORTS</Text>
       {loadingHistory && !history ? <Text>Loading exports…</Text> : null}
-      {history?.lineages.length === 0 ? <Text>No exports yet.</Text> : null}
+      {history?.lineages.length === 0 ? (
+        <EmptyState hint="Completed exports and retained job history will appear here." title="No exports yet" />
+      ) : null}
       {history?.lineages.map((lineage) => {
         const rootID = lineage.export.job.rootJobId;
         const lineageSave = save?.rootJobId === rootID ? save.result : undefined;
         const overwrite = lineageSave?.status === "overwrite-required" ? lineageSave : undefined;
-        const confirmingDelete = lineage.export.artifact?.id === deleteConfirmation;
+        const activeLineage = isActive(lineage);
+        const availableArtifact = !activeLineage ? lineage.export.artifact : undefined;
+        const confirmingDelete = Boolean(availableArtifact && availableArtifact.id === deleteConfirmation);
+        const hasActions =
+          activeLineage ||
+          lineage.export.recovery === "retry-job" ||
+          Boolean(availableArtifact) ||
+          lineageSave?.status === "saved";
         return (
-          <Stack key={rootID} spacing="compact">
-            <Text tone="eyebrow">{exportStatus(lineage)}</Text>
-            {isActive(lineage) ? (
-              <Button disabled={pending} onPress={() => void cancel(lineage)}>
-                Cancel export
-              </Button>
-            ) : null}
-            {lineage.export.recovery === "retry-job" ? (
-              <Button disabled={!available || pending} onPress={() => void retry(lineage)}>
-                Retry export
-              </Button>
-            ) : null}
-            {lineage.export.artifact ? (
-              <Button disabled={pending} onPress={() => void saveAs(lineage)}>
-                Save As…
-              </Button>
-            ) : null}
-            {overwrite ? (
-              <Button disabled={pending} onPress={() => void saveAs(lineage, overwrite)}>
-                Replace {overwrite.displayName}
-              </Button>
-            ) : null}
-            {lineage.export.artifact && !confirmingDelete ? (
-              <Button disabled={pending} onPress={() => setDeleteConfirmation(lineage.export.artifact?.id)}>
-                Delete export…
-              </Button>
-            ) : null}
+          <ResourceCard
+            actions={
+              hasActions ? (
+                <>
+                  {activeLineage ? (
+                    <Button disabled={pending} onPress={() => void cancel(lineage)}>
+                      Cancel export
+                    </Button>
+                  ) : null}
+                  {lineage.export.recovery === "retry-job" ? (
+                    <Button disabled={!available || pending} onPress={() => void retry(lineage)}>
+                      Retry export
+                    </Button>
+                  ) : null}
+                  {availableArtifact && !confirmingDelete ? (
+                    <>
+                      <Button disabled={pending} onPress={() => void saveAs(lineage)}>
+                        Save As…
+                      </Button>
+                      <Button disabled={pending} onPress={() => setDeleteConfirmation(availableArtifact.id)}>
+                        Delete export…
+                      </Button>
+                    </>
+                  ) : null}
+                  {overwrite ? (
+                    <Button disabled={pending} onPress={() => void saveAs(lineage, overwrite)}>
+                      Replace {overwrite.displayName}
+                    </Button>
+                  ) : null}
+                  {confirmingDelete ? (
+                    <>
+                      <Button disabled={pending} onPress={() => void deleteArtifact(lineage)}>
+                        Delete export permanently
+                      </Button>
+                      <Button disabled={pending} onPress={() => setDeleteConfirmation(undefined)}>
+                        Keep export
+                      </Button>
+                    </>
+                  ) : null}
+                  {lineageSave?.status === "saved" ? (
+                    <Button disabled={pending} onPress={() => void reveal(lineageSave)}>
+                      Reveal in folder
+                    </Button>
+                  ) : null}
+                </>
+              ) : undefined
+            }
+            details={exportDetails(lineage)}
+            eyebrow={`${lineage.origin.toUpperCase()} · SEQUENCE r${lineage.export.sequenceRevision}`}
+            key={rootID}
+            status={<Status state={exportStatusState(lineage)}>{exportStatusLabel(lineage)}</Status>}
+            title={exportFilename(projectName, lineage.export.sequenceRevision)}
+          >
             {confirmingDelete ? (
-              <>
-                <Text>This removes the exported media but keeps its job history.</Text>
-                <Button disabled={pending} onPress={() => void deleteArtifact(lineage)}>
-                  Delete export permanently
-                </Button>
-                <Button disabled={pending} onPress={() => setDeleteConfirmation(undefined)}>
-                  Keep export
-                </Button>
-              </>
+              <Status state="pending">This removes the exported media but keeps its job history.</Status>
             ) : null}
             {lineageSave?.status === "saved" ? (
-              <>
-                <Text tone="eyebrow">
-                  SAVED {lineageSave.displayName} · {lineageSave.byteLength} BYTES ·{" "}
-                  {lineageSave.contentSha256.slice(0, 19)}…
-                </Text>
-                <Button disabled={pending} onPress={() => void reveal(lineageSave)}>
-                  Reveal in folder
-                </Button>
-                {revealedName === lineageSave.displayName ? <Text>Revealed {revealedName}</Text> : null}
-              </>
+              <Status state="ready">
+                Saved {lineageSave.displayName} · {lineageSave.byteLength} bytes ·{" "}
+                {lineageSave.contentSha256.slice(0, 19)}…
+              </Status>
             ) : null}
-          </Stack>
+            {lineageSave?.status === "saved" && revealedName === lineageSave.displayName ? (
+              <Text>Revealed {revealedName}</Text>
+            ) : null}
+          </ResourceCard>
         );
       })}
       {history?.nextAfter ? (
@@ -252,8 +293,7 @@ export function CreatorExport({
           Load older exports
         </Button>
       ) : null}
-      {error ? <Text>{error.message}</Text> : null}
-      <Text tone="eyebrow">NEXT EXPORT · {suggestedName}</Text>
+      {error ? <Status state="unavailable">Export action failed · {error.message}</Status> : null}
     </Stack>
   );
 }
@@ -263,12 +303,61 @@ function isActive(lineage: SequenceExportLineage): boolean {
   return state === "blocked" || state === "queued" || state === "running";
 }
 
-function exportStatus(lineage: SequenceExportLineage): string {
+function exportStatusState(lineage: SequenceExportLineage): "ready" | "pending" | "unavailable" {
+  if (isActive(lineage)) return "pending";
+  if (lineage.export.job.state === "succeeded" && lineage.artifactAvailability === "ready") return "ready";
+  return "unavailable";
+}
+
+function exportStatusLabel(lineage: SequenceExportLineage): string {
+  switch (lineage.export.job.state) {
+    case "blocked":
+      return "Waiting";
+    case "queued":
+      return "Queued";
+    case "running":
+      return "Rendering";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    case "succeeded":
+      switch (lineage.artifactAvailability) {
+        case "ready":
+          return "Ready";
+        case "deleted":
+          return "Media deleted";
+        case "invalid":
+          return "Needs repair";
+        case "none":
+          return "Completed";
+      }
+  }
+}
+
+function exportDetails(lineage: SequenceExportLineage): readonly string[] {
   const value = lineage.export;
-  const failure = value.job.terminalErrorCode ? ` · ${value.job.terminalErrorCode}` : "";
-  const availability =
-    lineage.artifactAvailability === "none" ? "" : ` · ${lineage.artifactAvailability.toUpperCase()}`;
-  return `EXPORT r${value.sequenceRevision} · ${value.job.state.toUpperCase()} · ${value.job.progressBasisPoints / 100}% · ${lineage.origin.toUpperCase()} · ${lineage.attemptCount} ATTEMPT${availability}${failure}`;
+  const attempts = `${lineage.attemptCount} attempt${lineage.attemptCount === "1" ? "" : "s"}`;
+  const details = [`${value.job.progressBasisPoints / 100}% · ${attempts} · ${formatTimestamp(lineage.rootCreatedAt)}`];
+  if (value.artifact) {
+    details.push(
+      `${value.artifact.canvasWidth} × ${value.artifact.canvasHeight} · ${formatByteSize(value.artifact.byteSize)} · ${value.artifact.videoCodec.toUpperCase()} / ${value.artifact.audioCodec.toUpperCase()}`,
+    );
+  }
+  if (lineage.artifactAvailability === "deleted") details.push("Exported media deleted; durable job history retained.");
+  if (value.job.terminalErrorCode) details.push(`Needs attention · ${value.job.terminalErrorCode}`);
+  return details;
+}
+
+function formatTimestamp(value: string): string {
+  return `${new Date(value).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function formatByteSize(value: string): string {
+  const bytes = BigInt(value);
+  if (bytes < 1_024n) return `${bytes} B`;
+  if (bytes < 1_024n * 1_024n) return `${bytes / 1_024n} KiB`;
+  return `${bytes / (1_024n * 1_024n)} MiB`;
 }
 
 function exportFilename(projectName: string, revision: RevisionString): string {

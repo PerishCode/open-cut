@@ -78,9 +78,10 @@ describe("CreatorExport", () => {
         />
       </ContractsProvider>,
     );
-    expect(await screen.findByText("EXPORT r7 · SUCCEEDED · 100% · CREATOR · 1 ATTEMPT · READY")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Save As…" }));
-    expect(await screen.findByText(/SAVED History-story-r7\.webm/)).toBeTruthy();
+    const saveAsButton = await screen.findByRole("button", { name: "Save As…" });
+    expect(screen.getAllByText("Ready").length).toBe(2);
+    fireEvent.click(saveAsButton);
+    expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reveal in folder" }));
     expect(await screen.findByText("Revealed History-story-r7.webm")).toBeTruthy();
     expect(revealRequests).toBe(1);
@@ -88,10 +89,51 @@ describe("CreatorExport", () => {
     expect(deleteRequests).toBe(0);
     expect(screen.getByText("This removes the exported media but keeps its job history.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete export permanently" }));
-    expect(await screen.findByText("EXPORT r7 · SUCCEEDED · 100% · CREATOR · 1 ATTEMPT · DELETED")).toBeTruthy();
+    expect(await screen.findByText("Media deleted")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry export" })).toBeTruthy();
     expect(deleteRequests).toBe(1);
     view.unmount();
+  });
+
+  it("keeps running export actions mutually exclusive and never projects undefined as delete confirmation", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000221");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000222");
+    const jobId = durableID("018f0a60-7b80-7a01-8000-000000000223");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          return jsonResponse({
+            lineages: [activeHistoryLineage(projectId, sequenceId, jobId)],
+            activityCursor: "11",
+          });
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=11`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    render(
+      <ContractsProvider>
+        <CreatorExport
+          available
+          hasContent
+          projectId={projectId}
+          projectName="Running story"
+          sequenceId={sequenceId}
+          sequenceRevision={revisionString("8")}
+        />
+      </ContractsProvider>,
+    );
+
+    expect(await screen.findByText("Rendering")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Export in progress" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Cancel export" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save As…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete export permanently" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Keep export" })).toBeNull();
+    expect(screen.queryByText("This removes the exported media but keeps its job history.")).toBeNull();
   });
 
   it("explains an empty Sequence before offering an invalid export", async () => {
@@ -177,6 +219,32 @@ function exportResult(projectId: string, sequenceId: string, jobId: string, arti
     recovery: deleted ? "retry-job" : "none",
     replayed: false,
     activityCursor: deleted ? "10" : "9",
+  };
+}
+
+function activeHistoryLineage(projectId: string, sequenceId: string, jobId: string) {
+  return {
+    origin: "creator",
+    attemptCount: "1",
+    artifactAvailability: "none",
+    rootCreatedAt: "2026-07-16T00:00:00Z",
+    export: {
+      projectId,
+      sequenceId,
+      sequenceRevision: "8",
+      preset: "webm-vp9-opus-v1",
+      job: {
+        id: jobId,
+        rootJobId: jobId,
+        state: "running",
+        progressBasisPoints: 2_500,
+        createdAt: "2026-07-16T00:00:00Z",
+        updatedAt: "2026-07-16T00:00:01Z",
+      },
+      recovery: "none",
+      replayed: false,
+      activityCursor: "11",
+    },
   };
 }
 
