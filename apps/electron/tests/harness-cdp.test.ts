@@ -21,6 +21,7 @@ describe("delivery harness CDP", () => {
       assert.deepEqual(appendSwitch.mock.calls, [
         ["remote-debugging-address", "127.0.0.1"],
         ["remote-debugging-port", "43123"],
+        ["disable-backgrounding-occluded-windows"],
       ]);
     }
   });

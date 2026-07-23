@@ -25,5 +25,8 @@ export function configureHarnessCDP(
   }
   commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   commandLine.appendSwitch("remote-debugging-port", rawPort);
+  // Chromium otherwise stops producing compositor frames for an occluded
+  // macOS window, making read-only CDP captures time out unless tooling steals focus.
+  commandLine.appendSwitch("disable-backgrounding-occluded-windows");
   return port;
 }
