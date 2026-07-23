@@ -463,13 +463,14 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Media",
               content: (
                 <Stack spacing="compact">
-                  <SourceImportSurface
-                    disabled={!ready || importing}
-                    error={importError}
-                    onSelect={(file) => void importFootage(file)}
-                  />
-                  {ready && ready.assets.assets.length === 0 ? (
-                    <EmptyState hint="Add local footage to begin." title="No media yet" />
+                  {!ready || ready.assets.assets.length === 0 ? (
+                    <SourceImportSurface
+                      disabled={!ready || importing}
+                      error={importError}
+                      onSelect={(file) => void importFootage(file)}
+                    />
+                  ) : importError ? (
+                    <Status state="unavailable">Could not add footage · {importError.message}</Status>
                   ) : null}
                   {ready?.assets.assets.map((asset) => (
                     <AssetSummary

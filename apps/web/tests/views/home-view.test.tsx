@@ -534,6 +534,8 @@ describe("HomeView", () => {
     expect(exportRequests).toBe(0);
     expect(exportHistoryRequests).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
+    expect(screen.queryByLabelText("Drop footage here or choose a local file")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open transcript" }));
     expect(screen.getByRole("tab", { name: "Transcript" }).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("A precise opening line.")).toBeTruthy();
