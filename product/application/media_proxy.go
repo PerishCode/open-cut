@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
 	MaximumSourceProxyManifestSize = 1 << 20
-	MaximumSourceProxyFrames       = 10_000_000
-	MaximumSourceProxyAudioSamples = 8_000_000_000
+	MaximumSourceProxyFrames       = rendercontract.MaximumSourceProxyFrames
+	MaximumSourceProxyAudioSamples = rendercontract.MaximumSourceProxySamples
 	MaximumSourceProxyArtifactSize = 512 << 30
 	sourceProxyTimeMapHeaderSize   = 16
 	sourceProxyTimeMapRecordSize   = 16

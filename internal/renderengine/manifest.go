@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 	"github.com/PerishCode/open-cut/utils/target"
 )
 
@@ -81,14 +81,14 @@ type ExecutionClosure struct {
 }
 
 func CompileExecutionManifest(
-	plan application.PublishedRenderPlan,
-	renderer application.RenderExecutorIdentity,
+	plan domain.RenderPlan,
+	renderer rendercontract.ExecutorIdentity,
 	closure ExecutionClosure,
 	paths MaterialPaths,
 ) (ExecutionManifest, []byte, error) {
 	paths = NormalizeMaterialPaths(paths)
-	if len(paths.ArtifactRoots) != len(plan.Plan.Payload.Inputs) ||
-		len(paths.Resources) != len(plan.Plan.Payload.FontResources) ||
+	if len(paths.ArtifactRoots) != len(plan.Payload.Inputs) ||
+		len(paths.Resources) != len(plan.Payload.FontResources) ||
 		len(closure.Tools) != 1 {
 		return ExecutionManifest{}, nil, fmt.Errorf("render execution material set is invalid")
 	}
@@ -99,22 +99,22 @@ func CompileExecutionManifest(
 	manifest := ExecutionManifest{
 		Schema: ExecutionSchema, RendererVersion: renderer.Version, RendererTarget: renderer.Target,
 		CapabilityClosureSHA256: closure.SHA256,
-		PlanDigest:              plan.Plan.Digest, Plan: plan.Plan.Payload,
+		PlanDigest:              plan.Digest, Plan: plan.Payload,
 		Tools: []ExecutionTool{{
 			ID: "ffmpeg", Role: "raw-decoder-encoder", SHA256: ffmpeg.SHA256,
 			Path: normalizeMaterialPath(ffmpeg.Path),
 		}},
-		Inputs:    make([]ExecutionInput, 0, len(plan.Plan.Payload.Inputs)),
-		Resources: make([]ExecutionResource, 0, len(plan.Plan.Payload.FontResources)),
-		Output:    ExecutionOutput{RelativePath: renderOutputRelativePath(plan.Plan.Payload.Purpose)},
+		Inputs:    make([]ExecutionInput, 0, len(plan.Payload.Inputs)),
+		Resources: make([]ExecutionResource, 0, len(plan.Payload.FontResources)),
+		Output:    ExecutionOutput{RelativePath: renderOutputRelativePath(plan.Payload.Purpose)},
 		Result:    ExecutionResult{RelativePath: ResultFilename},
 	}
-	budget, err := CompileExecutionBudget(plan.Plan.Payload)
+	budget, err := CompileExecutionBudget(plan.Payload)
 	if err != nil {
 		return ExecutionManifest{}, nil, err
 	}
 	manifest.Budget = budget
-	for _, input := range plan.Plan.Payload.Inputs {
+	for _, input := range plan.Payload.Inputs {
 		root, exists := paths.ArtifactRoots[input.ArtifactID.String()]
 		if !exists {
 			return ExecutionManifest{}, nil, fmt.Errorf("render execution input material is missing")
@@ -124,7 +124,7 @@ func CompileExecutionManifest(
 			ArtifactRoot: root, MediaRelativePath: renderInputMediaRelativePath(input.Profile),
 		})
 	}
-	for _, resource := range plan.Plan.Payload.FontResources {
+	for _, resource := range plan.Payload.FontResources {
 		root, exists := paths.Resources[resource.ResourceID]
 		if !exists {
 			return ExecutionManifest{}, nil, fmt.Errorf("render execution resource material is missing")
@@ -172,7 +172,7 @@ func (manifest ExecutionManifest) Validate() error {
 	}
 	_, digest, err := domain.CanonicalDigest("open-cut/render-plan", domain.RenderPlanSchema, manifest.Plan)
 	if err != nil || digest != manifest.PlanDigest ||
-		application.ValidateRenderPlanPayload(manifest.Plan) != nil {
+		rendercontract.ValidateRenderPlanPayload(manifest.Plan) != nil {
 		return fmt.Errorf("render execution plan digest is invalid")
 	}
 	tool := manifest.Tools[0]
@@ -215,9 +215,9 @@ func renderOutputRelativePath(purpose domain.RenderPlanPurpose) string {
 
 func renderInputMediaRelativePath(profile string) string {
 	switch profile {
-	case application.SourceProxyProfile:
+	case rendercontract.SourceProxyProfile:
 		return "proxy.webm"
-	case application.RenderInputProfile:
+	case rendercontract.RenderInputProfile:
 		return "render-input.mkv"
 	default:
 		return ""

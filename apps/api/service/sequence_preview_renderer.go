@@ -141,7 +141,7 @@ func (renderer *ExternalSequencePreviewRenderer) Render(
 		resourceRoots[resource.ResourceID] = root
 	}
 	execution, executionBytes, err := renderengine.CompileExecutionManifest(
-		plan, renderer.identity, renderer.closure,
+		plan.Plan, renderer.identity, renderer.closure,
 		renderengine.MaterialPaths{ArtifactRoots: artifactRoots, Resources: resourceRoots},
 	)
 	if err != nil {

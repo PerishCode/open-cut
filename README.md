@@ -221,7 +221,12 @@ from phase duration.
 Each native CI lane publishes these JSON reports in a separate lightweight
 `open-cut-timing-<target>` artifact and renders them in the job summary. Its
 cache report distinguishes an exact key hit, a
-restore-prefix fallback, and a miss; the media reports independently show
+restore-prefix fallback, a miss, and `not-needed` when an exact published
+closure makes colder inputs irrelevant. The workflow restores the published
+closure first; only a fallback or miss restores source archives and the C tree
+and installs native compiler prerequisites. This keeps a normal product/UI
+change from downloading multi-gigabyte build material that `pack` will never
+inspect. The media reports independently show
 whether the restored closure and compiled C tree were actually reused. Compare
 the same target and cache cohort before attributing a duration change to code.
 An app artifact check that opts into generic timing also emits
@@ -239,9 +244,10 @@ The media, Whisper, and app artifact-check reports expose this as
 The CI C-tree cache is a sequence of validated producer generations below one
 exact build-identity prefix. A restored generation is only a reuse hint:
 `EnsureTree` still checks the embedded compiler/build-logic stamp and every
-required output. CI saves a new generation only when the media timing report
-states `c-build-tree=rebuilt`; a published-closure fast path records
-`not-inspected` and can never promote an unchecked fallback tree. Read either
+required output. CI consults it only after the published closure fails exact
+reuse, and saves a new generation only when the media timing report states
+`c-build-tree=rebuilt`; a published-closure fast path records `not-inspected`
+and can never download or promote an unchecked fallback tree. Read either
 decision without parsing report JSON by hand:
 
 ```sh

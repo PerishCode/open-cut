@@ -153,12 +153,6 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
-      - name: Install Linux media build prerequisites
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes nasm
       - name: Build control CLI from checkout
         shell: bash
         run: go build -trimpath -o "${{ matrix.control }}" ./cmd/oc-control
@@ -173,8 +167,24 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           ARCH: ${{ matrix.arch }}
         run: bash .github/scripts/media-cache-keys.sh
-      - name: Restore pinned media source archives
+      - name: Restore verified media toolchain closure
         if: github.event_name != 'release' && github.event_name != 'schedule'
+        id: media_closure_restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          # The exact published closure is sufficient for the full hot pack
+          # path. Restore it first so a normal product/UI edit does not download
+          # source archives or a multi-gigabyte C build tree that pack will
+          # never inspect.
+          path: apps/api/dist/sidecar
+          key: ${{ steps.media_cache.outputs.closure-key }}
+          restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
+      - name: Restore pinned media source archives
+        if: >-
+          github.event_name != 'release' &&
+          github.event_name != 'schedule' &&
+          steps.media_closure_restore.outputs.cache-hit != 'true'
         id: media_source_restore
         uses: actions/cache/restore@v4
         continue-on-error: true
@@ -191,7 +201,10 @@ jobs:
           key: ${{ steps.media_cache.outputs.source-key }}
           restore-keys: ${{ steps.media_cache.outputs.source-prefix }}
       - name: Restore compiled media C tree
-        if: github.event_name != 'release' && github.event_name != 'schedule'
+        if: >-
+          github.event_name != 'release' &&
+          github.event_name != 'schedule' &&
+          steps.media_closure_restore.outputs.cache-hit != 'true'
         id: media_cbuild_restore
         uses: actions/cache/restore@v4
         continue-on-error: true
@@ -208,15 +221,12 @@ jobs:
             !.tmp/oc-control/media-toolchain/*/build/renderer-relink-kit
           key: ${{ steps.media_cache.outputs.cbuild-key }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ${{ steps.media_cache.outputs.cbuild-key }}-
-      - name: Restore verified media toolchain closure
-        if: github.event_name != 'release' && github.event_name != 'schedule'
-        id: media_closure_restore
-        uses: actions/cache/restore@v4
-        continue-on-error: true
-        with:
-          path: apps/api/dist/sidecar
-          key: ${{ steps.media_cache.outputs.closure-key }}
-          restore-keys: ${{ steps.media_cache.outputs.closure-prefix }}
+      - name: Install Linux media build prerequisites
+        if: matrix.platform == 'linux' && steps.media_closure_restore.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nasm
       - name: Select Windows media build prerequisites
         if: matrix.platform == 'win'
         id: windows_media_prerequisites
@@ -293,6 +303,12 @@ jobs:
         shell: bash
         continue-on-error: true
         run: |
+          source_cache_hit="${{ steps.media_source_restore.outputs.cache-hit }}"
+          c_build_cache_hit="${{ steps.media_cbuild_restore.outputs.cache-hit }}"
+          if [ "${{ steps.media_closure_restore.outputs.cache-hit }}" = "true" ]; then
+            source_cache_hit="not-needed"
+            c_build_cache_hit="not-needed"
+          fi
           "$CONTROL" timing cache-report \
             --output "$TIMING_ROOT/cache-restore.json" \
             --target "$TARGET" \
@@ -302,11 +318,11 @@ jobs:
             --attribute "media-sources-restore-outcome=${{ steps.media_source_restore.outcome }}" \
             --attribute "media-c-build-restore-outcome=${{ steps.media_cbuild_restore.outcome }}" \
             --attribute "media-closure-restore-outcome=${{ steps.media_closure_restore.outcome }}" \
-            --cache "media-sources,${{ steps.media_source_restore.outputs.cache-primary-key }},${{ steps.media_source_restore.outputs.cache-matched-key }},${{ steps.media_source_restore.outputs.cache-hit }}" \
-            --cache "media-c-build,${{ steps.media_cbuild_restore.outputs.cache-primary-key }},${{ steps.media_cbuild_restore.outputs.cache-matched-key }},${{ steps.media_cbuild_restore.outputs.cache-hit }}" \
+            --cache "media-sources,${{ steps.media_source_restore.outputs.cache-primary-key }},${{ steps.media_source_restore.outputs.cache-matched-key }},$source_cache_hit" \
+            --cache "media-c-build,${{ steps.media_cbuild_restore.outputs.cache-primary-key }},${{ steps.media_cbuild_restore.outputs.cache-matched-key }},$c_build_cache_hit" \
             --cache "media-closure,${{ steps.media_closure_restore.outputs.cache-primary-key }},${{ steps.media_closure_restore.outputs.cache-matched-key }},${{ steps.media_closure_restore.outputs.cache-hit }}"
       - name: Save pinned media source archives
-        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'pull_request') && steps.media_source_restore.outputs.cache-hit != 'true' }}
+        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'pull_request') && steps.media_closure_restore.outputs.cache-hit != 'true' && steps.media_source_restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
@@ -472,7 +488,7 @@ jobs:
         timeout-minutes: 20
         run: |
           set -euo pipefail
-          model="$(ls ../../.tmp/ci/transcription-model/*.partial 2>/dev/null | head -1 || true)"
+          model="$(find ../../.tmp/ci/transcription-model -maxdepth 1 -type f -name '*.partial' -print -quit 2>/dev/null || true)"
           if [ -z "$model" ]; then
             echo "pinned transcription model unavailable; the Creator transcription test will skip"
           else

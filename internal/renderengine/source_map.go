@@ -11,8 +11,8 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
@@ -72,7 +72,7 @@ func OpenSourceMap(filename string, expectedDigest domain.Digest) (*SourceMap, e
 		return failure(fmt.Errorf("source proxy time map header is invalid"))
 	}
 	count := binary.BigEndian.Uint64(header[8:])
-	if count == 0 || count > application.MaximumSourceProxyFrames ||
+	if count == 0 || count > rendercontract.MaximumSourceProxyFrames ||
 		count > uint64((math.MaxInt64-proxyTimeMapHeaderSize)/proxyTimeMapRecordSize) ||
 		info.Size() != proxyTimeMapHeaderSize+int64(count)*proxyTimeMapRecordSize {
 		return failure(fmt.Errorf("source proxy time map count is invalid"))
@@ -242,7 +242,7 @@ func (tracker *DecodeTraversalTracker) BeginRun() error {
 }
 
 func (tracker *DecodeTraversalTracker) Observe(ordinal uint64) error {
-	if tracker == nil || !tracker.runStarted || ordinal >= application.MaximumSourceProxyFrames {
+	if tracker == nil || !tracker.runStarted || ordinal >= rendercontract.MaximumSourceProxyFrames {
 		return fmt.Errorf("decode traversal observation is invalid")
 	}
 	var additional uint64

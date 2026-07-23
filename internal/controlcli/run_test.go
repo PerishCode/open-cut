@@ -122,7 +122,7 @@ func TestTimingDecisionReadsOneExactValue(t *testing.T) {
 	}
 }
 
-func TestTimingCacheReportClassifiesExactFallbackAndMiss(t *testing.T) {
+func TestTimingCacheReportClassifiesExactFallbackMissAndNotNeeded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache.json")
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), []string{
@@ -131,6 +131,7 @@ func TestTimingCacheReportClassifiesExactFallbackAndMiss(t *testing.T) {
 		"--cache", "source,source-a,source-a,true",
 		"--cache", "c-build,cbuild-b,cbuild-a,false",
 		"--cache", "closure,closure-b,,false",
+		"--cache", "cold-inputs,,,not-needed",
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -139,9 +140,9 @@ func TestTimingCacheReportClassifiesExactFallbackAndMiss(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Attributes["event"] != "pull_request" || len(report.Decisions) != 3 ||
+	if report.Attributes["event"] != "pull_request" || len(report.Decisions) != 4 ||
 		report.Decisions[0].Value != "exact" || report.Decisions[1].Value != "fallback" ||
-		report.Decisions[2].Value != "miss" {
+		report.Decisions[2].Value != "miss" || report.Decisions[3].Value != "not-needed" {
 		t.Fatalf("report=%+v", report)
 	}
 }

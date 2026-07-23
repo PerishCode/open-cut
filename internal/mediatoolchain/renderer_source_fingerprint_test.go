@@ -2,7 +2,6 @@ package mediatoolchain
 
 import (
 	"context"
-	"github.com/PerishCode/open-cut/internal/toolchainclosure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,9 +26,7 @@ func fingerprintRepositoryRoot(t *testing.T) string {
 // dependencies that view must include.
 func TestRendererFingerprintCoversItsTransitiveDependencies(t *testing.T) {
 	root := fingerprintRepositoryRoot(t)
-	entries, err := toolchainclosure.FingerprintInputs(
-		context.Background(), root, RendererBuildTag, RendererBuildPackage,
-	)
+	entries, err := rendererSourceFingerprintInputs(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +36,7 @@ func TestRendererFingerprintCoversItsTransitiveDependencies(t *testing.T) {
 		"file\x00internal/rendernative/",
 		"file\x00cmd/open-cut-render/",
 		"file\x00product/domain/",
-		"file\x00product/application/",
+		"file\x00product/rendercontract/",
 		"file\x00lifecycle/",
 		"file\x00internal/mediaclosure/",
 		"file\x00utils/target/",
@@ -55,6 +52,53 @@ func TestRendererFingerprintCoversItsTransitiveDependencies(t *testing.T) {
 		if !found {
 			t.Fatalf("renderer fingerprint input set omits %q", strings.ReplaceAll(required, "\x00", " "))
 		}
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry, "file\x00product/application/") {
+			t.Fatalf(
+				"renderer fingerprint includes application orchestration: %q",
+				strings.ReplaceAll(entry, "\x00", " "),
+			)
+		}
+	}
+	for index := 1; index < len(entries); index++ {
+		if entries[index] == entries[index-1] {
+			t.Fatalf("renderer fingerprint contains duplicate input %q", entries[index])
+		}
+	}
+}
+
+func TestRendererFingerprintPinsTheNativeCGOClosure(t *testing.T) {
+	root := fingerprintRepositoryRoot(t)
+	ctx := context.Background()
+	t.Setenv("CGO_ENABLED", "0")
+	disabled, err := RendererSourceFingerprint(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CGO_ENABLED", "1")
+	enabled, err := RendererSourceFingerprint(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled != enabled {
+		t.Fatalf("ambient CGO_ENABLED changed renderer identity: %q vs %q", disabled, enabled)
+	}
+	entries, err := rendererSourceFingerprintInputs(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	native, stub := false, false
+	for _, entry := range entries {
+		native = native || strings.HasPrefix(
+			entry, "file\x00internal/rendernative/backend_native.go\x00",
+		)
+		stub = stub || strings.HasPrefix(
+			entry, "file\x00internal/rendernative/backend_stub.go\x00",
+		)
+	}
+	if !native || stub {
+		t.Fatalf("renderer identity did not resolve the native CGO implementation: native=%t stub=%t", native, stub)
 	}
 }
 

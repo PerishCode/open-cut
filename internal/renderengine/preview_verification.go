@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 type SequencePreviewProbeDocument struct {
@@ -162,8 +162,8 @@ func (collector *AudioSampleCollector) consume(value []byte) {
 		return
 	}
 	count, err := strconv.ParseUint(text, 10, 32)
-	if err != nil || count == 0 || count > application.MaximumSequencePreviewAudioSamples ||
-		collector.samples > application.MaximumSequencePreviewAudioSamples-count {
+	if err != nil || count == 0 || count > rendercontract.MaximumPreviewAudioSamples ||
+		collector.samples > rendercontract.MaximumPreviewAudioSamples-count {
 		collector.err = fmt.Errorf("preview audio sample report is invalid")
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 	MaximumRenderInputFrames       = MaximumSourceProxyFrames
 	MaximumRenderInputAudioSamples = MaximumSourceProxyAudioSamples
 	MaximumRenderInputArtifactSize = 1 << 40
-	MaximumRenderMaterialDimension = 16_384
+	MaximumRenderMaterialDimension = rendercontract.MaximumRenderDimension
 )
 
 type RenderInputArtifactFile struct {

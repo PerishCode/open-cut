@@ -56,7 +56,7 @@ func runRendererHelperSmoke(
 		return RendererSmokeObservation{}, err
 	}
 	manifest, encoded, err := renderengine.CompileExecutionManifest(
-		plan,
+		plan.Plan,
 		application.SequencePreviewRendererIdentity{
 			Version: application.SequencePreviewRendererV1 + "@relink-smoke", Target: buildTarget.String(),
 		},

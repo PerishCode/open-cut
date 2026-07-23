@@ -20,7 +20,7 @@ func TestExecutionManifestClosesPlanAndMaterialPaths(t *testing.T) {
 	identity := application.SequencePreviewRendererIdentity{
 		Version: "fixture-renderer-v1", Target: target.Host().String(),
 	}
-	manifest, encoded, err := CompileExecutionManifest(plan, identity, executionClosure(t), MaterialPaths{
+	manifest, encoded, err := CompileExecutionManifest(plan.Plan, identity, executionClosure(t), MaterialPaths{
 		ArtifactRoots: map[string]string{},
 		Resources:     map[string]string{"font:noto-caption-bundle": fontRoot},
 	})
@@ -67,7 +67,7 @@ func TestExecutionManifestClosesExportPurposeAndOutput(t *testing.T) {
 	plan := captionRenderPlanFor(t, domain.DefaultSequenceFormat(), true)
 	fontRoot := t.TempDir()
 	manifest, encoded, err := CompileExecutionManifest(
-		plan,
+		plan.Plan,
 		application.SequencePreviewRendererIdentity{
 			Version: "fixture-export-renderer-v1", Target: target.Host().String(),
 		},
@@ -95,13 +95,13 @@ func TestExecutionManifestRejectsMissingExtraAndNonDirectoryMaterial(t *testing.
 		Version: "fixture-renderer-v1", Target: target.Host().String(),
 	}
 	closure := executionClosure(t)
-	if _, _, err := CompileExecutionManifest(plan, identity, closure, MaterialPaths{
+	if _, _, err := CompileExecutionManifest(plan.Plan, identity, closure, MaterialPaths{
 		ArtifactRoots: map[string]string{}, Resources: map[string]string{},
 	}); err == nil {
 		t.Fatal("missing resource root was accepted")
 	}
 	fontRoot := t.TempDir()
-	if _, _, err := CompileExecutionManifest(plan, identity, closure, MaterialPaths{
+	if _, _, err := CompileExecutionManifest(plan.Plan, identity, closure, MaterialPaths{
 		ArtifactRoots: map[string]string{"extra": fontRoot},
 		Resources:     map[string]string{"font:noto-caption-bundle": fontRoot},
 	}); err == nil {
