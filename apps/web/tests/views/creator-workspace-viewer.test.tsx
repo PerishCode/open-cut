@@ -25,26 +25,46 @@ describe("SequencePreviewSurface", () => {
 
   it("keeps exact sequence transport persistently visible outside the media content", async () => {
     const controller = sequenceController();
-    const view = render(<SequencePreviewSurface controller={controller} snapshot={readySnapshot()} />);
+    const view = render(
+      <SequencePreviewSurface canvasLabel="1920 × 1080" controller={controller} snapshot={readySnapshot()} />,
+    );
 
     const transport = screen.getByRole("region", { name: "Sequence transport" });
     const player = screen.getByLabelText("Main Sequence revision 14");
     expect(player.nextElementSibling?.contains(transport)).toBe(true);
     expect(within(transport).getByText("SEQUENCE r14 · 00:08.00 / 00:09.00")).toBeTruthy();
+    expect(within(transport).getByText(/1920 × 1080 · 30 FPS/)).toBeTruthy();
     expect(player.getAttribute("controls")).toBeNull();
+    expect(transport.getAttribute("aria-keyshortcuts")).toBe("Home ArrowLeft Space ArrowRight");
+    expect(transport.tabIndex).toBe(0);
 
-    fireEvent.click(within(transport).getByRole("button", { name: "Go to start" }));
-    fireEvent.click(within(transport).getByRole("button", { name: "Previous frame" }));
+    fireEvent.click(within(transport).getByRole("button", { name: "Start" }));
+    fireEvent.click(within(transport).getByRole("button", { name: "−1 frame" }));
     fireEvent.click(within(transport).getByRole("button", { name: "Play" }));
-    fireEvent.click(within(transport).getByRole("button", { name: "Next frame" }));
+    fireEvent.click(within(transport).getByRole("button", { name: "+1 frame" }));
 
     await waitFor(() => expect(controller.seekToStart).toHaveBeenCalledTimes(1));
     expect(controller.stepFrame).toHaveBeenNthCalledWith(1, -1);
     expect(controller.stepFrame).toHaveBeenNthCalledWith(2, 1);
     expect(controller.togglePlayback).toHaveBeenCalledTimes(1);
+    controller.seekToStart.mockClear();
+    controller.stepFrame.mockClear();
+    controller.togglePlayback.mockClear();
+
+    fireEvent.keyDown(transport, { key: "Home" });
+    fireEvent.keyDown(transport, { key: "ArrowLeft" });
+    fireEvent.keyDown(transport, { key: " " });
+    fireEvent.keyDown(transport, { key: "ArrowRight" });
+    await waitFor(() => expect(controller.seekToStart).toHaveBeenCalledTimes(1));
+    expect(controller.stepFrame).toHaveBeenNthCalledWith(1, -1);
+    expect(controller.stepFrame).toHaveBeenNthCalledWith(2, 1);
+    expect(controller.togglePlayback).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(within(transport).getByRole("button", { name: "Play" }), { key: " " });
+    expect(controller.togglePlayback).toHaveBeenCalledTimes(1);
 
     view.rerender(
       <SequencePreviewSurface
+        canvasLabel="1920 × 1080"
         controller={controller}
         snapshot={readySnapshot("9007199254740993", "9007199254740993")}
       />,

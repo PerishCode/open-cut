@@ -739,19 +739,17 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       title={project.name}
       viewer={
         viewerMode === "sequence" ? (
-          <Stack spacing="compact">
-            <Text tone="eyebrow">SEQUENCE · VIEWER</Text>
-            <Text>
-              {ready
-                ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}`
-                : "Preparing Sequence"}
-            </Text>
-            {sequencePreviewAvailable ? (
-              <SequencePreviewSurface controller={sequenceViewer} snapshot={sequencePreview} />
-            ) : (
-              <Text>Sequence preview is unavailable in the active product build.</Text>
-            )}
-          </Stack>
+          sequencePreviewAvailable ? (
+            <SequencePreviewSurface
+              canvasLabel={
+                ready ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}` : undefined
+              }
+              controller={sequenceViewer}
+              snapshot={sequencePreview}
+            />
+          ) : (
+            <Text>Sequence preview is unavailable in the active product build.</Text>
+          )
         ) : (
           <SourceViewerLayout
             asset={sourceAsset}

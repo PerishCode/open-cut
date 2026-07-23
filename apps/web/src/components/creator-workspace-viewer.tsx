@@ -1,6 +1,6 @@
 import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
-import { type ReactNode, useCallback, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
@@ -39,9 +39,11 @@ export function SourceViewerLayout({
 }
 
 export function SequencePreviewSurface({
+  canvasLabel,
   controller,
   snapshot,
 }: {
+  canvasLabel?: string;
   controller: SequenceViewerController;
   snapshot: SequenceViewerSnapshot;
 }) {
@@ -61,16 +63,23 @@ export function SequencePreviewSurface({
       {newerRevision ? (
         <Button onPress={() => controller.adoptRevision(newerRevision)}>Adopt available r{newerRevision}</Button>
       ) : null}
-      <SequencePreparationSurface controller={controller} preparation={snapshot.preparation} snapshot={snapshot} />
+      <SequencePreparationSurface
+        canvasLabel={canvasLabel}
+        controller={controller}
+        preparation={snapshot.preparation}
+        snapshot={snapshot}
+      />
     </Stack>
   );
 }
 
 function SequencePreparationSurface({
+  canvasLabel,
   controller,
   preparation,
   snapshot,
 }: {
+  canvasLabel?: string;
   controller: SequenceViewerController;
   preparation: SequencePreviewPreparation | undefined;
   snapshot: SequenceViewerSnapshot;
@@ -85,6 +94,32 @@ function SequencePreparationSurface({
     void Promise.resolve()
       .then(action)
       .catch((value) => setTransportError(value instanceof Error ? value : new Error(String(value))));
+  };
+  const onTransportKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    const action =
+      event.key === "Home"
+        ? () => controller.seekToStart()
+        : event.key === "ArrowLeft"
+          ? () => controller.stepFrame(-1)
+          : event.key === " "
+            ? () => controller.togglePlayback()
+            : event.key === "ArrowRight"
+              ? () => controller.stepFrame(1)
+              : undefined;
+    if (!action) return;
+    event.preventDefault();
+    runTransport(action);
   };
   if (snapshot.status === "idle" || snapshot.status === "preparing") {
     const progress = preparation?.job ? ` · ${preparation.job.progressBasisPoints / 100}%` : "";
@@ -112,16 +147,18 @@ function SequencePreparationSurface({
   const facts = preparation.lease.facts;
   const transport = (
     <ControlStrip
-      hint={`${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      hint={`${canvasLabel ? `${canvasLabel} · ` : ""}${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      keyboardShortcuts="Home ArrowLeft Space ArrowRight"
       label="Sequence transport"
       summary={`SEQUENCE r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
+      onKeyDown={onTransportKeyDown}
     >
-      <Button onPress={() => runTransport(() => controller.seekToStart())}>Go to start</Button>
-      <Button onPress={() => runTransport(() => controller.stepFrame(-1))}>Previous frame</Button>
+      <Button onPress={() => runTransport(() => controller.seekToStart())}>Start</Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(-1))}>−1 frame</Button>
       <Button onPress={() => runTransport(() => controller.togglePlayback())}>
         {snapshot.playback === "playing" ? "Pause" : "Play"}
       </Button>
-      <Button onPress={() => runTransport(() => controller.stepFrame(1))}>Next frame</Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(1))}>+1 frame</Button>
     </ControlStrip>
   );
   return (

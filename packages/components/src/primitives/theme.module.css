@@ -490,6 +490,11 @@
   background: transparent;
 }
 
+.controlStrip:focus-visible {
+  outline: 1px solid var(--oc-accent-border-focus);
+  outline-offset: -1px;
+}
+
 .controlStripMeta {
   display: flex;
   min-width: 0;
@@ -673,53 +678,6 @@
 
 .unavailable {
   background: var(--oc-status-unavailable);
-}
-
-.tabs {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto 1fr;
-  gap: 12px;
-}
-
-.tabList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  border-bottom: 1px solid var(--oc-hairline-mid);
-  background: transparent;
-}
-
-.tab {
-  min-height: 32px;
-  padding: 7px 10px 8px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--oc-ink-dim);
-  cursor: pointer;
-  font: 600 11px / 1.2 var(--oc-font-sans);
-}
-
-.tab:hover:not(.tabActive) {
-  background: var(--oc-accent-wash-soft);
-  color: var(--oc-ink-mid);
-}
-
-.tabActive {
-  border-bottom-color: var(--oc-accent);
-  background: var(--oc-accent-wash-soft);
-  color: var(--oc-ink-strong);
-}
-
-.tab:focus-visible {
-  outline: 2px solid var(--oc-accent-border-focus);
-  outline-offset: -2px;
-}
-
-.tabPanel {
-  min-height: 0;
-  overflow: auto;
 }
 
 .emptyState {

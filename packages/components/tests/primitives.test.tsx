@@ -449,11 +449,14 @@ describe("atomic components", () => {
   });
 
   it("keeps a compact control strip near the canvas without consumer styling props", () => {
+    const onKeyDown = vi.fn();
     render(
       <ControlStrip
         hint="Choose scope and Alignment"
+        keyboardShortcuts="ArrowLeft ArrowRight"
         label="Timeline selection policy"
         summary="SELECTED · V1 · Timeline 00:00 → 00:02.10"
+        onKeyDown={onKeyDown}
       >
         <button type="button">Linked A/V</button>
         <button type="button">Preserve</button>
@@ -465,6 +468,10 @@ describe("atomic components", () => {
     expect(within(strip).getByText("Choose scope and Alignment")).toBeTruthy();
     expect(within(strip).getByRole("button", { name: "Linked A/V" })).toBeTruthy();
     expect(within(strip).getByRole("button", { name: "Preserve" })).toBeTruthy();
+    expect(strip.getAttribute("aria-keyshortcuts")).toBe("ArrowLeft ArrowRight");
+    expect(strip.tabIndex).toBe(0);
+    fireEvent.keyDown(strip, { key: "ArrowLeft" });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
   it("renders the policy accessory inside the same Timeline editor unit as the canvas", () => {
