@@ -122,4 +122,41 @@ describe("Creator Agent workspace context", () => {
     expect(result.attachment).toEqual(captionContext(caption));
     expect(result.notice).toContain("receipt references r5; current workspace is r6");
   });
+
+  it("routes current Narrative document and node receipts to the Story surface", () => {
+    const narrative = {
+      documentId: id(509),
+      documentRevision: revisionString("8"),
+      nodes: [node],
+    } as never;
+    const documentIntent = workspaceFocusIntent({
+      kind: "narrative-document",
+      id: id(509),
+      revision: revisionString("7"),
+    });
+    const nodeIntent = workspaceFocusIntent({
+      kind: "narrative-node",
+      id: id(502),
+      revision: revisionString("2"),
+    });
+    expect(documentIntent).toBeDefined();
+    expect(nodeIntent).toBeDefined();
+    if (!documentIntent || !nodeIntent) throw new Error("Narrative focus intent is missing");
+
+    const documentResult = resolveWorkspaceFocus(documentIntent, {
+      assets: [],
+      narrative,
+      tracks: [],
+    });
+    const nodeResult = resolveWorkspaceFocus(nodeIntent, {
+      assets: [],
+      narrative,
+      tracks: [],
+    });
+
+    expect(documentResult.sourceSurface).toBe("story");
+    expect(documentResult.notice).toContain("receipt references r7; current workspace is r8");
+    expect(nodeResult.sourceSurface).toBe("story");
+    expect(nodeResult.attachment).toEqual(narrativeContext(node));
+  });
 });

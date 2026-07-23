@@ -263,6 +263,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       if (result.assetId) {
         setSelectedAssetId(result.assetId);
       }
+      if (result.sourceSurface) setSourcePanel(`source-${result.sourceSurface}`);
       const attachment = result.attachment;
       if (attachment) setWorkspaceSelection((current) => includeWorkspaceSelection(current, attachment));
       return result.notice;

@@ -1,4 +1,13 @@
-import { Button, PanelDock, Stack, Text, TextAreaField } from "@open-cut/components";
+import {
+  Button,
+  ControlStrip,
+  PanelDock,
+  ResourceCard,
+  Stack,
+  Status,
+  Text,
+  TextAreaField,
+} from "@open-cut/components";
 import {
   type AgentAvailability,
   type AgentContextAttachment,
@@ -353,39 +362,50 @@ export function CreatorAgentPane({
       state.selected.status === "cancelled"
     : false;
   const canSubmit = state.availability?.state === "available" && !state.submitting && (!state.selected || canContinue);
+  const latestOutcome = [...state.receipts].reverse().find((receipt) => receipt.class === "outcome");
 
   return (
     <PanelDock
       footer={
         <Stack spacing="compact">
-          {onAddTimelineContext || onAddPlayheadContext ? <Text tone="eyebrow">QUICK CONTEXT</Text> : null}
-          {onAddTimelineContext ? (
-            <Button disabled={!canSubmit} onPress={onAddTimelineContext}>
-              Add visible timeline
-            </Button>
+          {onAddTimelineContext || onAddPlayheadContext ? (
+            <ControlStrip label="Quick Agent context" summary="QUICK CONTEXT">
+              {onAddTimelineContext ? (
+                <Button disabled={!canSubmit} onPress={onAddTimelineContext}>
+                  Add visible timeline
+                </Button>
+              ) : null}
+              {onAddPlayheadContext ? (
+                <Button disabled={!canSubmit} onPress={onAddPlayheadContext}>
+                  Add playhead
+                </Button>
+              ) : null}
+            </ControlStrip>
           ) : null}
-          {onAddPlayheadContext ? (
-            <Button disabled={!canSubmit} onPress={onAddPlayheadContext}>
-              Add playhead
-            </Button>
+          {contextCandidates.length > 0 ? (
+            <ControlStrip
+              hint={contextKeys.length > 0 ? `${contextKeys.length} attached` : "Optional"}
+              label="Agent context attachments"
+              summary="@ CONTEXT"
+            >
+              {contextCandidates.map((candidate) => {
+                const selected = contextKeys.includes(candidate.key);
+                return (
+                  <Button
+                    disabled={!canSubmit}
+                    key={candidate.key}
+                    onPress={() =>
+                      setContextKeys((current) =>
+                        selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
+                      )
+                    }
+                  >
+                    {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
+                  </Button>
+                );
+              })}
+            </ControlStrip>
           ) : null}
-          {contextCandidates.length > 0 ? <Text tone="eyebrow">@ CONTEXT</Text> : null}
-          {contextCandidates.map((candidate) => {
-            const selected = contextKeys.includes(candidate.key);
-            return (
-              <Button
-                disabled={!canSubmit}
-                key={candidate.key}
-                onPress={() =>
-                  setContextKeys((current) =>
-                    selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
-                  )
-                }
-              >
-                {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
-              </Button>
-            );
-          })}
           <TextAreaField
             disabled={!canSubmit}
             label={state.selected ? "Continue this task" : "New task"}
@@ -405,11 +425,9 @@ export function CreatorAgentPane({
         </Stack>
       }
       header={
-        <Stack spacing="compact">
-          <Text tone="eyebrow">LOCAL AGENT</Text>
-          <Text>{availabilityText(state.availability)}</Text>
+        <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
           <Button disabled={state.loading || state.submitting} onPress={() => void load()}>
-            Refresh Agent
+            Refresh
           </Button>
           <Button
             disabled={state.submitting}
@@ -432,55 +450,104 @@ export function CreatorAgentPane({
           >
             New task
           </Button>
-        </Stack>
+        </ControlStrip>
       }
       label="Agent collaboration"
     >
       <Stack spacing="compact">
-        {state.runs.length > 0 ? <Text tone="eyebrow">RECENT TASKS</Text> : null}
-        {state.runs.map((run) => (
-          <Button
-            disabled={state.loading || state.submitting || run.id === state.selected?.id}
-            key={run.id}
-            onPress={() => void selectRun(run.id)}
-          >
-            {runLabel(run)}
-          </Button>
-        ))}
         {state.selected ? (
-          <Text tone="eyebrow">
-            {state.selected.status.toUpperCase()} · TURN {state.selected.currentTurn.generation}
-            {state.selected.waitingReason ? ` · ${state.selected.waitingReason}` : ""}
-          </Text>
+          <ResourceCard
+            actions={
+              active ? (
+                <>
+                  <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
+                    Stop
+                  </Button>
+                  <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
+                    Cancel task
+                  </Button>
+                </>
+              ) : !terminal ? (
+                <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
+                  Cancel task
+                </Button>
+              ) : undefined
+            }
+            details={[`${state.messages.length} durable messages · ${state.receipts.length} receipts in selected Turn`]}
+            eyebrow={`SELECTED TASK · TURN ${state.selected.currentTurn.generation}`}
+            selected
+            status={<Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>}
+            title={`Task: ${state.selected.intent}`}
+          >
+            {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
+            {terminal ? <Text>This task is closed. Choose New task to start another Run.</Text> : null}
+          </ResourceCard>
         ) : (
           <Text>Describe a new writing or editing task.</Text>
         )}
+        {latestOutcome ? (
+          <ResourceCard
+            details={outcomeDetails(latestOutcome)}
+            eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
+            status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
+            title={outcomeTitle(latestOutcome)}
+          />
+        ) : null}
+        {state.runs.length > 0 ? (
+          <ControlStrip hint={`${state.runs.length} loaded`} label="Recent Agent tasks" summary="RECENT TASKS">
+            {state.runs.map((run) => (
+              <Button
+                disabled={state.loading || state.submitting || run.id === state.selected?.id}
+                key={run.id}
+                onPress={() => void selectRun(run.id)}
+              >
+                {runLabel(run)}
+              </Button>
+            ))}
+          </ControlStrip>
+        ) : null}
+        {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
         {state.messages.map((entry) => (
-          <Stack key={entry.id} spacing="compact">
-            <Text tone="eyebrow">{entry.role === "creator" ? "YOU" : entry.role === "agent" ? "AGENT" : "SYSTEM"}</Text>
+          <ResourceCard
+            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
+            key={entry.id}
+            title={messageTitle(entry)}
+          >
             <Text>
               {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
             </Text>
-            {entry.attachments.map((attachment, index) => (
-              <Text key={`${entry.id}:attachment:${index}`}>@ {attachmentLabel(attachment)}</Text>
-            ))}
-          </Stack>
+          </ResourceCard>
         ))}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
             {state.loading ? "Loading…" : "Load more conversation"}
           </Button>
         ) : null}
-        {state.selected && state.turns.length > 0 ? <Text tone="eyebrow">TURNS</Text> : null}
-        {state.turns.map((turn) => (
-          <Button
-            disabled={state.loading || turn.id === state.selectedTurn?.id}
-            key={turn.id}
-            onPress={() => void selectTurn(turn)}
-          >
-            Turn {turn.generation} · {turn.status}
-          </Button>
-        ))}
+        {state.selected && state.turns.length > 0 ? (
+          <>
+            <Text tone="eyebrow">TURNS</Text>
+            <ControlStrip
+              hint={`${state.turns.length} loaded`}
+              label="Agent task Turns"
+              summary={
+                state.selectedTurn
+                  ? `Turn ${state.selectedTurn.generation} · ${state.selectedTurn.status}`
+                  : "Choose a Turn"
+              }
+            >
+              {state.turns.map((turn) => (
+                <Button
+                  disabled={state.loading || turn.id === state.selectedTurn?.id}
+                  key={turn.id}
+                  onPress={() => void selectTurn(turn)}
+                >
+                  Turn {turn.generation} · {turn.status}
+                </Button>
+              ))}
+            </ControlStrip>
+          </>
+        ) : null}
         {state.turnNextBefore ? (
           <Button disabled={state.loading} onPress={() => void loadOlderTurns()}>
             {state.loading ? "Loading…" : "Load older Turns"}
@@ -489,29 +556,36 @@ export function CreatorAgentPane({
         {state.selected && state.selectedTurn ? (
           <>
             <Text tone="eyebrow">COMMAND RECEIPTS · TURN {state.selectedTurn.generation}</Text>
-            {state.receipts.length === 0 ? <Text>No durable command receipts for this Turn yet.</Text> : null}
+            {state.receipts.length === 0 ? (
+              <Status state={active ? "pending" : "ready"}>
+                {active
+                  ? "Waiting for the first durable command receipt."
+                  : "No durable command receipts for this Turn."}
+              </Status>
+            ) : null}
             {state.receipts.map((receipt) => (
-              <Stack key={receipt.id} spacing="compact">
-                <Text tone="eyebrow">
-                  {receipt.class.toUpperCase()} · {receipt.status.toUpperCase()} · #{receipt.ordinal}
-                </Text>
-                <Text>{receipt.command}</Text>
-                {receipt.resultRefs.map((ref, index) => (
-                  <Stack key={`${receipt.id}:${index}`} spacing="compact">
-                    <Text>
-                      {ref.kind} · {ref.id}
-                      {ref.revision ? ` · r${ref.revision}` : ""}
-                    </Text>
-                    {onFocusReceiptRef ? (
-                      <Button
-                        onPress={() => setState((current) => ({ ...current, focusNotice: onFocusReceiptRef(ref) }))}
-                      >
-                        Focus {ref.kind}
-                      </Button>
-                    ) : null}
-                  </Stack>
-                ))}
-              </Stack>
+              <ResourceCard
+                actions={
+                  onFocusReceiptRef && receipt.resultRefs.length > 0
+                    ? receipt.resultRefs.map((ref, index) => (
+                        <Button
+                          key={`${receipt.id}:focus:${index}`}
+                          onPress={() => {
+                            const focusNotice = onFocusReceiptRef(ref);
+                            setState((current) => ({ ...current, focusNotice }));
+                          }}
+                        >
+                          Focus {ref.kind}
+                        </Button>
+                      ))
+                    : undefined
+                }
+                details={receiptDetails(receipt)}
+                eyebrow={`${receipt.class.toUpperCase()} · #${receipt.ordinal}`}
+                key={receipt.id}
+                status={<Status state={receiptStatusState(receipt)}>{receiptStatusLabel(receipt)}</Status>}
+                title={receipt.command}
+              />
             ))}
             {state.receiptNextAfter ? (
               <Button disabled={state.loading} onPress={() => void loadMoreReceipts()}>
@@ -520,25 +594,8 @@ export function CreatorAgentPane({
             ) : null}
           </>
         ) : null}
-        {state.focusNotice ? <Text>{state.focusNotice}</Text> : null}
-        {state.presentation ? <Text>{presentationText(state.presentation)}</Text> : null}
-        {active ? (
-          <>
-            <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
-              Stop
-            </Button>
-            <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-              Cancel task
-            </Button>
-          </>
-        ) : null}
-        {!active && state.selected && !terminal ? (
-          <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-            Cancel task
-          </Button>
-        ) : null}
-        {terminal ? <Text>This task is closed. Choose New task to start another Run.</Text> : null}
-        {state.error ? <Text>{state.error.message}</Text> : null}
+        {state.focusNotice ? <Status state="ready">{state.focusNotice}</Status> : null}
+        {state.error ? <Status state="unavailable">{state.error.message}</Status> : null}
       </Stack>
     </PanelDock>
   );
@@ -550,6 +607,75 @@ function selectedAttachments(
 ): readonly AgentContextAttachment[] {
   const selected = new Set(keys);
   return candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => candidate.attachment);
+}
+
+function messageRole(message: AgentConversationMessage): string {
+  if (message.role === "creator") return "YOU";
+  if (message.role === "agent") return "AGENT";
+  return "SYSTEM";
+}
+
+function messageTitle(message: AgentConversationMessage): string {
+  if (message.role === "creator") return "Your request";
+  if (message.role === "agent") return "Agent response";
+  return "Context recovery";
+}
+
+function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {
+  if (run.status === "authorizing" || run.status === "active" || run.status === "waiting") return "pending";
+  if (run.status === "failed" || run.status === "cancelled") return "unavailable";
+  return "ready";
+}
+
+function runStatusLabel(run: AgentRun): string {
+  if (run.status === "authorizing") return "Starting";
+  if (run.status === "active") return "Working";
+  if (run.status === "waiting") return "Waiting";
+  if (run.status === "paused") return run.waitingReason === "awaiting-creator" ? "Ready for you" : "Paused";
+  if (run.status === "completed") return "Completed";
+  if (run.status === "failed") return "Failed";
+  return "Cancelled";
+}
+
+function receiptStatusState(receipt: CommandReceipt): "ready" | "pending" | "unavailable" {
+  if (receipt.status === "succeeded") return "ready";
+  if (receipt.status === "accepted" || receipt.status === "waiting" || receipt.status === "approval-required") {
+    return "pending";
+  }
+  return "unavailable";
+}
+
+function receiptStatusLabel(receipt: CommandReceipt): string {
+  if (receipt.status === "approval-required") return "Approval required";
+  return `${receipt.status[0]?.toUpperCase() ?? ""}${receipt.status.slice(1)}`;
+}
+
+function outcomeTitle(receipt: CommandReceipt): string {
+  if (receipt.status === "succeeded" && receipt.projectRevision) return "Creative change committed";
+  if (receipt.status === "approval-required") return "Change needs approval";
+  if (receipt.status === "conflict") return "Change needs replanning";
+  if (receipt.status === "accepted" || receipt.status === "waiting") return "Command accepted";
+  if (receipt.status === "succeeded") return "Command succeeded";
+  return "Command did not complete";
+}
+
+function outcomeDetails(receipt: CommandReceipt): readonly string[] {
+  const details = [
+    receipt.projectRevision ? `${receipt.command} · Project r${receipt.projectRevision}` : receipt.command,
+  ];
+  const transaction = receipt.resultRefs.find((ref) => ref.kind === "transaction");
+  if (transaction) details.push(`Transaction · ${transaction.id}`);
+  return details;
+}
+
+function receiptDetails(receipt: CommandReceipt): readonly string[] {
+  const details: string[] = [];
+  if (receipt.projectRevision) details.push(`Project r${receipt.projectRevision}`);
+  if (receipt.activityCursor) details.push(`Activity #${receipt.activityCursor}`);
+  for (const ref of receipt.resultRefs) {
+    details.push(`${ref.kind} · ${ref.id}${ref.revision ? ` · r${ref.revision}` : ""}`);
+  }
+  return details;
 }
 
 function attachmentLabel(attachment: AgentContextAttachment): string {
@@ -578,8 +704,8 @@ function availabilityText(value: AgentAvailability | undefined): string {
 }
 
 function runLabel(run: AgentRun): string {
-  const intent = run.intent.length > 48 ? `${run.intent.slice(0, 47)}…` : run.intent;
-  return `${run.status.toUpperCase()} · ${intent}`;
+  const intent = run.intent.length > 28 ? `${run.intent.slice(0, 27)}…` : run.intent;
+  return `T${run.currentTurn.generation} · ${run.status.toUpperCase()} · ${intent}`;
 }
 
 function presentationText(value: AgentPresentation): string {

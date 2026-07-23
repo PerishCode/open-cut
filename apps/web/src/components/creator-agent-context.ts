@@ -58,6 +58,7 @@ export type WorkspaceFocusIntent =
 export type WorkspaceFocusResult = Readonly<{
   attachment?: AgentContextAttachment;
   assetId?: DurableID;
+  sourceSurface?: "media" | "story" | "transcript";
   notice: string;
 }>;
 
@@ -150,6 +151,14 @@ export function resolveWorkspaceFocus(
   projection: WorkspaceSelectionProjection,
 ): WorkspaceFocusResult {
   if (intent.kind === "object") {
+    if (intent.objectKind === "narrative-document") {
+      const narrative = projection.narrative;
+      if (!narrative || narrative.documentId !== intent.id) return missingFocus("Narrative document", intent.id);
+      return {
+        sourceSurface: "story",
+        notice: revisionFocusNotice("Narrative document", intent.id, intent.revision, narrative.documentRevision),
+      };
+    }
     return {
       notice: `Focused receipt ${intent.objectKind} ${intent.id}; this durable object is outside the current canvas projection.`,
     };
@@ -169,6 +178,7 @@ export function resolveWorkspaceFocus(
         ? {
             attachment: assetContext(entity),
             assetId: entity.id,
+            sourceSurface: "media",
             notice: revisionFocusNotice("Asset", entity.id, intent.revision, entity.revision),
           }
         : missingFocus("Asset", intent.id);
@@ -179,6 +189,7 @@ export function resolveWorkspaceFocus(
       const entity = narrativeEntity(node);
       return {
         attachment: narrativeContext(node),
+        sourceSurface: "story",
         notice: revisionFocusNotice("Narrative node", entity.id, intent.revision, entity.revision),
       };
     }

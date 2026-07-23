@@ -97,6 +97,7 @@ describe("CreatorAgentPane", () => {
     const firstTurnId = durableID("018f0a60-7b80-7a01-8000-000000000424");
     const secondTurnId = durableID("018f0a60-7b80-7a01-8000-000000000425");
     const receiptId = durableID("018f0a60-7b80-7a01-8000-000000000426");
+    const transactionId = durableID("018f0a60-7b80-7a01-8000-000000000427");
     const run = submission(projectId, runId, secondTurnId, "2", "Continue", "2").run;
     vi.stubGlobal(
       "fetch",
@@ -151,7 +152,12 @@ describe("CreatorAgentPane", () => {
                 inputDigest: `sha256:${"b".repeat(64)}`,
                 resultDigest: `sha256:${"c".repeat(64)}`,
                 status: "succeeded",
-                resultRefs: [{ kind: "caption", id: receiptId, revision: "1" }],
+                resultRefs: [
+                  { kind: "transaction", id: transactionId },
+                  { kind: "caption", id: receiptId, revision: "1" },
+                ],
+                projectRevision: "9",
+                activityCursor: "12",
                 createdAt: "2026-07-16T07:00:01Z",
               },
             ],
@@ -173,7 +179,11 @@ describe("CreatorAgentPane", () => {
     );
     expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Turn 1 · completed" }));
-    expect(await screen.findByText("edit apply")).toBeTruthy();
+    expect(await screen.findByText("Creative change committed")).toBeTruthy();
+    expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
+    expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
+    expect(screen.getByText("OUTCOME · #1")).toBeTruthy();
+    expect(screen.getByText("Activity #12")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Focus caption" }));
     expect(focus).toHaveBeenCalledWith({ kind: "caption", id: receiptId, revision: "1" });
     expect(await screen.findByText("Caption receipt r1; current workspace is r2.")).toBeTruthy();
