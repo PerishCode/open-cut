@@ -161,16 +161,18 @@ activity, prompt, or CLI. Multiple candidates follow declaration order; a newer
 ambient binary cannot displace an earlier qualified candidate merely because
 its version sorts higher.
 
-Each Open Cut release declares a bounded, release-qualified Codex version range
-and the exact required capabilities. A missing executable, absent login,
-unsupported version, unrecognized JSONL contract, or unavailable security
-capability is a closed `missing | unauthenticated | incompatible` adapter state.
-Open Cut never installs, upgrades, logs in, or silently falls back to another
-Agent on the creator's behalf.
+The prototype does not gate candidates by a declared Codex version range.
+Version output is a bounded safe observation only; compatibility is decided by
+the exact required prompt-input, JSONL, continuation, login, config/rule
+isolation, and inline filesystem/network permission capabilities. A missing
+executable, absent login, unrecognized protocol contract, or unavailable
+security capability is a closed `missing | unauthenticated | incompatible`
+adapter state. Open Cut never installs, upgrades, logs in, or silently falls
+back to another Agent on the creator's behalf.
 
 The Creator surface may read one safe availability projection containing only
 the stable adapter ID, closed `available | missing | unauthenticated |
-incompatible` state, prompt version, and qualified adapter version when
+incompatible` state, prompt version, and observed adapter version when
 available. Executable paths, candidate order, probe output, login material,
 credential-store details, and private home paths never enter that projection.
 
@@ -180,39 +182,44 @@ and uses the per-turn scratch directory as the process working root. User Codex
 configuration is not loaded; authentication remains owned by Codex's own
 credential store. Open Cut does not select or persist an API key, provider,
 model credential, MCP server, app, plugin, skill, hook, or arbitrary profile.
-Web search and Agent-command network are disabled for the first vertical slice.
+Web search is disabled; Agent-command network is limited to the local loopback
+names required by the stable product CLI.
 
-The adapter sets `CODEX_HOME` to a private Run-scoped directory derived below
-the plain API datadir. It never uses the user's Codex home and never stores the
-derived absolute path in Project, Run, Contracts, activity, prompt, or CLI
-state. The home contains only Open Cut's fixed adapter config/rules and
-Codex-owned native continuation material. Authentication is qualified only
-through the OS keychain/keyring; file-backed authentication is
-`unauthenticated | incompatible`, and Open Cut never copies `auth.json`.
+The host Codex process retains its existing `CODEX_HOME` solely so Codex's own
+configured credential store remains authoritative. Every Turn passes
+`--ignore-user-config` and `--ignore-rules`; Open Cut never reads, copies, or
+projects `auth.json`, keyring material, user configuration, or user rules.
+`CODEX_SQLITE_HOME` instead points to a private Run-scoped state directory below
+the plain API datadir, so native continuation does not enter the user's Codex
+state.
 
-The private home is disposable adapter cache, not Project truth. It survives API
-restart while the active Project has a non-terminal Run so exact native resume
-can work. It is removed after terminal Run transition and when the Project is
-archived, tombstoned, or purged; the durable ConversationLedger and business
-receipts remain. Missing, corrupt, or already-collected native state therefore
-causes bounded fresh recovery rather than Project damage.
+The private native state directory is disposable adapter cache, not Project
+truth. It survives API restart while the active Project has a non-terminal Run
+so exact native resume can work. It is removed after terminal Run transition and
+when the Project is archived, tombstoned, or purged; the durable
+ConversationLedger and business receipts remain. Missing, corrupt, or
+already-collected native state therefore causes bounded fresh recovery rather
+than Project damage.
 
-The Codex command sandbox uses an Open Cut-owned least-privilege permission
-profile: only platform-minimal runtime files are readable and the current
-scratch root is writable. A product-owned exact-prefix exec-policy exception
-allows only the installed stable `open-cut` resolver to execute outside that
-command sandbox. The exception contains no Open Cut command tree or argument
-schema. It lets the resolver and its active payload absorb lifecycle discovery,
-signed CLI authorization, and dynamic loopback transport while every other
-Agent command remains unable to read product roots or contact loopback services.
+The Codex command sandbox uses an Open Cut-owned inline least-privilege
+permission profile: only platform-minimal runtime files and the stable resolver
+directory are readable, and the current scratch root is writable. Network uses
+Codex limited mode with only `127.0.0.1` and `localhost` allowed, no upstream
+proxy, and no local binding. This lets the stable resolver and its active
+payload absorb lifecycle discovery, signed CLI authorization, and dynamic
+loopback transport. Direct API access remains unauthorized because the Agent
+receives no endpoint, token, challenge, signature, or credential material.
 
-That policy is materialized only in the isolated trusted scratch config layer.
-Existing system or managed Codex policy may narrow or forbid it; Open Cut never
-weakens a more restrictive machine policy. If the qualified Codex release
-cannot load the filesystem profile and exact resolver exception, the adapter is
-`incompatible`. Broad command network, a general loopback allowlist,
-`danger-full-access`, an approval bypass, and an arbitrary shell allow rule are
-not fallback modes.
+That policy is supplied as fixed CLI overrides after user config and rules have
+been disabled. Existing system or managed Codex policy may narrow or forbid it;
+Open Cut never weakens a more restrictive machine policy. If the candidate
+Codex release cannot ignore user config/rules or load the inline filesystem and
+limited-network profile, the adapter is `incompatible`. Broad command network,
+non-loopback domains, local listeners, `danger-full-access`, an approval bypass,
+and an arbitrary shell allow rule are not fallback modes. The prototype treats
+host-wide loopback visibility as explicit security debt; product authorization
+still fails closed, and a future command-scoped transport can narrow this
+without changing the Agent-facing CLI.
 
 The child command environment seen by Codex tools contains only the stable
 resolver-first `PATH`, the four scoped `OPEN_CUT_*` context values that apply,
@@ -225,6 +232,12 @@ agent-message text and safe typed activity/error states, and treats unknown or
 malformed required events as an adapter failure. Raw reasoning, command text,
 command output, file paths, environment, token usage, and stderr never become an
 Open Cut receipt or durable creative evidence.
+
+Native terminal JSONL is not itself the durable Turn terminal signal. The API
+first commits `FinishAgentBridgeTurn`, then publishes the non-replayable
+terminal presentation event and closes that stream. Creator reconciliation
+therefore cannot observe the pre-finalized Run after presentation says the Turn
+ended.
 
 A later AgentTurn may attempt `codex exec resume` with the exact stored thread
 identity, the new prompt on stdin, the new scratch working root, and the same

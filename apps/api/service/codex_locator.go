@@ -3,26 +3,22 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/product/application"
 )
 
 const (
-	qualifiedCodexMajor       = 0
-	qualifiedCodexMinor       = 144
 	maximumAgentProbeBytes    = 64 * 1024
 	maximumAgentProbeDuration = 10 * time.Second
 )
@@ -140,31 +136,37 @@ func LocateCodexCLI(
 	environment := codexHostEnvironment(
 		config.Environment, paths.Home, filepath.Dir(config.StableCLIExecutable),
 	)
+	isolatedEnvironment := codexHostEnvironment(
+		append(append([]string(nil), config.Environment...), "CODEX_HOME="+paths.Home),
+		paths.Home,
+		filepath.Dir(config.StableCLIExecutable),
+	)
 	found, unauthenticated := false, false
 	for _, candidate := range qualifiedAgentCandidates(config.Candidates) {
 		found = true
 		versionOutput, probeErr := probe.Run(ctx, AgentProbeInvocation{
-			Executable: candidate, Args: []string{"--version"}, Env: environment,
+			Executable: candidate, Args: []string{"--version"}, Env: isolatedEnvironment,
 		})
-		version, compatible := parseQualifiedCodexVersion(string(versionOutput))
+		version, compatible := parseObservedCodexVersion(string(versionOutput))
 		if probeErr != nil || !compatible {
+			continue
+		}
+		execHelp, probeErr := probe.Run(ctx, AgentProbeInvocation{
+			Executable: candidate, Args: []string{"exec", "--help"}, Env: isolatedEnvironment,
+		})
+		if probeErr != nil || !supportsCodexExecIsolation(execHelp) {
 			continue
 		}
 		if _, probeErr = probe.Run(ctx, AgentProbeInvocation{
 			Executable: candidate,
-			Args:       []string{"debug", "prompt-input", "open-cut adapter qualification"}, Env: environment,
-		}); probeErr != nil {
-			continue
-		}
-		ruleOutput, probeErr := probe.Run(ctx, AgentProbeInvocation{
-			Executable: candidate,
 			Args: []string{
-				"execpolicy", "check", "--rules", filepath.Join(paths.Home, "rules", "open-cut.rules"),
-				"--", filepath.Base(config.StableCLIExecutable), "--help",
+				"debug", "prompt-input",
+				"-c", "default_permissions=\"open-cut-agent\"",
+				"-c", "permissions.open-cut-agent=" + codexPermissionProfile(filepath.Dir(config.StableCLIExecutable)),
+				"open-cut adapter qualification",
 			},
-			Env: environment,
-		})
-		if probeErr != nil || !allowedCodexRuleProbe(ruleOutput) {
+			Env: isolatedEnvironment,
+		}); probeErr != nil {
 			continue
 		}
 		if _, probeErr = probe.Run(ctx, AgentProbeInvocation{
@@ -197,18 +199,10 @@ func (store *CodexRuntimeStore) PrepareQualification() (CodexQualificationPaths,
 		return CodexQualificationPaths{}, ErrAgentAdapterIncompatible
 	}
 	home := filepath.Join(store.dataDir, "agent", codexAdapterDirectory, "qualification", "home")
-	for _, root := range []string{home, filepath.Join(home, "rules")} {
-		if err := os.MkdirAll(root, 0o700); err != nil {
-			return CodexQualificationPaths{}, err
-		}
-		if err := os.Chmod(root, 0o700); err != nil {
-			return CodexQualificationPaths{}, err
-		}
-	}
-	if err := replacePrivateFile(filepath.Join(home, "config.toml"), store.config()); err != nil {
+	if err := os.MkdirAll(home, 0o700); err != nil {
 		return CodexQualificationPaths{}, err
 	}
-	if err := replacePrivateFile(filepath.Join(home, "rules", "open-cut.rules"), store.rules()); err != nil {
+	if err := os.Chmod(home, 0o700); err != nil {
 		return CodexQualificationPaths{}, err
 	}
 	return CodexQualificationPaths{Home: home}, nil
@@ -273,30 +267,31 @@ func resolveAgentCandidate(value string) (string, error) {
 	return resolved, nil
 }
 
-func parseQualifiedCodexVersion(value string) (string, bool) {
+func parseObservedCodexVersion(value string) (string, bool) {
 	fields := strings.Fields(strings.TrimSpace(value))
 	if len(fields) != 2 || fields[0] != "codex-cli" {
 		return "", false
 	}
-	parts := strings.Split(fields[1], ".")
-	if len(parts) != 3 {
+	version := "codex-cli " + fields[1]
+	if len(version) > 128 {
 		return "", false
 	}
-	major, majorErr := strconv.Atoi(parts[0])
-	minor, minorErr := strconv.Atoi(parts[1])
-	patch, patchErr := strconv.Atoi(parts[2])
-	if majorErr != nil || minorErr != nil || patchErr != nil || patch < 0 ||
-		major != qualifiedCodexMajor || minor != qualifiedCodexMinor {
-		return "", false
+	for _, value := range fields[1] {
+		if unicode.IsControl(value) {
+			return "", false
+		}
 	}
-	return fmt.Sprintf("codex-cli %d.%d.%d", major, minor, patch), true
+	return version, true
 }
 
-func allowedCodexRuleProbe(value []byte) bool {
-	var output struct {
-		Decision string `json:"decision"`
+func supportsCodexExecIsolation(value []byte) bool {
+	output := string(value)
+	for _, capability := range []string{"--ignore-user-config", "--ignore-rules"} {
+		if !strings.Contains(output, capability) {
+			return false
+		}
 	}
-	return json.Unmarshal(value, &output) == nil && output.Decision == "allow"
+	return true
 }
 
 type UnavailableAgentAdapter struct {

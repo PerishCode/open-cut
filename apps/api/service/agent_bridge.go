@@ -278,6 +278,15 @@ func (service *AgentBridgeService) finish(run application.AgentBridgeRun, outcom
 	}); err != nil {
 		return
 	}
+	presentation := AgentPresentationTurnFailed
+	if outcome == application.AgentBridgeRuntimeCompleted {
+		presentation = AgentPresentationTurnCompleted
+	}
+	_ = service.publisher.PublishAgentPresentation(
+		run.ID,
+		run.CurrentTurn.ID,
+		AgentPresentationEvent{Kind: presentation},
+	)
 	current, err := service.repository.ShowAgentBridge(ctx, run.ProjectID, run.ID)
 	if err == nil && terminalAgentBridgeRun(current.Status) {
 		service.collectRun(run.ID)
@@ -338,7 +347,7 @@ func agentBridgePrompts(invocation application.AgentBridgeInvocation) (string, s
 		}
 		messages = append(messages, agentBridgePromptMessage{
 			TurnID: message.TurnID.String(), Role: string(message.Role), Text: message.Text,
-			Attachments: append([]application.AgentContextAttachment(nil), message.Attachments...),
+			Attachments: append([]application.AgentContextAttachment{}, message.Attachments...),
 		})
 	}
 	base := agentBridgePrompt{
@@ -410,6 +419,9 @@ func (observer *agentBridgeObserver) ObserveAgentPresentation(
 	_ context.Context,
 	value AgentPresentationEvent,
 ) error {
+	if value.Kind == AgentPresentationTurnCompleted || value.Kind == AgentPresentationTurnFailed {
+		return nil
+	}
 	return observer.service.publisher.PublishAgentPresentation(
 		observer.run.ID, observer.run.CurrentTurn.ID, value,
 	)

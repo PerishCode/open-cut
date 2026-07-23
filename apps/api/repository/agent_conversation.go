@@ -127,6 +127,7 @@ FROM agent_conversation_messages WHERE turn_id = ? AND role = 'agent'`, message.
 	if err := tx.Commit(); err != nil {
 		return application.AgentConversationMessage{}, err
 	}
+	message.Attachments = []application.AgentContextAttachment{}
 	return message, nil
 }
 

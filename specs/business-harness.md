@@ -374,9 +374,10 @@ uses a published protocol-compliance and creative-completion threshold rather
 than one stochastic pass.
 
 The first-release matrix contains only `codex-cli-v1` plus the deterministic
-standalone CLI driver. It proves the qualified Codex version range, stdin prompt,
-JSONL framing, scratch-only permission profile, exact stable-resolver exec-policy
-exception, absence of general command network, native-session reset/resume, and
+standalone CLI driver. It records the observed Codex version and proves stdin
+prompt, JSONL framing, user config/rule isolation, scratch-only inline
+permission profile, stable-resolver-only `PATH`, loopback-only limited network
+with direct API authorization rejection, native-session reset/resume, and
 process-tree cancellation on every supported target. Arbitrary executable
 templates are not a qualification surface.
 
