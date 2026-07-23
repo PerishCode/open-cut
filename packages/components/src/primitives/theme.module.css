@@ -370,6 +370,10 @@
   box-shadow: 0 -12px 28px rgb(0 0 0 / 6%);
 }
 
+.panelDockFooter > .stackCompact {
+  gap: 12px;
+}
+
 .eyebrow,
 .body,
 .heading {

@@ -438,7 +438,7 @@ export function CreatorAgentPane({
                 ? "Tell the Agent what to write or change…"
                 : "Wait for this Turn to finish."
             }
-            rows={5}
+            rows={3}
             value={message}
             onChange={setMessage}
             onKeyDown={(event) => {
