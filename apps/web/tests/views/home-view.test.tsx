@@ -538,11 +538,11 @@ describe("HomeView", () => {
     expect(screen.getByRole("tab", { name: "Transcript" }).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("A precise opening line.")).toBeTruthy();
     expect(screen.getByText("A precise opening line. → A specific opening line.")).toBeTruthy();
-    expect(screen.getByText("en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
+    expect(screen.getByText("opening.mov · en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Inspect transcript 1" }));
     expect(await screen.findByText("An alternate recognition.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make this the Creator default" }));
-    expect(await screen.findByText("en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
+    expect(await screen.findByText("opening.mov · en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select token 1 · An alternate recognition." }));
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
     expect((await screen.findByRole("tab", { name: "Story" })).getAttribute("aria-selected")).toBe("true");
