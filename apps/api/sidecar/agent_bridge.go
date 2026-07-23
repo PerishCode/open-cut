@@ -3,36 +3,33 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/PerishCode/open-cut/apps/api/service"
-	"github.com/PerishCode/open-cut/lifecycle"
 	"github.com/PerishCode/open-cut/product/application"
 )
 
 func localAgentBridge(
 	ctx context.Context,
-	dataDir string,
-	profile lifecycle.Profile,
+	resolver service.AgentCLIResolverConfig,
 	bridges *application.AgentBridges,
 	repository application.AgentBridgeRepository,
 ) (*service.AgentBridgeService, string, error) {
-	probe, err := service.NewAgentProbeEngine(profile)
+	probe, err := service.NewAgentProbeEngine(resolver.Profile)
 	if err != nil {
 		return nil, "incompatible", err
 	}
-	process, err := service.NewAgentProcessEngine(profile)
+	process, err := service.NewAgentProcessEngine(resolver.Profile)
 	if err != nil {
 		return nil, "incompatible", err
 	}
 	var adapter service.AgentTurnAdapter
 	state := "ready"
-	stableCLI, resolveErr := service.FindStableOpenCutCLI()
+	stableCLI, resolveErr := service.PrepareAgentCLIResolver(resolver)
 	if resolveErr == nil {
 		config, locateErr := service.LocateCodexCLI(ctx, service.CodexLocatorConfig{
-			DataDir: dataDir, StableCLIExecutable: stableCLI,
-			Candidates: service.SystemCodexCandidates(), Environment: os.Environ(),
+			DataDir: resolver.DataDir, StableCLIExecutable: stableCLI,
+			Candidates: service.SystemCodexCandidates(), Environment: resolver.Environment,
 		}, probe)
 		if locateErr == nil {
 			adapter, err = service.NewCodexCLIAdapter(config, process)

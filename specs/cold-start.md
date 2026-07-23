@@ -107,11 +107,11 @@ silently bypasses the state machine.
   material and lifecycle generation. B0, L1, and the runner forward it outside
   runtime topology without interpreting product roles. No private key or product
   permission enters bootstrap, topology, environment, or sidecar data.
-- The installed platform host prepends its stable executable directory to the
-  child process `PATH` before B0 starts. B0, L1, and the generic runner inherit
-  and forward that environment without knowing the `open-cut` command. This lets
-  product business code resolve the installed stable CLI while keeping the path
-  and product name out of runtime topology.
+- The installed platform host, B0, L1, and the generic runner do not alter
+  `PATH` for product command discovery. The product Agent adapter resolves the
+  installed stable CLI from the platform-host identity and its validated install
+  receipt, then constructs the isolated Agent Turn environment itself. The
+  product name and path remain absent from runtime topology.
 - The runner starts peer sidecar processes, aggregates their READY state into the
   broker-visible `payload` session, and independently restarts peers after
   unexpected exits with bounded exponential backoff.
@@ -123,10 +123,13 @@ silently bypasses the state machine.
 - Any binary that accepts a sidecar launch envelope is valid; the runner has no
   Electron, web, API, or product branches.
 
-`oc-control dev` builds the same stable resolver into its guarded temporary
-surface, supplies normal launch parameters for the development bootstrap, and
-prepends that directory to the dev process `PATH`. It does not create a wrapper
-or document a different Agent command.
+In development, the product Agent adapter materializes a private temporary
+`open-cut` resolver from the current product-side executable and binds it to the
+current loopback product port and development installation signer through a
+private adjacent context. It sets only that resolver directory as each isolated
+Agent Turn's `PATH`. `oc-control dev`, the launcher, and the generic runner
+neither build nor discover the product CLI, and the Agent sees the same
+`open-cut` command and generated help in development and installed products.
 
 ## Activation state
 

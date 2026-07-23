@@ -319,6 +319,62 @@ func TestStableResolverPinsPlatformSignerAndDropsCallerOverrides(t *testing.T) {
 	}
 }
 
+func TestAgentAdapterResolverUsesTheSameDiscoveryShapeWithoutLeakingContext(t *testing.T) {
+	root := t.TempDir()
+	executable := filepath.Join(root, target.Host().ExecutableName("open-cut"))
+	endpoint := "http://127.0.0.1:43123"
+	signer := filepath.Join(root, "private", "signer.sock")
+	if err := WriteAgentAdapterContext(executable, AgentAdapterContext{
+		Schema: AgentAdapterContextSchema, Endpoint: endpoint,
+		SignerSocket: signer, CLIVersion: "development",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunAgentAdapter(context.Background(), []string{
+		"project", "show", "--help",
+	}, Options{Executable: executable, Stdout: &stdout, Stderr: &stderr})
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var discovery command.Discovery
+	if err := json.Unmarshal(stdout.Bytes(), &discovery); err != nil {
+		t.Fatal(err)
+	}
+	if discovery.Schema != command.HelpSchemaVersion || discovery.CLIVersion != "development" ||
+		len(discovery.Path) != 2 || discovery.Path[0] != "project" || discovery.Path[1] != "show" ||
+		discovery.Input == nil || discovery.Result == nil {
+		t.Fatalf("discovery=%+v", discovery)
+	}
+	if strings.Contains(stdout.String(), endpoint) || strings.Contains(stdout.String(), signer) {
+		t.Fatalf("private resolver context leaked through help: %s", stdout.String())
+	}
+}
+
+func TestAgentAdapterResolverPinsItsPrivateSignerAndRestoresAmbientState(t *testing.T) {
+	t.Setenv(lifecycle.SignerSocketEnvironment, "/tmp/untrusted-signer.sock")
+	t.Setenv(lifecycle.PlatformHostEnvironment, "/tmp/untrusted-platform-host")
+	restore := pinAgentAdapterSigner("/tmp/private-adapter-signer.sock")
+	if os.Getenv(lifecycle.SignerSocketEnvironment) != "/tmp/private-adapter-signer.sock" ||
+		os.Getenv(lifecycle.PlatformHostEnvironment) != "" {
+		t.Fatalf(
+			"pinned signer=%q host=%q",
+			os.Getenv(lifecycle.SignerSocketEnvironment),
+			os.Getenv(lifecycle.PlatformHostEnvironment),
+		)
+	}
+	restore()
+	if os.Getenv(lifecycle.SignerSocketEnvironment) != "/tmp/untrusted-signer.sock" ||
+		os.Getenv(lifecycle.PlatformHostEnvironment) != "/tmp/untrusted-platform-host" {
+		t.Fatalf(
+			"restored signer=%q host=%q",
+			os.Getenv(lifecycle.SignerSocketEnvironment),
+			os.Getenv(lifecycle.PlatformHostEnvironment),
+		)
+	}
+}
+
 func TestBusinessReadinessUsesObserverWithoutLifecycleMutation(t *testing.T) {
 	root := t.TempDir()
 	publicKey, _, err := ed25519.GenerateKey(rand.Reader)

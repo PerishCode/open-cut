@@ -20,7 +20,6 @@ import (
 	"github.com/PerishCode/open-cut/internal/release"
 	"github.com/PerishCode/open-cut/internal/state"
 	"github.com/PerishCode/open-cut/lifecycle"
-	"github.com/PerishCode/open-cut/product/command"
 	"github.com/PerishCode/open-cut/sidecar/client"
 	"github.com/PerishCode/open-cut/sidecar/protocol"
 )
@@ -269,32 +268,12 @@ func activeCLIEnvironment(base []string, platformHost string) []string {
 }
 
 func writeDiscovery(bootstrapPath string, path []string, stdout, stderr io.Writer) int {
-	bootstrap, err := config.LoadBootstrap(bootstrapPath)
+	version, err := activeVersion(bootstrapPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	identity, _ := cell.New(bootstrap.Channel, bootstrap.Namespace)
-	paths, err := layout.Resolve(bootstrap.Roots, identity)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	runtimeState, err := state.Load(paths.StateFile, identity.Channel)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	discovery, err := command.InitialRegistry().Discover(path, runtimeState.Active)
-	if err != nil {
-		fmt.Fprintf(stderr, "discover command: %v\n", err)
-		return 2
-	}
-	if err := json.NewEncoder(stdout).Encode(discovery); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	return 0
+	return writeDiscoveryForVersion(version, path, stdout, stderr)
 }
 
 func isHelpInvocation(args []string) bool {

@@ -19,6 +19,7 @@ import (
 	"github.com/PerishCode/open-cut/apps/api/repository"
 	"github.com/PerishCode/open-cut/apps/api/service"
 	"github.com/PerishCode/open-cut/internal/mediatoolchain"
+	"github.com/PerishCode/open-cut/internal/productcli"
 	"github.com/PerishCode/open-cut/internal/productresource"
 	"github.com/PerishCode/open-cut/internal/renderengine"
 	"github.com/PerishCode/open-cut/internal/whispertoolchain"
@@ -33,6 +34,14 @@ import (
 const httpEndpoint = "http"
 
 func main() {
+	executable, executableErr := os.Executable()
+	if executableErr == nil && productcli.IsAgentAdapterExecutable(executable) {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		os.Exit(productcli.RunAgentAdapter(ctx, os.Args[1:], productcli.Options{
+			Executable: executable, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
+		}))
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -419,6 +428,12 @@ func run(args []string) error {
 	defer stopScheduler()
 	schedulerStopped := make(chan error, 1)
 	go func() { schedulerStopped <- scheduler.Run(schedulerContext) }()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("listen for API: %w", err)
+	}
+	defer listener.Close()
+	endpoint := "http://" + listener.Addr().String()
 	authorizer, err := localAuthorizer(ctx, launch, projects)
 	if err != nil {
 		return err
@@ -436,7 +451,14 @@ func run(args []string) error {
 		return err
 	}
 	agentBridge, adapterState, err := localAgentBridge(
-		ctx, dataDir, lifecycleProfile(launch.Mode), agentBridges, projects,
+		ctx,
+		service.AgentCLIResolverConfig{
+			Profile: lifecycleProfile(launch.Mode), DataDir: dataDir,
+			SidecarExecutable: executable, Endpoint: endpoint,
+			Channel: launch.Channel, Namespace: launch.Namespace, Environment: os.Environ(),
+		},
+		agentBridges,
+		projects,
 	)
 	if err != nil {
 		return err
@@ -497,15 +519,10 @@ func run(args []string) error {
 	}
 	defer session.Close(0)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("listen for API: %w", err)
-	}
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 
-	endpoint := "http://" + listener.Addr().String()
 	if err := session.Endpoint(httpEndpoint, endpoint); err != nil {
 		return shutdownServer(server, fmt.Errorf("publish API endpoint: %w", err))
 	}

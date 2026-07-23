@@ -54,6 +54,15 @@ func runBusiness(
 	if err != nil {
 		return writeCommandFailure(stdout, stderr, cliVersion, invocation, command.StatusUnavailable, "product-unavailable", err, "")
 	}
+	return runBusinessInvocation(ctx, endpoint, cliVersion, invocation, stdout, stderr)
+}
+
+func runBusinessInvocation(
+	ctx context.Context,
+	endpoint, cliVersion string,
+	invocation businessInvocation,
+	stdout, stderr io.Writer,
+) int {
 	challenge, err := requestCLIChallenge(ctx, endpoint, invocation)
 	if err != nil {
 		return writeCommandFailure(stdout, stderr, cliVersion, invocation, command.StatusUnavailable, "challenge-unavailable", err, "")
