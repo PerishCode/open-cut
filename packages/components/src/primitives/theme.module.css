@@ -130,7 +130,7 @@
 }
 
 .editorViewer .editorPaneContent {
-  /* Media stays dark in both system themes. */
+  /* Media owns a stricter black well inside the stable matte workspace. */
   --oc-ink: var(--oc-media-ink);
   --oc-ink-strong: var(--oc-media-ink-strong);
   --oc-ink-mid: var(--oc-media-ink-mid);

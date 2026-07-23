@@ -34,6 +34,7 @@ The business baseline is split across
 [`editing-interaction.md`](./specs/editing-interaction.md),
 [`project-versions.md`](./specs/project-versions.md),
 [`playback.md`](./specs/playback.md),
+[`visual-language.md`](./specs/visual-language.md),
 [`workspace-ui.md`](./specs/workspace-ui.md) and
 [`business-harness.md`](./specs/business-harness.md). These sit above the
 product-independent cold-start, sidecar, release, and delivery contracts.
