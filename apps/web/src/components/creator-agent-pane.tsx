@@ -21,7 +21,7 @@ import {
   type DurableID,
   useContracts,
 } from "@open-cut/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CreatorAgentContextCandidate } from "./creator-agent-context.js";
 
@@ -75,6 +75,8 @@ export function CreatorAgentPane({
   const [contextKeys, setContextKeys] = useState<ContextKeys>([]);
   const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
   const [receiptsExpanded, setReceiptsExpanded] = useState(false);
+  const latestMessageRef = useRef<HTMLElement>(null);
+  const lastRevealedMessageIdRef = useRef<DurableID | undefined>(undefined);
 
   const loadRun = useCallback(
     async (runId: DurableID, signal?: AbortSignal) => {
@@ -370,6 +372,16 @@ export function CreatorAgentPane({
   const canSubmit = state.availability?.state === "available" && !state.submitting && (!state.selected || canContinue);
   const latestOutcome = [...state.receipts].reverse().find((receipt) => receipt.class === "outcome");
   const recentRuns = state.runs.filter((run) => run.id !== state.selected?.id);
+  const latestMessage = state.messages.at(-1);
+  const latestRevealMessageId = latestMessage?.role === "creator" ? undefined : latestMessage?.id;
+
+  useEffect(() => {
+    if (!latestRevealMessageId || lastRevealedMessageIdRef.current === latestRevealMessageId) return;
+    const target = latestMessageRef.current;
+    if (!target) return;
+    lastRevealedMessageIdRef.current = latestRevealMessageId;
+    target.scrollIntoView({ block: "start", inline: "nearest" });
+  }, [latestRevealMessageId]);
 
   return (
     <PanelDock
@@ -498,18 +510,21 @@ export function CreatorAgentPane({
           />
         ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
-        {state.messages.map((entry) => (
-          <ResourceCard
-            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
-            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
-            key={entry.id}
-            title={messageTitle(entry)}
-          >
-            <Text>
-              {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-            </Text>
-          </ResourceCard>
-        ))}
+        {state.messages.map((entry) => {
+          return (
+            <ResourceCard
+              details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+              elementRef={entry.id === latestRevealMessageId ? latestMessageRef : undefined}
+              eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
+              key={entry.id}
+              title={messageTitle(entry)}
+            >
+              <Text>
+                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+              </Text>
+            </ResourceCard>
+          );
+        })}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
             {state.loading ? "Loading…" : "Load more conversation"}

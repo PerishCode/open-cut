@@ -6,9 +6,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorAgentPane } from "../../src/components/creator-agent-pane.js";
 
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  if (originalScrollIntoView) {
+    Object.defineProperty(Element.prototype, "scrollIntoView", originalScrollIntoView);
+  } else {
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
 });
 
 describe("CreatorAgentPane", () => {
@@ -98,7 +105,14 @@ describe("CreatorAgentPane", () => {
     const secondTurnId = durableID("018f0a60-7b80-7a01-8000-000000000425");
     const receiptId = durableID("018f0a60-7b80-7a01-8000-000000000426");
     const transactionId = durableID("018f0a60-7b80-7a01-8000-000000000427");
+    const creatorMessageId = durableID("018f0a60-7b80-7a01-8000-000000000428");
+    const agentMessageId = durableID("018f0a60-7b80-7a01-8000-000000000429");
     const run = submission(projectId, runId, secondTurnId, "2", "Continue", "2").run;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
@@ -118,7 +132,34 @@ describe("CreatorAgentPane", () => {
         }
         if (url === `/api/v1/projects/${projectId}/agent/runs/${runId}`) return jsonResponse(run);
         if (url === `/api/v1/projects/${projectId}/agent/runs/${runId}/conversation?limit=100`) {
-          return jsonResponse({ projectId, runId, messages: [] });
+          return jsonResponse({
+            projectId,
+            runId,
+            messages: [
+              {
+                id: creatorMessageId,
+                projectId,
+                runId,
+                turnId: secondTurnId,
+                ordinal: "1",
+                role: "creator",
+                text: "Make the ending concise.",
+                attachments: [],
+                createdAt: "2026-07-16T07:00:00Z",
+              },
+              {
+                id: agentMessageId,
+                projectId,
+                runId,
+                turnId: secondTurnId,
+                ordinal: "2",
+                role: "agent",
+                text: "The ending is now concise.",
+                attachments: [],
+                createdAt: "2026-07-16T07:00:01Z",
+              },
+            ],
+          });
         }
         if (url === `/api/v1/projects/${projectId}/agent/runs/${runId}/turns?limit=100`) {
           return jsonResponse({
@@ -178,6 +219,12 @@ describe("CreatorAgentPane", () => {
       </ContractsProvider>,
     );
     expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: "start",
+        inline: "nearest",
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Turn 1 · completed" }));
     expect(await screen.findByText("Creative change committed")).toBeTruthy();
     expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
@@ -192,6 +239,7 @@ describe("CreatorAgentPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus Caption" }));
     expect(focus).toHaveBeenCalledWith({ kind: "caption", id: receiptId, revision: "1" });
     expect(await screen.findByText("Caption receipt r1; current workspace is r2.")).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -80,9 +80,11 @@ describe("atomic components", () => {
   });
 
   it("groups a scannable resource identity, state, detail, and actions", () => {
+    const elementRef = { current: null as HTMLElement | null };
     render(
       <ResourceCard
         actions={<button type="button">Open source</button>}
+        elementRef={elementRef}
         eyebrow="WebM"
         selected
         status={<Status state="ready">Ready</Status>}
@@ -93,6 +95,7 @@ describe("atomic components", () => {
     );
 
     const card = screen.getByRole("article");
+    expect(elementRef.current).toBe(card);
     expect(card.getAttribute("aria-current")).toBe("true");
     expect(within(card).getByText("interview.webm")).toBeTruthy();
     expect(within(card).getByRole("status").textContent).toContain("Ready");
