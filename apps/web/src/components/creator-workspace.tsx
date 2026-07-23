@@ -107,8 +107,8 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
   const [sourcePanel, setSourcePanel] = useState("source-media");
+  const [timelinePanel, setTimelinePanel] = useState("timeline");
   const [productAvailability, setProductAvailability] = useState<ProductAvailabilityState>({ status: "loading" });
-
   const loadProductAvailability = useCallback(async () => {
     setProductAvailability({ status: "loading" });
     try {
@@ -121,7 +121,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       });
     }
   }, [contracts]);
-
   const load = useCallback(
     async (signal?: AbortSignal, preserveReady = false) => {
       if (!preserveReady) setState({ status: "loading" });
@@ -172,7 +171,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
-
   const refreshCommittedWorkspace = useCallback(() => load(undefined, true), [load]);
   const reconcileBackgroundWorkspace = useMemo(() => createBackgroundWorkspaceInvalidation(load), [load]);
   const recordCreativeCommit = useCallback((_receipt: CreatorEditCommit) => {
@@ -202,7 +200,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   useEffect(() => {
     void loadProductAvailability();
   }, [loadProductAvailability]);
-
   useEffect(
     () => contracts.media.read.subscribe(project.id, reconcileBackgroundWorkspace),
     [contracts, project.id, reconcileBackgroundWorkspace],
@@ -215,7 +212,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [sequenceViewer, sourceViewer],
   );
-
   const ready = state.status === "ready" ? state : undefined;
   const selectedAsset = ready?.assets.assets.find((asset) => asset.id === selectedAssetId);
   const sourceAsset = ready?.assets.assets.find((asset) => asset.id === sourceStreamSelection?.assetId);
@@ -534,10 +530,12 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                                 ),
                               ],
                         );
+                        setTimelinePanel("rough-cut");
                       }}
-                      onCreateCaptions={(sourceExcerpt, evidenceStatus) =>
-                        setCaptionSource({ sourceExcerpt, evidenceStatus })
-                      }
+                      onCreateCaptions={(sourceExcerpt, evidenceStatus) => {
+                        setCaptionSource({ sourceExcerpt, evidenceStatus });
+                        setTimelinePanel("captions");
+                      }}
                       onReload={refreshCommittedWorkspace}
                       onCommitReceipt={recordCreativeCommit}
                       onSelect={(node, anchor, sectionPath) => {
@@ -599,7 +597,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       status={<Status state={status}>{workspaceStatus(state.status)}</Status>}
       timeline={
         <Tabs
+          activeTabId={timelinePanel}
           label="Timeline panels"
+          onTabChange={setTimelinePanel}
           tabs={[
             {
               id: "timeline",
