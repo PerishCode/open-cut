@@ -17,6 +17,7 @@ import {
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CreatorCaptionSource } from "../lib/creator-caption-controller.js";
+import { adoptViewerSequenceFromCommit } from "../lib/creator-timeline-controller.js";
 import { createBackgroundWorkspaceInvalidation, workspaceStatus } from "../lib/creator-workspace-refresh.js";
 import { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import { SourceViewerController } from "../lib/source-viewer-controller.js";
@@ -42,13 +43,11 @@ import { CreatorExport } from "./creator-export.js";
 import { CreatorHistory } from "./creator-history.js";
 import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-narrative-anchor.js";
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
-import {
-  type CreatorRoughCutOccurrence,
-  CreatorRoughCutPanel,
-  createCreatorRoughCutOccurrence,
-} from "./creator-rough-cut.js";
+import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
+import { type CreatorRoughCutOccurrence, createCreatorRoughCutOccurrence } from "./creator-rough-cut-queue.js";
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
+import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
 import { CreatorVersions } from "./creator-versions.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
 import {
@@ -74,11 +73,8 @@ type WorkspaceState =
       sequence: SequenceWindow;
       assets: AssetPage;
     }>;
-
 type ReadyWorkspaceState = Extract<WorkspaceState, Readonly<{ status: "ready" }>>;
-
 type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
-
 export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
   const sequenceViewer = useMemo(() => new SequenceViewerController(contracts.media.viewer), [contracts]);
@@ -108,6 +104,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
   const [sourcePanel, setSourcePanel] = useState("source-media");
   const [timelinePanel, setTimelinePanel] = useState("timeline");
+  const timelineHandoff = useCreatorTimelineHandoff();
   const [productAvailability, setProductAvailability] = useState<ProductAvailabilityState>({ status: "loading" });
   const loadProductAvailability = useCallback(async () => {
     setProductAvailability({ status: "loading" });
@@ -165,7 +162,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, project.id],
   );
-
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
@@ -187,6 +183,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     setHistoryRefreshEpoch((current) => current + 1);
     setWorkspaceSelection(emptyWorkspaceSelection);
     narrativeHandoff.reset();
+    timelineHandoff.reset();
     setRoughCutOccurrences([]);
     setRoughCutTimelineStart(undefined);
     setCaptionSource(undefined);
@@ -195,8 +192,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       sequenceViewer.setAvailableRevision(restored.sequence.sequenceRevision);
       sequenceViewer.adoptRevision(restored.sequence.sequenceRevision);
     }
-  }, [narrativeHandoff, refreshCommittedWorkspace, sequenceViewer]);
-
+  }, [narrativeHandoff, refreshCommittedWorkspace, sequenceViewer, timelineHandoff]);
   useEffect(() => {
     void loadProductAvailability();
   }, [loadProductAvailability]);
@@ -204,7 +200,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     () => contracts.media.read.subscribe(project.id, reconcileBackgroundWorkspace),
     [contracts, project.id, reconcileBackgroundWorkspace],
   );
-
   useEffect(
     () => () => {
       sequenceViewer.close();
@@ -265,7 +260,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [selectionProjection],
   );
-
   useEffect(() => {
     if (!ready) return;
     if (!sequencePreviewAvailable) {
@@ -274,14 +268,12 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     }
     sequenceViewer.open(project.id, ready.overview.project.mainSequenceId, ready.sequence.sequenceRevision);
   }, [project.id, ready, sequencePreviewAvailable, sequenceViewer]);
-
   useEffect(() => {
     const assets = ready?.assets.assets ?? [];
     setSelectedAssetId((current) =>
       current && assets.some((asset) => asset.id === current) ? current : assets[0]?.id,
     );
   }, [ready?.assets.assets]);
-
   const openSourceAsset = useCallback((asset: Asset) => {
     const streams = asset.facts?.streams ?? [];
     const video = uniqueSourceStream(streams, "video");
@@ -294,7 +286,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     });
     setViewerMode("source");
   }, []);
-
   useEffect(() => {
     if (!sourcePreviewAvailable) {
       sourceViewer.close();
@@ -320,7 +311,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         : { audioStreamId: sourceStreamSelection.audioStreamId }),
     });
   }, [project.id, sourceAsset, sourcePreviewAvailable, sourceStreamSelection, sourceViewer]);
-
   const readTranscript = useCallback(
     async (assetId: DurableID, artifactId?: DurableID, signal?: AbortSignal) => {
       const currentDefault =
@@ -359,7 +349,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, project.id, transcript],
   );
-
   const readMoreTranscript = useCallback(async () => {
     if (transcript.status !== "resolved" || !transcript.page.nextAfter || transcript.loadingMore) return;
     const current = transcript;
@@ -389,7 +378,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       });
     }
   }, [contracts, project.id, transcript]);
-
   const selectTranscriptDefault = useCallback(async () => {
     if (
       transcript.status !== "resolved" ||
@@ -612,8 +600,10 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       captions={ready.sequence.captions}
                       clips={ready.sequence.clips}
                       frameRate={ready.overview.format.frameRate}
+                      handoff={timelineHandoff.current}
                       onCommitted={recordAndRefreshCreativeCommit}
                       onContextClip={(clip) => selectContext(clipContext(clip))}
+                      onHandoffSeen={timelineHandoff.clear}
                       onReload={refreshCommittedWorkspace}
                       projectId={project.id}
                       range={ready.sequence.range}
@@ -645,7 +635,16 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       onChange={setRoughCutOccurrences}
                       onCommitted={async (receipt) => {
                         setRoughCutOccurrences([]);
-                        await recordAndRefreshCreativeCommit(receipt);
+                        recordCreativeCommit(receipt);
+                        adoptViewerSequenceFromCommit(sequenceViewer, receipt, ready.overview.project.mainSequenceId);
+                        let projectionReady = true;
+                        try {
+                          await refreshCommittedWorkspace();
+                        } catch {
+                          projectionReady = false;
+                        }
+                        timelineHandoff.revealRoughCut(receipt, projectionReady);
+                        setTimelinePanel("timeline");
                       }}
                       onReload={refreshCommittedWorkspace}
                       onTimelineStartChange={setRoughCutTimelineStart}
@@ -740,6 +739,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         />
       }
       timelineLabel="Main sequence"
+      timelineScrollKey={timelinePanel}
       title={project.name}
       viewer={
         <Stack spacing="compact">

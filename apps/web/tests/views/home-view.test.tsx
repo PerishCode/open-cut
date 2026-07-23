@@ -553,7 +553,7 @@ describe("HomeView", () => {
     if (!addToRoughCut) throw new Error("inserted Story excerpt has no rough-cut action");
     fireEvent.click(addToRoughCut);
     expect(screen.getByRole("tab", { name: "Rough cut" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("ROUGH CUT DRAFT · EXCERPT QUEUE")).toBeTruthy();
+    expect(screen.getByText("ROUGH CUT · EXCERPT QUEUE")).toBeTruthy();
     const createCaptions = screen.getAllByRole("button", { name: "Create captions from excerpt" }).at(-1);
     if (!createCaptions) throw new Error("inserted Story excerpt has no caption action");
     fireEvent.click(createCaptions);

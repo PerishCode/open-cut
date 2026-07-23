@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 
 import { adoptViewerSequenceFromCommit, CreatorTimelineController } from "../lib/creator-timeline-controller.js";
 import type { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
+import type { CreatorTimelineHandoff } from "./creator-timeline-handoff.js";
 import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
@@ -25,6 +26,8 @@ export function CreatorTimeline({
   captions,
   clips,
   frameRate,
+  handoff,
+  onHandoffSeen,
   onCommitted,
   onContextClip,
   onReload,
@@ -39,6 +42,8 @@ export function CreatorTimeline({
   captions: readonly Caption[];
   clips: readonly Clip[];
   frameRate: RationalTime;
+  handoff?: CreatorTimelineHandoff;
+  onHandoffSeen(): void;
   onCommitted(receipt: CreatorEditCommit): Promise<AsyncResult>;
   onContextClip(clip: Clip): void;
   onReload(): Promise<AsyncResult>;
@@ -57,6 +62,7 @@ export function CreatorTimeline({
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [validationError, setValidationError] = useState<Error>();
   const viewerSnapshot = useSyncExternalStore(viewer.subscribe, viewer.getSnapshot, viewer.getSnapshot);
+  const handoffClipIds = useMemo(() => new Set(handoff?.clipIds ?? []), [handoff]);
 
   useEffect(() => {
     controller.setProjection({ projectId, sequenceId, sequenceRevision, clips, tracks });
@@ -97,7 +103,7 @@ export function CreatorTimeline({
       label: assets.find((asset) => asset.id === clip.assetId)?.displayName ?? "Source clip",
       startSeconds: seconds(clip.timelineRange.start),
       durationSeconds: seconds(clip.timelineRange.duration),
-      selected: clip.id === selected?.id || clip.id === snapshot.selectionHint?.clipId,
+      selected: clip.id === selected?.id || clip.id === snapshot.selectionHint?.clipId || handoffClipIds.has(clip.id),
       linked: clip.linkGroupId !== undefined,
     })),
     ...captions.map((caption) => ({
@@ -202,13 +208,17 @@ export function CreatorTimeline({
 
   return (
     <Stack spacing="compact">
+      {handoff ? <Status state="ready">{handoff.notice}</Status> : null}
       <TimelineSurface
         accessory={accessory}
         durationSeconds={rangeDuration}
         itemGesturesEnabled={ready}
         items={timelineItems}
         onItemMove={commitMove}
-        onItemSelect={(id) => controller.selectClip(id as DurableID)}
+        onItemSelect={(id) => {
+          onHandoffSeen();
+          controller.selectClip(id as DurableID);
+        }}
         onItemTrimEnd={commitTrimEnd}
         onItemTrimStart={commitTrimStart}
         onSeek={(value) => controller.setPlayhead(snapToFrame(value, frameRate))}

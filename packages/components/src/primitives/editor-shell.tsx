@@ -1,4 +1,12 @@
-import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import styles from "./theme.module.css";
 
@@ -15,6 +23,7 @@ export type EditorShellProps = {
   inspector: ReactNode;
   timelineLabel: string;
   timeline: ReactNode;
+  timelineScrollKey?: string;
 };
 
 type ResizeTarget = "source" | "agent" | "timeline";
@@ -39,12 +48,20 @@ export function EditorShell({
   inspector,
   timelineLabel,
   timeline,
+  timelineScrollKey,
 }: EditorShellProps) {
   const shellRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const timelineContentRef = useRef<HTMLDivElement>(null);
   const [sourceWidth, setSourceWidth] = useState(288);
   const [agentWidth, setAgentWidth] = useState(360);
   const [timelineHeight, setTimelineHeight] = useState(292);
+
+  useEffect(() => {
+    if (timelineScrollKey !== undefined && timelineContentRef.current) {
+      timelineContentRef.current.scrollTop = 0;
+    }
+  }, [timelineScrollKey]);
 
   const resize = (target: ResizeTarget, clientX: number, clientY: number) => {
     const shell = shellRef.current?.getBoundingClientRect();
@@ -101,7 +118,9 @@ export function EditorShell({
           />
           <section aria-label={timelineLabel} className={styles.editorTimeline}>
             <div className={styles.editorPaneHeader}>{timelineLabel}</div>
-            <div className={styles.editorTimelineContent}>{timeline}</div>
+            <div className={styles.editorTimelineContent} ref={timelineContentRef}>
+              {timeline}
+            </div>
           </section>
         </section>
         <ResizeHandle

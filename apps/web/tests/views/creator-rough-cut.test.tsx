@@ -18,11 +18,11 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorNarrativeWriter } from "../../src/components/creator-narrative-writer.js";
+import { CreatorRoughCutPanel } from "../../src/components/creator-rough-cut.js";
 import {
   type CreatorRoughCutOccurrence,
-  CreatorRoughCutPanel,
   createCreatorRoughCutOccurrence,
-} from "../../src/components/creator-rough-cut.js";
+} from "../../src/components/creator-rough-cut-queue.js";
 
 const ids = {
   project: "018f0a60-7b80-7a01-8000-000000000801",
@@ -88,10 +88,12 @@ describe("Creator rough cut", () => {
     expect(onCreateCaptions).toHaveBeenCalledWith(sourceExcerpt(), "exact");
   });
 
-  it("reviews semantic ghosts and byte-replays an ambiguous direct apply", async () => {
+  it("reviews the outcome, byte-replays an ambiguous apply, and preserves commit success", async () => {
     const previewBodies: string[] = [];
     const applyBodies: string[] = [];
-    const onCommitted = vi.fn(async () => undefined);
+    const onCommitted = vi.fn(async () => {
+      throw new Error("projection refresh failed");
+    });
     vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000813") });
     vi.stubGlobal(
       "fetch",
@@ -116,12 +118,13 @@ describe("Creator rough cut", () => {
     );
     renderWithContracts(<RoughCutHarness onCommitted={onCommitted} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "No video lane" }));
-    fireEvent.click(screen.getByRole("button", { name: "Preview rough cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Omit video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review rough cut" }));
 
-    expect(await screen.findByText(/GHOST 01 · 5\.00 → 7\.00 · A/)).toBeTruthy();
+    expect(await screen.findByText(/01 · 5\.00 → 7\.00 · A/)).toBeTruthy();
     expect(screen.getAllByText("A precise sentence.")).toHaveLength(2);
-    expect(screen.getByText("No audiovisual work is scheduled before Apply.")).toBeTruthy();
+    expect(screen.getByText("Nothing changes until you add this rough cut to the Timeline.")).toBeTruthy();
+    expect(screen.queryByText(/preconditions|paper-edit|OUTPUT DIGEST|GHOST/)).toBeNull();
     expect(JSON.parse(previewBodies[0] ?? "{}")).toMatchObject({
       timelineStart: { value: "5", scale: 1 },
       items: [
@@ -133,13 +136,14 @@ describe("Creator rough cut", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply reviewed rough cut" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry identical rough-cut apply" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add rough cut to Timeline" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry same rough cut" }));
 
     await waitFor(() => expect(applyBodies).toHaveLength(2));
     await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
     expect(applyBodies[1]).toBe(applyBodies[0]);
-    expect(screen.getByText("Creator rough-cut transaction committed")).toBeTruthy();
+    expect(screen.getByText("Rough cut added · refresh reads to reveal it")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry same rough cut" })).toBeNull();
   });
 });
 
