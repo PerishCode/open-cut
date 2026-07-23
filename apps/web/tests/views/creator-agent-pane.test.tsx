@@ -238,7 +238,7 @@ describe("CreatorAgentPane", () => {
     expect(latestResponse?.compareDocumentPosition(outcome.closest("article") as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
+    expect(screen.getByText("Captions updated · Project r9")).toBeTruthy();
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
     expect(screen.queryByText("OUTCOME · #1")).toBeNull();
     expect(screen.queryByText(transactionId)).toBeNull();

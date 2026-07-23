@@ -724,7 +724,21 @@ function outcomeTitle(receipt: CommandReceipt): string {
 }
 
 function outcomeDetails(receipt: CommandReceipt): readonly string[] {
-  return [receipt.projectRevision ? `${receipt.command} · Project r${receipt.projectRevision}` : receipt.command];
+  const detail = outcomeProjection(receipt) ?? receipt.command;
+  return [receipt.projectRevision ? `${detail} · Project r${receipt.projectRevision}` : detail];
+}
+
+function outcomeProjection(receipt: CommandReceipt): string | undefined {
+  const surfaces: string[] = [];
+  const addSurface = (surface: string) => !surfaces.includes(surface) && surfaces.push(surface);
+  for (const ref of receipt.resultRefs) {
+    if (ref.kind === "narrative-document" || ref.kind === "narrative-node") addSurface("Story");
+    else if (ref.kind === "clip" || ref.kind === "sequence" || ref.kind === "track") addSurface("Timeline");
+    else if (ref.kind === "caption") addSurface("Captions");
+    else if (ref.kind === "asset" || ref.kind === "asset-media-state") addSurface("Media");
+    else if (ref.kind === "export-artifact") addSurface("Export");
+  }
+  return surfaces.length > 0 ? `${surfaces.join(" + ")} updated` : undefined;
 }
 
 function receiptDetails(receipt: CommandReceipt): readonly string[] {
