@@ -21,6 +21,14 @@ import (
 
 var sequencePreviewFailureCodePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
+type sequencePreviewPublicationResolution uint8
+
+const (
+	sequencePreviewPublicationFresh sequencePreviewPublicationResolution = iota
+	sequencePreviewPublicationRematerialize
+	sequencePreviewPublicationReuse
+)
+
 func (repository *SQLiteProjects) CompleteSequencePreview(
 	ctx context.Context,
 	input application.CompleteSequencePreview,
@@ -30,15 +38,20 @@ func (repository *SQLiteProjects) CompleteSequencePreview(
 	}
 	repository.artifactLifecycleMu.Lock()
 	defer repository.artifactLifecycleMu.Unlock()
-	rematerializing, err := repository.resolveSequencePreviewRematerialization(ctx, &input)
+	resolution, err := repository.resolveSequencePreviewPublication(ctx, &input)
 	if err != nil {
 		return err
 	}
-	finalRoot, err := repository.publishSequencePreviewFiles(input)
-	if err != nil {
-		return err
+	finalRoot := ""
+	if resolution != sequencePreviewPublicationReuse {
+		finalRoot, err = repository.publishSequencePreviewFiles(input)
+		if err != nil {
+			return err
+		}
 	}
-	defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
+	if finalRoot != "" {
+		defer func() { discardUnpublishedTree(finalRoot, &resultErr) }()
+	}
 	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -59,7 +72,8 @@ SELECT render_plan_digest FROM sequence_preview_job_details WHERE job_id = ?`,
 	}
 	at := formatInstant(input.CompletedAt.UTC())
 	byteReference := "artifact:sequence-preview/" + input.ArtifactID.String()
-	if rematerializing {
+	switch resolution {
+	case sequencePreviewPublicationRematerialize:
 		result, err := tx.ExecContext(ctx, `
 UPDATE sequence_preview_artifacts SET state = 'ready'
 WHERE id = ? AND project_id = ? AND sequence_id = ? AND sequence_revision = ?
@@ -77,18 +91,23 @@ WHERE id = ? AND project_id = ? AND sequence_id = ? AND sequence_revision = ?
 		if changed, err := result.RowsAffected(); err != nil || changed != 1 {
 			return application.ErrWorkLeaseLost
 		}
-	} else if _, err := tx.ExecContext(ctx, `
+	case sequencePreviewPublicationFresh:
+		if _, err := tx.ExecContext(ctx, `
 INSERT INTO sequence_preview_artifacts (
   id, project_id, sequence_id, sequence_revision, render_plan_digest,
   renderer_version, renderer_target, output_profile, state, facts_json,
   byte_reference, byte_size, content_digest, created_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, ?, ?, ?)`,
-		input.ArtifactID.String(), input.Manifest.ProjectID.String(), input.Manifest.SequenceID.String(),
-		input.Manifest.SequenceRevision.Value(), input.Manifest.RenderPlanDigest.String(),
-		input.Manifest.RendererVersion, input.Manifest.RendererTarget, input.Manifest.Profile,
-		string(factsJSON), byteReference, input.ByteSize.Value(), input.ContentDigest.String(), at,
-	); err != nil {
-		return err
+			input.ArtifactID.String(), input.Manifest.ProjectID.String(), input.Manifest.SequenceID.String(),
+			input.Manifest.SequenceRevision.Value(), input.Manifest.RenderPlanDigest.String(),
+			input.Manifest.RendererVersion, input.Manifest.RendererTarget, input.Manifest.Profile,
+			string(factsJSON), byteReference, input.ByteSize.Value(), input.ContentDigest.String(), at,
+		); err != nil {
+			return err
+		}
+	case sequencePreviewPublicationReuse:
+	default:
+		return application.ErrSequencePreviewInvalid
 	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE sequence_preview_job_details SET result_artifact_id = ?
@@ -220,10 +239,10 @@ func validateSequencePreviewPublication(input application.CompleteSequencePrevie
 	return nil
 }
 
-func (repository *SQLiteProjects) resolveSequencePreviewRematerialization(
+func (repository *SQLiteProjects) resolveSequencePreviewPublication(
 	ctx context.Context,
 	input *application.CompleteSequencePreview,
-) (bool, error) {
+) (sequencePreviewPublicationResolution, error) {
 	var idValue, state, factsJSON, byteReference, contentDigest string
 	var byteSize uint64
 	err := repository.db.QueryRowContext(ctx, `
@@ -234,23 +253,30 @@ WHERE render_plan_digest = ? AND renderer_version = ? AND renderer_target = ? AN
 		input.Manifest.RendererTarget, input.Manifest.Profile,
 	).Scan(&idValue, &state, &factsJSON, &byteReference, &byteSize, &contentDigest)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return sequencePreviewPublicationFresh, nil
 	}
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	id, err := domain.ParseArtifactID(idValue)
 	if err != nil {
-		return false, application.ErrSequencePreviewInvalid
+		return 0, application.ErrSequencePreviewInvalid
 	}
 	wantFacts, _ := json.Marshal(input.Manifest.Facts)
-	if state != string(domain.SequencePreviewArtifactEvicted) || factsJSON != string(wantFacts) ||
+	if factsJSON != string(wantFacts) ||
 		byteReference != "artifact:sequence-preview/"+idValue || byteSize != input.ByteSize.Value() ||
 		contentDigest != input.ContentDigest.String() {
-		return false, application.ErrSequencePreviewInvalid
+		return 0, application.ErrSequencePreviewInvalid
 	}
 	input.ArtifactID = id
-	return true, nil
+	switch domain.SequencePreviewArtifactState(state) {
+	case domain.SequencePreviewArtifactEvicted:
+		return sequencePreviewPublicationRematerialize, nil
+	case domain.SequencePreviewArtifactReady:
+		return sequencePreviewPublicationReuse, nil
+	default:
+		return 0, application.ErrSequencePreviewInvalid
+	}
 }
 
 func (repository *SQLiteProjects) publishSequencePreviewFiles(

@@ -407,6 +407,117 @@ WHERE job.id = ?`, claim.JobID.String()).Scan(
 		manifest.RendererVersion != previewVersion || manifest.Media.Path != "preview.webm" {
 		t.Fatalf("manifest=%+v err=%v", manifest, err)
 	}
+	duplicateValue, err := domain.GenerateUUIDv7(now.Add(4 * time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicateJobID, err := domain.ParseWorkJobID(duplicateValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err = sql.Open("sqlite3", store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := now.Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+INSERT INTO work_jobs (
+  id, scope_kind, project_id, installation_id, kind, state, pool, priority_class,
+  logical_key, parameters_digest, parameters_json, producer_version,
+  progress_basis_points, cancellation_requested, retry_of_job_id, created_at,
+  updated_at, terminal_error_code
+)
+SELECT ?, scope_kind, project_id, installation_id, kind, 'blocked', pool, priority_class,
+       logical_key || '/equivalent-lineage', parameters_digest, parameters_json,
+       producer_version, 0, 0, NULL, ?, ?, NULL
+FROM work_jobs WHERE id = ?`,
+		duplicateJobID.String(), at, at, prepared.Job.ID.String(),
+	); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+INSERT INTO sequence_preview_job_details (
+  job_id, sequence_id, sequence_revision, resolver_version, compiler_version,
+  renderer_version, renderer_target, output_profile, render_intent_schema,
+  render_intent_digest, render_intent_json, render_plan_digest
+)
+SELECT ?, sequence_id, sequence_revision, resolver_version, compiler_version,
+       renderer_version, renderer_target, output_profile, render_intent_schema,
+       render_intent_digest, render_intent_json, render_plan_digest
+FROM sequence_preview_job_details WHERE job_id = ?`,
+		duplicateJobID.String(), prepared.Job.ID.String(),
+	); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO sequence_preview_job_inputs
+		 SELECT ?, ordinal, clip_id, source_stream_id, producer_job_id
+		 FROM sequence_preview_job_inputs WHERE job_id = ?`,
+		`INSERT INTO sequence_preview_job_resources
+		 SELECT ?, ordinal, resource_kind, resource_id, resource_version, resource_digest
+		 FROM sequence_preview_job_resources WHERE job_id = ?`,
+		`INSERT INTO work_job_prerequisites
+		 SELECT ?, kind, reference_kind, reference_id, created_at
+		 FROM work_job_prerequisites WHERE job_id = ?`,
+		`INSERT INTO work_job_owners
+		 SELECT ?, owner_kind, owner_id, created_at
+		 FROM work_job_owners WHERE job_id = ?`,
+	} {
+		if _, err := db.Exec(statement, duplicateJobID.String(), prepared.Job.ID.String()); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecoverWorkJobs(ctx, registrations, nil, now); err != nil {
+		t.Fatal(err)
+	}
+	duplicateClaim, err := store.ClaimWorkJob(ctx, application.ClaimWorkJobInput{
+		AttemptID: mustJobAttemptID(t, now.Add(5*time.Second)), Executors: registrations,
+		LeaseOwner: "api:sequence-preview-dedup-test", Now: now, LeaseDuration: 30 * time.Second,
+	})
+	if err != nil || duplicateClaim.JobID != duplicateJobID {
+		t.Fatalf("duplicate claim=%+v err=%v", duplicateClaim, err)
+	}
+	if err := previewExecutor.Execute(ctx, duplicateClaim); err != nil {
+		t.Fatalf("equivalent preview publication did not reuse its ready artifact: %v", err)
+	}
+	db, err = sql.Open("sqlite3", store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var duplicateState, duplicateArtifact string
+	var equivalentArtifactCount int
+	if err := db.QueryRow(`
+SELECT job.state, detail.result_artifact_id
+FROM work_jobs job
+JOIN sequence_preview_job_details detail ON detail.job_id = job.id
+WHERE job.id = ?`, duplicateJobID.String()).Scan(&duplicateState, &duplicateArtifact); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`
+SELECT COUNT(*) FROM sequence_preview_artifacts
+WHERE render_plan_digest = ? AND renderer_version = ? AND renderer_target = ?
+  AND output_profile = ?`,
+		first.Plan.Digest.String(), previewVersion, "mac-arm64", domain.SequencePreviewProfileV1,
+	).Scan(&equivalentArtifactCount); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if duplicateState != "succeeded" || duplicateArtifact != artifactValue || equivalentArtifactCount != 1 {
+		t.Fatalf(
+			"equivalent preview state=%s artifact=%s want=%s artifacts=%d",
+			duplicateState, duplicateArtifact, artifactValue, equivalentArtifactCount,
+		)
+	}
 	failingVersion := application.SequencePreviewRendererV1 + "@failing-fixture"
 	failingPreviews, err := application.NewSequencePreviews(
 		store, application.UUIDv7IdentityGenerator{}, clock,
@@ -679,7 +790,6 @@ func (workspace memoryProxyWorkspace) Open(relativePath string) (io.ReadCloser, 
 }
 
 func (memoryProxyWorkspace) Release() error { return nil }
-
 func bytesDigest(value []byte) domain.Digest {
 	digest := sha256.Sum256(value)
 	return domain.Digest("sha256:" + hex.EncodeToString(digest[:]))

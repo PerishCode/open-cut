@@ -153,7 +153,18 @@ func (executor *SequencePreviewWorkExecutor) Execute(ctx context.Context, claim 
 			Code: "renderer-output-invalid", Cause: err,
 		})
 	}
-	return executor.repository.CompleteSequencePreview(ctx, publication)
+	if err := executor.repository.CompleteSequencePreview(ctx, publication); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, ErrSequencePreviewInvalid) {
+			return executor.fail(ctx, claim, SequencePreviewExecutionError{
+				Code: "renderer-output-invalid", Cause: err,
+			})
+		}
+		return err
+	}
+	return nil
 }
 
 func (executor *SequencePreviewWorkExecutor) materialize(
@@ -251,9 +262,12 @@ func (executor *SequencePreviewWorkExecutor) fail(
 	if failure.Cause != nil {
 		detail = BoundedDiagnosticDetail(failure.Cause.Error())
 	}
-	return executor.repository.FailSequencePreview(ctx, FailSequencePreview{
+	if err := executor.repository.FailSequencePreview(ctx, FailSequencePreview{
 		Claim: claim, Code: failure.Code, Detail: detail, EventID: eventID, FailedAt: now,
-	})
+	}); err != nil {
+		return fmt.Errorf("persist sequence preview failure %s: %w", failure.Code, err)
+	}
+	return nil
 }
 
 func (executor *SequencePreviewWorkExecutor) newArtifactID(
