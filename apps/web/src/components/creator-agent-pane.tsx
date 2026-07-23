@@ -428,7 +428,8 @@ export function CreatorAgentPane({
           ) : null}
           <TextAreaField
             disabled={!canSubmit}
-            label={state.selected ? "Continue this task" : "New task"}
+            keyboardShortcuts={canSubmit ? "Control+Enter Meta+Enter" : undefined}
+            label={`${state.selected ? "Continue this task" : "New task"}${canSubmit ? " · Ctrl/⌘ Enter" : ""}`}
             maxLength={8000}
             placeholder={
               canContinue || !state.selected
@@ -438,6 +439,20 @@ export function CreatorAgentPane({
             rows={5}
             value={message}
             onChange={setMessage}
+            onKeyDown={(event) => {
+              if (
+                event.key !== "Enter" ||
+                (!event.ctrlKey && !event.metaKey) ||
+                event.altKey ||
+                event.shiftKey ||
+                event.repeat ||
+                event.nativeEvent.isComposing
+              ) {
+                return;
+              }
+              event.preventDefault();
+              void submit();
+            }}
           />
           <Button disabled={!canSubmit || message.trim() === ""} onPress={() => void submit()}>
             {state.submitting ? "Submitting…" : state.selected ? "Continue" : "Start task"}

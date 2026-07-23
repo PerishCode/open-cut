@@ -7,6 +7,7 @@ export type TextAreaFieldProps = {
   value: string;
   focusRequest?: string | number;
   disabled?: boolean;
+  keyboardShortcuts?: string;
   maxLength?: number;
   placeholder?: string;
   rows?: number;
@@ -21,6 +22,7 @@ export function TextAreaField({
   value,
   focusRequest,
   disabled = false,
+  keyboardShortcuts,
   maxLength,
   placeholder,
   rows = 4,
@@ -38,6 +40,7 @@ export function TextAreaField({
     <label className={styles.field}>
       <span className={styles.fieldLabel}>{label}</span>
       <textarea
+        aria-keyshortcuts={keyboardShortcuts}
         className={styles.fieldTextArea}
         disabled={disabled}
         maxLength={maxLength}

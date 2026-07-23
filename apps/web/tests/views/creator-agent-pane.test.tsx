@@ -69,7 +69,7 @@ describe("CreatorAgentPane", () => {
     );
     expect(await screen.findByText("Ready · codex-cli 0.144.4")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add @ Current asset" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "New task" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "New task · Ctrl/⌘ Enter" }), {
       target: { value: "Draft a sharp opening" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Start task" }));
@@ -81,10 +81,14 @@ describe("CreatorAgentPane", () => {
       attachments: [attachment],
     });
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Continue this task" }), {
+    const composer = screen.getByRole("textbox", { name: "Continue this task · Ctrl/⌘ Enter" });
+    expect(composer.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
+    fireEvent.change(composer, {
       target: { value: "Make it warmer" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(submissions).toHaveLength(1);
+    fireEvent.keyDown(composer, { ctrlKey: true, key: "Enter" });
     await waitFor(() => expect(submissions).toHaveLength(2));
     expect(submissions[1]).toEqual({
       requestId: "ui:agent-continue:018f0a60-7b80-7a01-8000-000000000407",

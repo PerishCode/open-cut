@@ -72,8 +72,18 @@ describe("atomic components", () => {
 
   it("owns bounded multiline text input as a semantic atom", () => {
     const onChange = vi.fn();
-    render(<TextAreaField label="Agent task" maxLength={8000} rows={5} value="Draft" onChange={onChange} />);
+    render(
+      <TextAreaField
+        keyboardShortcuts="Control+Enter Meta+Enter"
+        label="Agent task"
+        maxLength={8000}
+        rows={5}
+        value="Draft"
+        onChange={onChange}
+      />,
+    );
     const input = screen.getByRole("textbox", { name: "Agent task" });
+    expect(input.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
     expect(input.getAttribute("maxlength")).toBe("8000");
     expect(input.getAttribute("rows")).toBe("5");
     fireEvent.change(input, { target: { value: "Draft a clear opening" } });
