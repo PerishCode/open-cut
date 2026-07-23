@@ -8,6 +8,7 @@ import { DestinationGrantStore, handleExportSaveRequest } from "./export-save.js
 import { OC_PLATFORM_EXPORT_REVEAL_PATH, OC_PLATFORM_EXPORT_SAVE_PATH } from "./oc-protocol.js";
 import { registerOcWebProtocol } from "./oc-protocol-electron.js";
 import { handleSourcePickerRequest } from "./source-picker.js";
+import { CREATOR_WINDOW_CONTRACT } from "./window-contract.js";
 
 const navigationTimeoutMs = 15_000;
 const startupPlaceholderDelayMs = 500;
@@ -31,10 +32,10 @@ export type ElectronApp = {
 export async function startElectronApp(): Promise<ElectronApp> {
   await app.whenReady();
   const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1280,
-    minHeight: 800,
+    width: CREATOR_WINDOW_CONTRACT.default.width,
+    height: CREATOR_WINDOW_CONTRACT.default.height,
+    minWidth: CREATOR_WINDOW_CONTRACT.minimum.width,
+    minHeight: CREATOR_WINDOW_CONTRACT.minimum.height,
     show: false,
     webPreferences: {
       backgroundThrottling: false,
