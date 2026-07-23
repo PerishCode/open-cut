@@ -2,11 +2,13 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  Button,
   ControlStrip,
   EditorShell,
   FileField,
   Heading,
   MediaPlayer,
+  MessageContent,
   PanelDock,
   ResourceCard,
   Status,
@@ -14,11 +16,38 @@ import {
   TextAreaField,
   TextField,
   TimelineSurface,
+  TokenSelection,
 } from "../src/index.js";
 
 describe("atomic components", () => {
   afterEach(() => {
     cleanup();
+  });
+
+  it("exposes a closed visual hierarchy without changing native button behavior", () => {
+    const onPress = vi.fn();
+    render(
+      <>
+        <Button variant="primary" onPress={onPress}>
+          Commit
+        </Button>
+        <Button onPress={onPress}>Review</Button>
+        <Button variant="quiet" onPress={onPress}>
+          Refresh
+        </Button>
+        <Button disabled variant="danger" onPress={onPress}>
+          Delete
+        </Button>
+      </>,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(new Set(buttons.map((button) => button.className)).size).toBe(4);
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onPress).toHaveBeenCalledTimes(3);
   });
 
   it("provides semantic structure without consumer styling props", () => {
@@ -71,12 +100,73 @@ describe("atomic components", () => {
 
   it("owns bounded multiline text input as a semantic atom", () => {
     const onChange = vi.fn();
-    render(<TextAreaField label="Agent task" maxLength={8000} rows={5} value="Draft" onChange={onChange} />);
+    render(
+      <TextAreaField
+        keyboardShortcuts="Control+Enter Meta+Enter"
+        label="Agent task"
+        maxLength={8000}
+        rows={5}
+        value="Draft"
+        onChange={onChange}
+      />,
+    );
     const input = screen.getByRole("textbox", { name: "Agent task" });
+    expect(input.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
     expect(input.getAttribute("maxlength")).toBe("8000");
     expect(input.getAttribute("rows")).toBe("5");
     fireEvent.change(input, { target: { value: "Draft a clear opening" } });
     expect(onChange).toHaveBeenCalledWith("Draft a clear opening");
+  });
+
+  it("presents a safe bounded message subset without activating HTML or links", () => {
+    const { container } = render(
+      <MessageContent
+        text={
+          'Changed the ending with `edit apply`.\n\n- Kept the final beat\n- Preserved `A1`\n\n1. Review\n2. Export\n\n```json\n{"status":"ready"}\n```\n\n<a href="https://example.com">unsafe</a> [docs](https://example.com)'
+        }
+      />,
+    );
+
+    expect(screen.getByText("edit apply").tagName).toBe("CODE");
+    const lists = screen.getAllByRole("list");
+    expect(lists.map((list) => list.tagName)).toEqual(["UL", "OL"]);
+    expect(within(lists[0] as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(lists[1] as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText('{"status":"ready"}').parentElement?.tagName).toBe("PRE");
+    expect(container.querySelector('[data-language="json"]')).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText(/<a href="https:\/\/example.com">unsafe<\/a>/)).toBeTruthy();
+    expect(screen.getByText(/\[docs\]\(https:\/\/example.com\)/)).toBeTruthy();
+  });
+
+  it("keeps exact transcript tokens inline, selectable, and semantically pressed", () => {
+    const onSelect = vi.fn();
+    render(
+      <TokenSelection
+        items={[
+          { id: "hello", label: "Hello", selected: true, text: "Hello" },
+          { id: "space", label: "space", selected: false, text: " " },
+          { id: "world", label: "world", selected: false, text: "world" },
+        ]}
+        label="Transcript segment 1 tokens"
+        onSelect={onSelect}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Transcript segment 1 tokens" });
+    expect(group.textContent).toBe("Hello␠world");
+    const hello = screen.getByRole("button", { name: "Selected token 1 · Hello" });
+    expect(hello.getAttribute("aria-pressed")).toBe("true");
+    expect(hello.tabIndex).toBe(0);
+    const world = screen.getByRole("button", { name: "Select token 3 · world" });
+    expect(world.getAttribute("aria-pressed")).toBe("false");
+    expect(world.tabIndex).toBe(-1);
+    fireEvent.focus(hello);
+    fireEvent.keyDown(hello, { key: "End" });
+    expect(document.activeElement).toBe(world);
+    expect(world.tabIndex).toBe(0);
+    fireEvent.click(world);
+    expect(onSelect).toHaveBeenCalledWith("world");
   });
 
   it("groups a scannable resource identity, state, detail, and actions", () => {
@@ -100,6 +190,22 @@ describe("atomic components", () => {
     expect(within(card).getByText("interview.webm")).toBeTruthy();
     expect(within(card).getByRole("status").textContent).toContain("Ready");
     expect(within(card).getByRole("button", { name: "Open source" })).toBeTruthy();
+  });
+
+  it("offers closed card emphasis without changing article semantics", () => {
+    render(
+      <>
+        <ResourceCard title="Default card" />
+        <ResourceCard emphasis="quiet" title="Quiet card" />
+        <ResourceCard emphasis="strong" title="Strong card" />
+      </>,
+    );
+
+    const cards = ["Default card", "Quiet card", "Strong card"].map(
+      (title) => screen.getByText(title).closest("article") as HTMLElement,
+    );
+    expect(cards.every((card) => card.tagName === "ARTICLE")).toBe(true);
+    expect(new Set(cards.map((card) => card.className)).size).toBe(3);
   });
 
   it("keeps panel controls and composer around an independently scrolling feed", () => {

@@ -1,0 +1,47 @@
+.tokenSelection {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--oc-ink-soft);
+  font-size: 17px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.token {
+  display: inline;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.token:hover {
+  background: var(--oc-accent-wash);
+  color: var(--oc-ink-strong);
+}
+
+.token[aria-pressed="true"] {
+  background: var(--oc-accent-wash);
+  box-shadow: inset 0 -2px 0 var(--oc-accent);
+  color: var(--oc-accent-ink);
+}
+
+.token:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--oc-accent);
+  outline-offset: 2px;
+}
+
+.token:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

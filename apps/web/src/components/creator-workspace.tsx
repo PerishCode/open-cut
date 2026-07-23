@@ -49,6 +49,7 @@ import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
 import { CreatorVersions } from "./creator-versions.js";
+import { CreatorWorkspaceActions } from "./creator-workspace-actions.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
 import {
   mergeTranscriptCorrections,
@@ -407,7 +408,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       });
     }
   }, [contracts, project.id, transcript]);
-
   const importFootage = useCallback(
     async (droppedFile?: File) => {
       if (state.status !== "ready" || importing) return;
@@ -428,20 +428,17 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, importing, load, project.id, state],
   );
-
   const status = state.status === "loading" ? "pending" : state.status === "ready" ? "ready" : "unavailable";
   return (
     <EditorShell
       actions={
-        <>
-          {onExit ? <Button onPress={onExit}>Projects</Button> : null}
-          <Button disabled={!ready || importing} onPress={() => void importFootage()}>
-            {importing ? "Selecting…" : "Add footage"}
-          </Button>
-          <Button disabled={importing} onPress={() => void load()}>
-            Refresh reads
-          </Button>
-        </>
+        <CreatorWorkspaceActions
+          importing={importing}
+          ready={Boolean(ready)}
+          onExit={onExit}
+          onImport={() => void importFootage()}
+          onRefresh={() => void load()}
+        />
       }
       brand="OPEN CUT"
       inspector={

@@ -1,6 +1,7 @@
 import {
   Button,
   ControlStrip,
+  MessageContent,
   PanelDock,
   ResourceCard,
   Stack,
@@ -427,7 +428,8 @@ export function CreatorAgentPane({
           ) : null}
           <TextAreaField
             disabled={!canSubmit}
-            label={state.selected ? "Continue this task" : "New task"}
+            keyboardShortcuts={canSubmit ? "Control+Enter Meta+Enter" : undefined}
+            label={`${state.selected ? "Continue this task" : "New task"}${canSubmit ? " · Ctrl/⌘ Enter" : ""}`}
             maxLength={8000}
             placeholder={
               canContinue || !state.selected
@@ -437,15 +439,29 @@ export function CreatorAgentPane({
             rows={5}
             value={message}
             onChange={setMessage}
+            onKeyDown={(event) => {
+              if (
+                event.key !== "Enter" ||
+                (!event.ctrlKey && !event.metaKey) ||
+                event.altKey ||
+                event.shiftKey ||
+                event.repeat ||
+                event.nativeEvent.isComposing
+              ) {
+                return;
+              }
+              event.preventDefault();
+              void submit();
+            }}
           />
-          <Button disabled={!canSubmit || message.trim() === ""} onPress={() => void submit()}>
+          <Button disabled={!canSubmit || message.trim() === ""} variant="primary" onPress={() => void submit()}>
             {state.submitting ? "Submitting…" : state.selected ? "Continue" : "Start task"}
           </Button>
         </Stack>
       }
       header={
         <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
-          <Button disabled={state.loading || state.submitting} onPress={() => void load()}>
+          <Button disabled={state.loading || state.submitting} variant="quiet" onPress={() => void load()}>
             Refresh
           </Button>
           <Button
@@ -504,6 +520,7 @@ export function CreatorAgentPane({
         {latestOutcome ? (
           <ResourceCard
             details={outcomeDetails(latestOutcome)}
+            emphasis="strong"
             eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
             status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             title={outcomeTitle(latestOutcome)}
@@ -515,13 +532,18 @@ export function CreatorAgentPane({
             <ResourceCard
               details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
               elementRef={entry.id === latestRevealMessageId ? latestMessageRef : undefined}
+              emphasis={entry.role === "agent" ? "default" : "quiet"}
               eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
               key={entry.id}
               title={messageTitle(entry)}
             >
-              <Text>
-                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-              </Text>
+              {entry.role === "agent" ? (
+                <MessageContent text={entry.text} />
+              ) : (
+                <Text>
+                  {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+                </Text>
+              )}
             </ResourceCard>
           );
         })}

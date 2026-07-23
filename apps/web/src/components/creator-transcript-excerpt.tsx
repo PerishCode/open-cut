@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, Stack, Status, Text, TokenSelection } from "@open-cut/components";
 import {
   type Asset,
   type CommitCreatorEditInput,
@@ -185,35 +185,32 @@ export function CreatorTranscriptExcerpt({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">TRANSCRIPT · EXACT TOKEN SELECTION</Text>
-      {segments.map((segment) => (
+      {segments.map((segment, segmentIndex) => (
         <Stack key={segment.id} spacing="compact">
           <Text tone="eyebrow">
             {formatTime(segment.sourceRange.start)} → {formatTimeEnd(segment.sourceRange)}
           </Text>
-          <Text>{segment.text}</Text>
-          {segment.tokens.map((token, index) => {
-            const selected = selectedTokenIds.has(token.id);
-            const tokenLabel = token.text.trim().length > 0 ? token.text : "space";
-            return (
-              <Button
-                disabled={phase === "saving" || phase === "conflict"}
-                key={token.id}
-                onPress={() => {
-                  setSelection((current) =>
-                    !current || current.artifactId !== page.artifact.id
-                      ? { artifactId: page.artifact.id, anchorTokenId: token.id, focusTokenId: token.id }
-                      : { ...current, focusTokenId: token.id },
-                  );
-                  attemptRef.current = undefined;
-                  setPhase("idle");
-                  setError(undefined);
-                  setNotice(undefined);
-                }}
-              >
-                {selected ? "Selected" : "Select"} token {index + 1} · {tokenLabel}
-              </Button>
-            );
-          })}
+          <TokenSelection
+            disabled={phase === "saving" || phase === "conflict"}
+            items={segment.tokens.map((token) => ({
+              id: token.id,
+              label: token.text.trim().length > 0 ? token.text : "space",
+              selected: selectedTokenIds.has(token.id),
+              text: token.text,
+            }))}
+            label={`Transcript segment ${segmentIndex + 1} tokens`}
+            onSelect={(tokenId) => {
+              setSelection((current) =>
+                !current || current.artifactId !== page.artifact.id
+                  ? { artifactId: page.artifact.id, anchorTokenId: tokenId, focusTokenId: tokenId }
+                  : { ...current, focusTokenId: tokenId },
+              );
+              attemptRef.current = undefined;
+              setPhase("idle");
+              setError(undefined);
+              setNotice(undefined);
+            }}
+          />
           <Button onPress={() => onContext(page, segment)}>Use this segment as @ context</Button>
         </Stack>
       ))}

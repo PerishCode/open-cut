@@ -157,7 +157,7 @@ export function CreatorVersions({
         placeholder="e.g. Approved assembly"
         value={name}
       />
-      <Button disabled={!name.trim() || saving || restoring} onPress={() => void save()}>
+      <Button disabled={!name.trim() || saving || restoring} variant="primary" onPress={() => void save()}>
         {saving ? "Saving version…" : "Save version"}
       </Button>
       {notice ? <Status state="ready">{notice}</Status> : null}

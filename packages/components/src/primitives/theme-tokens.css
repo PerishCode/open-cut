@@ -1,0 +1,142 @@
+:root {
+  /* Neutral Broadcast Matte surface roles. */
+  --oc-canvas: #131518;
+  --oc-canvas-wash: var(--oc-canvas);
+  --oc-surface-chrome: #191c20;
+  --oc-surface-pane: #1d2024;
+  --oc-surface-raised: #25292e;
+  --oc-surface-input: #202429;
+  --oc-surface-media: #090b0d;
+  --oc-surface-media-chrome: #121519;
+
+  /* Compatibility names consumed by existing atoms. */
+  --oc-surface: var(--oc-surface-pane);
+  --oc-surface-header: var(--oc-surface-chrome);
+  --oc-surface-timeline: var(--oc-surface-media);
+  --oc-surface-panel: var(--oc-surface-raised);
+  --oc-viewer-well: var(--oc-surface-media);
+  --oc-viewer-glow: none;
+  --oc-timeline-ruler: rgb(235 238 240 / 6%);
+  --oc-input-wash: var(--oc-surface-input);
+
+  /* Text roles. */
+  --oc-ink: #f1f3f4;
+  --oc-ink-strong: rgb(241 243 244 / 90%);
+  --oc-ink-mid: rgb(241 243 244 / 72%);
+  --oc-ink-soft: rgb(241 243 244 / 64%);
+  --oc-ink-dim: rgb(241 243 244 / 54%);
+  --oc-ink-faint: rgb(241 243 244 / 44%);
+
+  /* Structure roles. */
+  --oc-hairline: rgb(241 243 244 / 8%);
+  --oc-hairline-mid: rgb(241 243 244 / 10%);
+  --oc-hairline-strong: rgb(241 243 244 / 14%);
+  --oc-hairline-input: rgb(241 243 244 / 18%);
+
+  /* Identity, creative selection, and focus. */
+  --oc-accent: #a7cf65;
+  --oc-accent-hover: #b4d879;
+  --oc-accent-ink: #c7e99a;
+  --oc-accent-contrast: #17200e;
+  --oc-accent-border: rgb(167 207 101 / 42%);
+  --oc-accent-border-soft: rgb(167 207 101 / 30%);
+  --oc-accent-border-dashed: rgb(167 207 101 / 36%);
+  --oc-accent-border-focus: rgb(167 207 101 / 66%);
+  --oc-accent-border-focus-strong: rgb(167 207 101 / 76%);
+  --oc-accent-wash: rgb(167 207 101 / 12%);
+  --oc-accent-wash-soft: rgb(167 207 101 / 6%);
+  --oc-accent-wash-mild: rgb(167 207 101 / 9%);
+  --oc-accent-halo: rgb(167 207 101 / 14%);
+  --oc-accent-pulse: rgb(167 207 101 / 42%);
+  --oc-focus-ring: rgb(167 207 101 / 24%);
+  --oc-danger-border: rgb(223 113 113 / 44%);
+  --oc-danger-ink: #f0a1a1;
+  --oc-danger-wash: rgb(223 113 113 / 12%);
+
+  /* Status is independent of the brand accent. */
+  --oc-status-ready: #72b58a;
+  --oc-status-pending: #d5aa55;
+  --oc-status-unavailable: #df7171;
+
+  /* Always-dark media subtree roles. */
+  --oc-media-ink: #f1f3f4;
+  --oc-media-ink-strong: rgb(241 243 244 / 90%);
+  --oc-media-ink-mid: rgb(241 243 244 / 72%);
+  --oc-media-ink-soft: rgb(241 243 244 / 64%);
+  --oc-media-ink-dim: rgb(241 243 244 / 54%);
+  --oc-media-ink-faint: rgb(241 243 244 / 44%);
+  --oc-media-border: rgb(241 243 244 / 9%);
+  --oc-media-border-mid: rgb(241 243 244 / 12%);
+  --oc-media-border-strong: rgb(241 243 244 / 16%);
+  --oc-media-border-input: rgb(241 243 244 / 20%);
+  --oc-media-input: #181c20;
+  --oc-media-accent: #a7cf65;
+  --oc-media-accent-ink: #c7e99a;
+  --oc-media-accent-contrast: #17200e;
+  --oc-media-accent-border: rgb(167 207 101 / 46%);
+  --oc-media-accent-wash: rgb(167 207 101 / 12%);
+  --oc-media-bed: #000;
+
+  /* Depth and type. */
+  --oc-shadow-panel: 0 18px 48px rgb(0 0 0 / 24%);
+  --oc-shadow-card: 0 6px 18px rgb(0 0 0 / 16%);
+  --oc-shadow-media: 0 18px 44px rgb(0 0 0 / 36%);
+  --oc-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --oc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  color: var(--oc-ink);
+  color-scheme: dark;
+  background: var(--oc-surface);
+  font-family: var(--oc-font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --oc-canvas: #dfe3e5;
+    --oc-surface-chrome: #e8ebed;
+    --oc-surface-pane: #f1f3f4;
+    --oc-surface-raised: #fafbfb;
+    --oc-surface-input: #e8ebed;
+
+    --oc-ink: #1d2227;
+    --oc-ink-strong: rgb(29 34 39 / 90%);
+    --oc-ink-mid: rgb(29 34 39 / 72%);
+    --oc-ink-soft: rgb(29 34 39 / 64%);
+    --oc-ink-dim: rgb(29 34 39 / 54%);
+    --oc-ink-faint: rgb(29 34 39 / 44%);
+
+    --oc-hairline: rgb(29 34 39 / 9%);
+    --oc-hairline-mid: rgb(29 34 39 / 11%);
+    --oc-hairline-strong: rgb(29 34 39 / 15%);
+    --oc-hairline-input: rgb(29 34 39 / 21%);
+
+    --oc-accent: #5f7f2d;
+    --oc-accent-hover: #526f27;
+    --oc-accent-ink: #4c6822;
+    --oc-accent-contrast: #fff;
+    --oc-accent-border: rgb(95 127 45 / 40%);
+    --oc-accent-border-soft: rgb(95 127 45 / 28%);
+    --oc-accent-border-dashed: rgb(95 127 45 / 34%);
+    --oc-accent-border-focus: rgb(95 127 45 / 62%);
+    --oc-accent-border-focus-strong: rgb(95 127 45 / 72%);
+    --oc-accent-wash: rgb(95 127 45 / 11%);
+    --oc-accent-wash-soft: rgb(95 127 45 / 5%);
+    --oc-accent-wash-mild: rgb(95 127 45 / 8%);
+    --oc-accent-halo: rgb(95 127 45 / 13%);
+    --oc-focus-ring: rgb(95 127 45 / 22%);
+    --oc-danger-border: rgb(184 77 77 / 40%);
+    --oc-danger-ink: #9f3636;
+    --oc-danger-wash: rgb(184 77 77 / 9%);
+
+    --oc-status-ready: #43805c;
+    --oc-status-pending: #946c22;
+    --oc-status-unavailable: #b84d4d;
+    --oc-shadow-panel: 0 16px 40px rgb(24 31 36 / 12%);
+    --oc-shadow-card: 0 6px 18px rgb(24 31 36 / 8%);
+    --oc-shadow-media: 0 18px 44px rgb(0 0 0 / 28%);
+
+    color-scheme: light;
+  }
+}

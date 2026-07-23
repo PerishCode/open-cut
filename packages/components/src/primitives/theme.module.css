@@ -1,119 +1,4 @@
-:global(:root) {
-  /* Canvas layers */
-  --oc-canvas: #0c0d0b;
-  --oc-canvas-wash:
-    radial-gradient(circle at 82% 18%, rgb(174 255 83 / 12%), transparent 32rem),
-    linear-gradient(145deg, #151711, #0c0d0b 72%);
-  --oc-surface: #11120f;
-  --oc-surface-header: #141611;
-  --oc-surface-timeline: #11130f;
-  --oc-surface-panel: rgb(14 15 12 / 72%);
-  --oc-viewer-well: #090a08;
-  --oc-viewer-glow: radial-gradient(circle at center, rgb(181 255 88 / 7%), transparent 18rem);
-  --oc-timeline-ruler: rgb(244 241 234 / 5%);
-
-  /* Ink tiers */
-  --oc-ink: #f4f1ea;
-  --oc-ink-strong: rgb(244 241 234 / 82%);
-  --oc-ink-mid: rgb(244 241 234 / 72%);
-  --oc-ink-soft: rgb(244 241 234 / 62%);
-  --oc-ink-dim: rgb(244 241 234 / 58%);
-  --oc-ink-faint: rgb(244 241 234 / 48%);
-
-  /* Hairlines */
-  --oc-hairline: rgb(244 241 234 / 9%);
-  --oc-hairline-mid: rgb(244 241 234 / 10%);
-  --oc-hairline-strong: rgb(244 241 234 / 12%);
-  --oc-hairline-input: rgb(244 241 234 / 18%);
-
-  /* Accent */
-  --oc-accent: #b5ff58;
-  --oc-accent-ink: #d8ffab;
-  --oc-accent-border: rgb(181 255 88 / 45%);
-  --oc-accent-border-soft: rgb(181 255 88 / 36%);
-  --oc-accent-border-dashed: rgb(181 255 88 / 42%);
-  --oc-accent-border-focus: rgb(181 255 88 / 68%);
-  --oc-accent-border-focus-strong: rgb(181 255 88 / 72%);
-  --oc-accent-wash: rgb(181 255 88 / 10%);
-  --oc-accent-wash-soft: rgb(181 255 88 / 5%);
-  --oc-accent-wash-mild: rgb(181 255 88 / 8%);
-  --oc-accent-halo: rgb(181 255 88 / 8%);
-  --oc-accent-pulse: rgb(181 255 88 / 55%);
-
-  /* Status */
-  --oc-status-ready: #b5ff58;
-  --oc-status-pending: #f4d35e;
-  --oc-status-unavailable: #ff6b6b;
-
-  /* Media and depth */
-  --oc-media-bed: #000;
-  --oc-shadow-panel: 0 32px 100px rgb(0 0 0 / 42%);
-  --oc-shadow-media: 0 24px 72px rgb(0 0 0 / 42%);
-  --oc-input-wash: rgb(244 241 234 / 5%);
-
-  /* Type */
-  --oc-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --oc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  color: var(--oc-ink);
-  color-scheme: dark;
-  background: var(--oc-surface);
-  font-family: var(--oc-font-sans);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
-@media (prefers-color-scheme: light) {
-  :global(:root) {
-    --oc-canvas: #f3f1e9;
-    --oc-canvas-wash:
-      radial-gradient(circle at 82% 18%, rgb(106 158 26 / 9%), transparent 32rem),
-      linear-gradient(145deg, #faf8f2, #efede4 72%);
-    --oc-surface: #f6f4ee;
-    --oc-surface-header: #f0eee6;
-    --oc-surface-timeline: #f1efe8;
-    --oc-surface-panel: rgb(255 254 250 / 78%);
-    --oc-viewer-well: #14150f;
-    --oc-viewer-glow: radial-gradient(circle at center, rgb(181 255 88 / 5%), transparent 18rem);
-    --oc-timeline-ruler: rgb(28 30 22 / 6%);
-
-    --oc-ink: #1c1e16;
-    --oc-ink-strong: rgb(28 30 22 / 84%);
-    --oc-ink-mid: rgb(28 30 22 / 74%);
-    --oc-ink-soft: rgb(28 30 22 / 64%);
-    --oc-ink-dim: rgb(28 30 22 / 58%);
-    --oc-ink-faint: rgb(28 30 22 / 48%);
-
-    --oc-hairline: rgb(28 30 22 / 10%);
-    --oc-hairline-mid: rgb(28 30 22 / 11%);
-    --oc-hairline-strong: rgb(28 30 22 / 13%);
-    --oc-hairline-input: rgb(28 30 22 / 22%);
-
-    --oc-accent: #45700a;
-    --oc-accent-ink: #33540a;
-    --oc-accent-border: rgb(69 112 10 / 45%);
-    --oc-accent-border-soft: rgb(69 112 10 / 36%);
-    --oc-accent-border-dashed: rgb(69 112 10 / 42%);
-    --oc-accent-border-focus: rgb(69 112 10 / 66%);
-    --oc-accent-border-focus-strong: rgb(69 112 10 / 72%);
-    --oc-accent-wash: rgb(106 158 26 / 12%);
-    --oc-accent-wash-soft: rgb(106 158 26 / 6%);
-    --oc-accent-wash-mild: rgb(106 158 26 / 9%);
-    --oc-accent-halo: rgb(106 158 26 / 12%);
-    --oc-accent-pulse: rgb(106 158 26 / 45%);
-
-    --oc-status-ready: #45700a;
-    --oc-status-pending: #92600a;
-    --oc-status-unavailable: #c23636;
-
-    --oc-media-bed: #000;
-    --oc-shadow-panel: 0 24px 72px rgb(38 40 30 / 16%);
-    --oc-shadow-media: 0 18px 56px rgb(38 40 30 / 22%);
-    --oc-input-wash: rgb(28 30 22 / 4%);
-
-    color-scheme: light;
-  }
-}
+@import "./theme-tokens.css";
 
 :global(*) {
   box-sizing: border-box;
@@ -152,12 +37,20 @@
 
 .editorBrand,
 .editorPaneHeader {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.editorBrand {
   color: var(--oc-accent);
   font-family: var(--oc-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.editorPaneHeader {
+  color: var(--oc-ink-faint);
+  font-family: var(--oc-font-sans);
+  letter-spacing: 0.02em;
 }
 
 .editorTitle {
@@ -204,7 +97,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 42px 1fr;
+  grid-template-rows: 36px 1fr;
 }
 
 .editorSidebar {
@@ -212,7 +105,7 @@
 }
 
 .editorInspector {
-  background: color-mix(in srgb, var(--oc-surface) 92%, var(--oc-accent) 8%);
+  background: var(--oc-surface);
 }
 
 .editorPaneHeader {
@@ -237,20 +130,26 @@
 }
 
 .editorViewer .editorPaneContent {
-  /* The viewer well stays dark in both themes, so its subtree re-scopes the
-     ink and accent tokens to their dark values regardless of system theme. */
-  --oc-ink: #f4f1ea;
-  --oc-ink-strong: rgb(244 241 234 / 82%);
-  --oc-ink-mid: rgb(244 241 234 / 72%);
-  --oc-ink-soft: rgb(244 241 234 / 62%);
-  --oc-ink-dim: rgb(244 241 234 / 58%);
-  --oc-ink-faint: rgb(244 241 234 / 48%);
-  --oc-hairline-input: rgb(244 241 234 / 18%);
-  --oc-accent: #b5ff58;
-  --oc-accent-ink: #d8ffab;
-  --oc-accent-border: rgb(181 255 88 / 45%);
-  --oc-accent-wash: rgb(181 255 88 / 10%);
-  --oc-input-wash: rgb(244 241 234 / 5%);
+  /* Media stays dark in both system themes. */
+  --oc-ink: var(--oc-media-ink);
+  --oc-ink-strong: var(--oc-media-ink-strong);
+  --oc-ink-mid: var(--oc-media-ink-mid);
+  --oc-ink-soft: var(--oc-media-ink-soft);
+  --oc-ink-dim: var(--oc-media-ink-dim);
+  --oc-ink-faint: var(--oc-media-ink-faint);
+  --oc-hairline: var(--oc-media-border);
+  --oc-hairline-mid: var(--oc-media-border-mid);
+  --oc-hairline-strong: var(--oc-media-border-strong);
+  --oc-hairline-input: var(--oc-media-border-input);
+  --oc-surface-raised: var(--oc-media-input);
+  --oc-surface-input: var(--oc-surface-media-chrome);
+  --oc-accent: var(--oc-media-accent);
+  --oc-accent-ink: var(--oc-media-accent-ink);
+  --oc-accent-contrast: var(--oc-media-accent-contrast);
+  --oc-accent-border: var(--oc-media-accent-border);
+  --oc-accent-wash: var(--oc-media-accent-wash);
+  --oc-focus-ring: rgb(167 207 101 / 24%);
+  --oc-input-wash: var(--oc-media-input);
 
   display: grid;
   color: var(--oc-ink);
@@ -261,10 +160,8 @@
 .editorTimeline {
   display: grid;
   min-height: 0;
-  grid-template-rows: 42px 1fr;
-  background:
-    repeating-linear-gradient(90deg, transparent 0, transparent 119px, var(--oc-timeline-ruler) 120px),
-    var(--oc-surface-timeline);
+  grid-template-rows: 36px 1fr;
+  background: var(--oc-surface);
 }
 
 .editorTimelineContent {
@@ -342,7 +239,21 @@
   display: grid;
   overflow: hidden;
   border: 1px solid var(--oc-hairline-strong);
-  background: color-mix(in srgb, var(--oc-surface) 94%, var(--oc-ink) 6%);
+  background: var(--oc-surface-raised);
+}
+
+.resourceCardDefault {
+  background: var(--oc-surface-raised);
+}
+
+.resourceCardQuiet {
+  border-color: var(--oc-hairline);
+  background: transparent;
+}
+
+.resourceCardStrong {
+  background: var(--oc-surface-raised);
+  box-shadow: var(--oc-shadow-card);
 }
 
 .resourceCard[aria-current="true"] {
@@ -420,7 +331,7 @@
 
 .panelDockHeader {
   border-bottom: 1px solid var(--oc-hairline);
-  background: color-mix(in srgb, var(--oc-surface) 92%, var(--oc-accent) 8%);
+  background: var(--oc-surface-header);
 }
 
 .panelDockBody {
@@ -432,8 +343,8 @@
   overflow: auto;
   max-height: 58vh;
   border-top: 1px solid var(--oc-hairline-strong);
-  background: color-mix(in srgb, var(--oc-surface) 88%, var(--oc-accent) 12%);
-  box-shadow: 0 -16px 36px rgb(0 0 0 / 8%);
+  background: var(--oc-surface-raised);
+  box-shadow: 0 -12px 28px rgb(0 0 0 / 6%);
 }
 
 .eyebrow,
@@ -443,11 +354,11 @@
 }
 
 .eyebrow {
-  color: var(--oc-accent);
+  color: var(--oc-ink-faint);
   font-family: var(--oc-font-mono);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
 }
 
 .heading {
@@ -460,8 +371,8 @@
 .body {
   max-width: 610px;
   color: var(--oc-ink-soft);
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .resourceCardBody > .body {
@@ -474,20 +385,73 @@
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
   color: var(--oc-ink-strong);
-  font-family: var(--oc-font-mono);
-  font-size: 13px;
+  font-family: var(--oc-font-sans);
+  font-size: 12px;
 }
 
 .button {
   align-self: flex-start;
-  padding: 11px 16px;
-  border: 1px solid var(--oc-accent-border);
-  background: var(--oc-accent-wash);
-  color: var(--oc-accent-ink);
+  min-height: 28px;
+  padding: 6px 10px;
+  border: 1px solid var(--oc-hairline-input);
+  border-radius: 4px;
+  background: var(--oc-surface-raised);
+  color: var(--oc-ink-strong);
   cursor: pointer;
-  font: 600 13px / 1 var(--oc-font-mono);
+  font: 600 12px / 1.2 var(--oc-font-sans);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--oc-hairline-strong);
+  background: var(--oc-surface-input);
+  color: var(--oc-ink);
+}
+
+.buttonSecondary {
+  background: var(--oc-surface-raised);
+}
+
+.buttonPrimary {
+  border-color: var(--oc-accent);
+  background: var(--oc-accent);
+  color: var(--oc-accent-contrast);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  border-color: var(--oc-accent-hover);
+  background: var(--oc-accent-hover);
+  color: var(--oc-accent-contrast);
+}
+
+.buttonQuiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--oc-ink-mid);
+}
+
+.buttonQuiet:hover:not(:disabled) {
+  border-color: var(--oc-hairline);
+  background: var(--oc-surface-input);
+}
+
+.buttonDanger {
+  border-color: var(--oc-danger-border);
+  background: var(--oc-danger-wash);
+  color: var(--oc-danger-ink);
+}
+
+.buttonDanger:hover:not(:disabled) {
+  border-color: var(--oc-danger-ink);
+  background: var(--oc-danger-wash);
+  color: var(--oc-danger-ink);
+}
+
+.button:focus-visible {
+  border-color: var(--oc-accent-border-focus);
+  box-shadow: 0 0 0 3px var(--oc-focus-ring);
+  outline: none;
 }
 
 .button:disabled {
@@ -545,6 +509,19 @@
   font-size: 10px;
 }
 
+.controlStripBody > .buttonSecondary,
+.controlStripBody > .buttonQuiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--oc-ink-mid);
+}
+
+.controlStripBody > .buttonSecondary:hover:not(:disabled),
+.controlStripBody > .buttonQuiet:hover:not(:disabled) {
+  border-color: var(--oc-hairline);
+  background: var(--oc-surface-input);
+}
+
 .field {
   display: grid;
   gap: 9px;
@@ -552,10 +529,10 @@
 
 .fieldLabel {
   color: var(--oc-ink-mid);
-  font-family: var(--oc-font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--oc-font-sans);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .fieldInput {
@@ -598,8 +575,9 @@
   min-width: 0;
   gap: 10px;
   padding: 18px;
-  border: 1px dashed var(--oc-accent-border-dashed);
-  background: var(--oc-accent-wash-soft);
+  border: 1px dashed var(--oc-hairline-input);
+  border-radius: 6px;
+  background: var(--oc-surface-input);
   cursor: pointer;
 }
 
@@ -623,10 +601,11 @@
 }
 .fileFieldAction {
   padding: 8px 11px;
-  border: 1px solid var(--oc-accent-border-soft);
-  background: var(--oc-accent-wash-mild);
-  color: var(--oc-accent-ink);
-  font: 600 13px / 1 var(--oc-font-mono);
+  border: 1px solid var(--oc-hairline-input);
+  border-radius: 4px;
+  background: var(--oc-surface-raised);
+  color: var(--oc-ink-strong);
+  font: 600 12px / 1 var(--oc-font-sans);
 }
 
 .fileFieldName {
@@ -663,8 +642,6 @@
 
 .ready {
   background: var(--oc-status-ready);
-  box-shadow: 0 0 0 0 var(--oc-accent-pulse);
-  animation: pulse 2s infinite;
 }
 
 .pending {
@@ -673,16 +650,6 @@
 
 .unavailable {
   background: var(--oc-status-unavailable);
-}
-
-@keyframes pulse {
-  70% {
-    box-shadow: 0 0 0 9px rgb(181 255 88 / 0%);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 rgb(181 255 88 / 0%);
-  }
 }
 
 .tabs {
@@ -698,24 +665,30 @@
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--oc-hairline-mid);
-  background: var(--oc-input-wash);
+  background: var(--oc-surface-input);
 }
 
 .tab {
-  padding: 8px 12px;
+  min-height: 28px;
+  padding: 6px 10px;
   border: 1px solid transparent;
+  border-radius: 4px;
   background: transparent;
   color: var(--oc-ink-dim);
   cursor: pointer;
-  font: 600 12px / 1 var(--oc-font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 600 11px / 1.2 var(--oc-font-sans);
 }
 
 .tabActive {
-  border-color: var(--oc-accent-border);
-  background: var(--oc-accent-wash);
-  color: var(--oc-accent-ink);
+  border-color: var(--oc-hairline-strong);
+  background: var(--oc-surface-raised);
+  box-shadow: inset 0 -2px 0 var(--oc-accent);
+  color: var(--oc-ink-strong);
+}
+
+.tab:focus-visible {
+  box-shadow: 0 0 0 3px var(--oc-focus-ring);
+  outline: none;
 }
 
 .tabPanel {

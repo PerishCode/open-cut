@@ -1,0 +1,50 @@
+.messageContent {
+  min-width: 0;
+  color: var(--oc-ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.messageContent p,
+.messageContent ol,
+.messageContent ul,
+.messageContent pre {
+  margin: 0 0 10px;
+}
+
+.messageContent > :last-child {
+  margin-bottom: 0;
+}
+
+.messageContent ol,
+.messageContent ul {
+  padding-left: 20px;
+}
+
+.messageContent li + li {
+  margin-top: 4px;
+}
+
+.messageContent :not(pre) > code {
+  padding: 1px 4px;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink-strong);
+  font: 0.92em / 1.4 var(--oc-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.messageContent pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 9px 10px;
+  border: 1px solid var(--oc-hairline-input);
+  background: var(--oc-input-wash);
+  color: var(--oc-ink-strong);
+}
+
+.messageContent pre code {
+  font: 12px / 1.5 var(--oc-font-mono);
+  white-space: pre;
+}

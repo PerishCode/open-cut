@@ -198,7 +198,11 @@ export function CreatorExport({
         summary={`NEXT · SEQUENCE r${sequenceRevision} · ${suggestedName}`}
       >
         <Status state={nextStatus.state}>{nextStatus.label}</Status>
-        <Button disabled={!available || !hasContent || pending || active} onPress={() => void start()}>
+        <Button
+          disabled={!available || !hasContent || pending || active}
+          variant="primary"
+          onPress={() => void start()}
+        >
           {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export current revision"}
         </Button>
       </ControlStrip>
@@ -251,7 +255,7 @@ export function CreatorExport({
                   ) : null}
                   {confirmingDelete ? (
                     <>
-                      <Button disabled={pending} onPress={() => void deleteArtifact(lineage)}>
+                      <Button disabled={pending} variant="danger" onPress={() => void deleteArtifact(lineage)}>
                         Delete export permanently
                       </Button>
                       <Button disabled={pending} onPress={() => setDeleteConfirmation(undefined)}>

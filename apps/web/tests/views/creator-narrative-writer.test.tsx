@@ -47,6 +47,7 @@ describe("CreatorNarrativeWriter", () => {
     renderWriter(onReload);
 
     const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" });
+    expect(screen.getByRole("region", { name: "Narrative paragraph 1 structure actions" })).toBeTruthy();
     fireEvent.change(editor, { target: { value: "First checkpoint" } });
     fireEvent.blur(editor);
     expect(await screen.findByText("Saving checkpoint…")).toBeTruthy();
