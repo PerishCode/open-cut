@@ -125,28 +125,32 @@ describe("atomic components", () => {
   });
 
   it("keeps Sources, Viewer, Timeline, and Agent as one resizable editor workspace", () => {
-    render(
-      <EditorShell
-        brand="OPEN CUT"
-        inspector={<span>Agent conversation</span>}
-        inspectorLabel="Agent"
-        sidebar={<span>Media bin</span>}
-        sidebarLabel="Sources"
-        timeline={<span>Track lanes</span>}
-        timelineLabel="Timeline"
-        title="Story"
-        viewer={<span>Program picture</span>}
-        viewerLabel="Viewer"
-      />,
-    );
+    const props = {
+      brand: "OPEN CUT",
+      inspector: <span>Agent conversation</span>,
+      inspectorLabel: "Agent",
+      sidebar: <span>Media bin</span>,
+      sidebarLabel: "Sources",
+      timeline: <span>Track lanes</span>,
+      timelineLabel: "Timeline",
+      title: "Story",
+      viewer: <span>Program picture</span>,
+      viewerLabel: "Viewer",
+    };
+    const view = render(<EditorShell {...props} timelineScrollKey="timeline" />);
 
     expect(screen.getByRole("region", { name: "Sources" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Viewer" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Timeline" })).toBeTruthy();
+    const timeline = screen.getByRole("region", { name: "Timeline" });
+    expect(timeline).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agent" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Sources" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Timeline" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Agent" })).toBeTruthy();
+    const timelineContent = timeline.lastElementChild as HTMLElement;
+    timelineContent.scrollTop = 120;
+    view.rerender(<EditorShell {...props} timelineScrollKey="rough-cut" />);
+    expect(timelineContent.scrollTop).toBe(0);
   });
 
   it("projects real tracks, items, playhead, seeking, and zoom as a spatial timeline", () => {
