@@ -1,5 +1,4 @@
 .mediaPlayerFrame {
-  position: relative;
   width: min(100%, 960px);
 }
 
@@ -22,12 +21,8 @@
 }
 
 .mediaPlayerTransport {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  left: 8px;
+  margin-top: 4px;
   border: 1px solid rgb(244 241 234 / 16%);
   background: rgb(9 10 8 / 88%);
   box-shadow: 0 8px 28px rgb(0 0 0 / 38%);
-  backdrop-filter: blur(12px);
 }
