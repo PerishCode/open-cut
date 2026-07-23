@@ -82,6 +82,14 @@ Conversation ordinal orders durable messages and receipt ordinal orders command
 evidence; display timestamps may be shown but never interleave the two as a
 claimed causal total order.
 
+The selected task is a persistent state card with its current Turn and lifecycle
+actions. When the selected Turn has outcome receipts, the newest outcome is
+summarized above the conversation: only a succeeded outcome carrying an exact
+Project revision may say that a creative change was committed. The summary is a
+receipt projection, never an inference from Agent prose. Every command remains
+available below as its own class/status/ordinal card with durable result
+references and focus actions.
+
 The Run surface reads an authoritative creator-only `AgentTurnPage`. Historical
 Turns are ordered only by their Run generation, and the UI lazy-loads each
 expanded Turn's `TurnReceiptPage`. There is no run-wide receipt cursor or total
