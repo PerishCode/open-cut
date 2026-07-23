@@ -11,7 +11,7 @@ import {
   revisionString,
   type Track,
 } from "@open-cut/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { CreatorTimeline } from "../../src/components/creator-timeline.js";
@@ -48,6 +48,16 @@ describe("Creator Timeline handoff", () => {
     fireEvent.click(clipButton);
     expect(screen.queryByText("Rough cut added · 1 clip highlighted")).toBeNull();
     expect(clipButton.getAttribute("aria-pressed")).toBe("true");
+    const policy = screen.getByRole("region", { name: "Timeline selection policy" });
+    const move = within(policy).getByRole("button", { name: "Move here" });
+    expect((move as HTMLButtonElement).disabled).toBe(true);
+    expect((within(policy).getByRole("button", { name: "Trim in" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(policy).getByRole("button", { name: "Trim out" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(policy).getByRole("button", { name: "Split" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(policy).getByRole("button", { name: "Remove" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(policy).getByRole("button", { name: "Mark stale" }));
+    expect((move as HTMLButtonElement).disabled).toBe(false);
+    expect((within(policy).getByRole("button", { name: "Remove" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

@@ -146,7 +146,9 @@ export function CreatorTimeline({
     : !selected
       ? undefined
       : ready
-        ? "Canvas ready · drag body to move · drag edges to trim"
+        ? snapshot.alignmentHandling === "preserve-if-provable"
+          ? "Canvas ready · drag body/edges · Remove needs Mark stale or Unbind"
+          : "Canvas ready · drag body to move · drag edges to trim"
         : !busy && snapshot.phase !== "conflict"
           ? selected.linkGroupId && !snapshot.scope
             ? "Choose linked scope, then Alignment, to enable move and trim."
@@ -202,7 +204,29 @@ export function CreatorTimeline({
       >
         {snapshot.alignmentHandling === "unbind" ? "✓ " : ""}Unbind
       </Button>
-      {selected ? <Button onPress={() => onContextClip(selected)}>Add @ context</Button> : null}
+      {selected ? (
+        <>
+          <Button disabled={!ready} onPress={() => void run(() => controller.moveToPlayhead())}>
+            Move here
+          </Button>
+          <Button disabled={!ready} onPress={() => void run(() => controller.trimStartToPlayhead())}>
+            Trim in
+          </Button>
+          <Button disabled={!ready} onPress={() => void run(() => controller.trimEndToPlayhead())}>
+            Trim out
+          </Button>
+          <Button disabled={!ready} onPress={() => void run(() => controller.splitAtPlayhead())}>
+            Split
+          </Button>
+          <Button
+            disabled={!ready || snapshot.alignmentHandling === "preserve-if-provable"}
+            onPress={() => void run(() => controller.remove())}
+          >
+            Remove
+          </Button>
+          <Button onPress={() => onContextClip(selected)}>Add @ context</Button>
+        </>
+      ) : null}
     </ControlStrip>
   ) : undefined;
 
@@ -227,32 +251,6 @@ export function CreatorTimeline({
         tracks={tracks.map((track) => ({ id: track.id, label: track.label, kind: track.type }))}
       />
       {clips.length === 0 ? <Text>Drop a source range or apply a rough cut to add the first Clip.</Text> : null}
-      {selected ? (
-        <Stack spacing="compact">
-          <Text tone="eyebrow">PLAYHEAD ACTIONS · {formatTime(viewerSnapshot.playhead)}</Text>
-          <Button disabled={!ready} onPress={() => void run(() => controller.moveToPlayhead())}>
-            Move selected scope to playhead
-          </Button>
-          <Button disabled={!ready} onPress={() => void run(() => controller.trimStartToPlayhead())}>
-            Trim in to playhead
-          </Button>
-          <Button disabled={!ready} onPress={() => void run(() => controller.trimEndToPlayhead())}>
-            Trim out to playhead
-          </Button>
-          <Button disabled={!ready} onPress={() => void run(() => controller.splitAtPlayhead())}>
-            Split at playhead
-          </Button>
-          <Button
-            disabled={!ready || snapshot.alignmentHandling === "preserve-if-provable"}
-            onPress={() => void run(() => controller.remove())}
-          >
-            Remove selected scope
-          </Button>
-          {snapshot.alignmentHandling === "preserve-if-provable" || snapshot.alignmentHandling === undefined ? (
-            <Text>Remove requires an explicit mark-stale or unbind choice.</Text>
-          ) : null}
-        </Stack>
-      ) : null}
       {snapshot.phase === "planning" ? (
         <Status state="pending">Planning complete linked/Alignment closure…</Status>
       ) : null}
