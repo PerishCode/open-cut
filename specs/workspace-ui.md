@@ -255,6 +255,12 @@ Pointer and text drafts remain visibly ephemeral until the checkpoint rules in
 Playback pins one Sequence revision and RenderPlan, uses the exact master-clock
 rules in `specs/playback.md`, and pauses before a creative gesture. A newer
 revision is reconciled explicitly rather than hot-swapped beneath playback.
+Sequence mode keeps one always-visible transport over the program picture:
+current/semantic timecode, start, previous frame, play/pause, and next frame.
+The native media element is an actuator, not a second hidden transport. A
+Timeline seek immediately actuates that same media session; playback clock
+observations are settled onto the pinned Sequence frame grid before updating
+the shared logical playhead.
 
 ## Timeline
 

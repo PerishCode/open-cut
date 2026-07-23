@@ -44,6 +44,10 @@ export interface TimelinePlayheadAuthority {
   setPlayhead(value: RationalTime): void;
 }
 
+export interface TimelineGestureAuthority extends TimelinePlayheadAuthority {
+  pause(): void;
+}
+
 export interface TimelineViewerRevisionAuthority {
   setAvailableRevision(revision: RevisionString): void;
   adoptRevision(revision: RevisionString): void;
@@ -76,7 +80,7 @@ const initialSnapshot: CreatorTimelineSnapshot = {
 
 export class CreatorTimelineController {
   readonly #timeline: CreatorTimelinePort;
-  readonly #playhead: TimelinePlayheadAuthority;
+  readonly #playhead: TimelineGestureAuthority;
   readonly #listeners = new Set<() => void>();
   #snapshot: CreatorTimelineSnapshot = initialSnapshot;
   #projection?: TimelineProjection;
@@ -86,7 +90,7 @@ export class CreatorTimelineController {
   #generation = 0;
   #inFlight = false;
 
-  constructor(timeline: CreatorTimelinePort, playhead: TimelinePlayheadAuthority) {
+  constructor(timeline: CreatorTimelinePort, playhead: TimelineGestureAuthority) {
     this.#timeline = timeline;
     this.#playhead = playhead;
   }
@@ -344,6 +348,7 @@ export class CreatorTimelineController {
   }
 
   async #commit(input: CreatorTimelineGestureInput): Promise<CreatorEditCommit | undefined> {
+    this.#playhead.pause();
     const generation = ++this.#generation;
     this.#inFlight = true;
     this.#attempt = undefined;

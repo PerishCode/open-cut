@@ -65,6 +65,7 @@ describe("CreatorTimelineController", () => {
       review("split", "linked"),
       expect.objectContaining({ intent: "Split selected Timeline Clip" }),
     );
+    expect(playhead.pause).toHaveBeenCalledTimes(1);
     expect(receipt?.transactionId).toBe(transactionId);
     expect(controller.getSnapshot()).toMatchObject({ phase: "committed", review: { kind: "split" } });
 
@@ -471,6 +472,7 @@ function range(start: number, duration: number) {
 
 class FakePlayhead implements TimelinePlayheadAuthority {
   value;
+  pause = vi.fn();
 
   constructor(value: number) {
     this.value = { value: int64String(String(value)), scale: 1 };

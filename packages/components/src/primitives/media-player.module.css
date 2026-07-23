@@ -1,0 +1,33 @@
+.mediaPlayerFrame {
+  position: relative;
+  width: min(100%, 960px);
+}
+
+.mediaPlayer,
+.audioPlayer {
+  border: 1px solid var(--oc-hairline-strong);
+  background: var(--oc-media-bed);
+  box-shadow: var(--oc-shadow-media);
+}
+
+.mediaPlayer {
+  display: block;
+  width: 100%;
+  max-height: min(36vh, 720px);
+}
+
+.audioPlayer {
+  width: min(100%, 960px);
+  min-width: min(100%, 420px);
+}
+
+.mediaPlayerTransport {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  border: 1px solid rgb(244 241 234 / 16%);
+  background: rgb(9 10 8 / 88%);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(12px);
+}

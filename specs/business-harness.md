@@ -87,7 +87,11 @@ job progress.
 They race snapshot-plus-cursor reads against SSE reconnect, duplicate and gap
 activity delivery, and require bounded refetch. Viewer tests exercise session-
 bound opaque MediaLeases, `HEAD`/Range seeking, expiry renewal, and process-
-instance invalidation through the real same-origin proxy chain.
+instance invalidation through the real same-origin proxy chain. Sequence UI
+acceptance proves that the persistent transport and Timeline command one shared
+playhead: Timeline seek moves the media actuator, playback observations settle
+to the declared frame grid without accumulated float drift, frame-step is exact,
+and a creative Timeline gesture pauses before planning.
 
 These tests may use in-process adapters, but Web still imports product
 communication only from `packages/contracts`. UI test convenience is not an

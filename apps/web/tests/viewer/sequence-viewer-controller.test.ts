@@ -1,3 +1,4 @@
+import type { MediaPlayerActuator } from "@open-cut/components";
 import {
   digestString,
   durableID,
@@ -103,6 +104,37 @@ describe("SequenceViewerController", () => {
       expect.any(AbortSignal),
     );
     expect(controller.getSnapshot().status).toBe("preparing");
+  });
+
+  it("owns exact seek, frame-step, and playback transport over one media actuator", async () => {
+    const port = viewerPort();
+    vi.mocked(port.prepareSequencePreview).mockResolvedValue(readyPreparation("1", "7200"));
+    const controller = new SequenceViewerController(port, new FakeRuntime());
+    const actuator = mediaActuator();
+
+    controller.open(projectId, sequenceId, revisionString("1"));
+    await settle();
+    controller.attachActuator(actuator);
+    controller.setPlayhead({ value: int64String("8"), scale: 1 });
+    expect(actuator.seekToSeconds).toHaveBeenLastCalledWith(8);
+    controller.observePlaybackPosition(8.033333);
+    expect(controller.getSnapshot().playhead).toEqual({ value: "241", scale: 30 });
+
+    controller.observePlaybackPosition(3_600.1);
+    expect(controller.getSnapshot().playhead).toEqual({ value: "36001", scale: 10 });
+
+    controller.stepFrame(-1);
+    expect(actuator.pause).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().playhead).toEqual({ value: "54001", scale: 15 });
+    controller.stepFrame(1);
+    expect(controller.getSnapshot().playhead).toEqual({ value: "36001", scale: 10 });
+
+    controller.seekToStart();
+    expect(controller.getSnapshot().playhead).toEqual({ value: "0", scale: 1 });
+    controller.setPlayhead({ value: int64String("7200"), scale: 1 });
+    await controller.play();
+    expect(controller.getSnapshot().playhead).toEqual({ value: "0", scale: 1 });
+    expect(actuator.play).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -242,4 +274,13 @@ function deferred<Value>() {
 async function settle(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function mediaActuator(): MediaPlayerActuator {
+  return {
+    readCurrentTimeSeconds: vi.fn(() => 0),
+    seekToSeconds: vi.fn(),
+    play: vi.fn(async () => undefined),
+    pause: vi.fn(),
+  };
 }
