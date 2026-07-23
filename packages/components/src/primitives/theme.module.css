@@ -340,11 +340,11 @@
 }
 
 .eyebrow {
-  color: var(--oc-accent);
+  color: var(--oc-ink-faint);
   font-family: var(--oc-font-mono);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
 }
 
 .heading {
@@ -357,8 +357,8 @@
 .body {
   max-width: 610px;
   color: var(--oc-ink-soft);
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .resourceCardBody > .body {
@@ -493,6 +493,19 @@
   min-height: 22px;
   padding: 3px 6px;
   font-size: 10px;
+}
+
+.controlStripBody > .buttonSecondary,
+.controlStripBody > .buttonQuiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--oc-ink-mid);
+}
+
+.controlStripBody > .buttonSecondary:hover:not(:disabled),
+.controlStripBody > .buttonQuiet:hover:not(:disabled) {
+  border-color: var(--oc-hairline);
+  background: var(--oc-surface-input);
 }
 
 .field {
