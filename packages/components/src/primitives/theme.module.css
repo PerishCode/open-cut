@@ -538,22 +538,6 @@
   font-size: 10px;
 }
 
-.mediaPlayer,
-.audioPlayer {
-  width: min(100%, 960px);
-  border: 1px solid var(--oc-hairline-strong);
-  background: var(--oc-media-bed);
-  box-shadow: var(--oc-shadow-media);
-}
-
-.mediaPlayer {
-  max-height: min(62vh, 720px);
-}
-
-.audioPlayer {
-  min-width: min(100%, 420px);
-}
-
 .field {
   display: grid;
   gap: 9px;

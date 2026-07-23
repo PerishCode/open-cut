@@ -29,6 +29,7 @@ export type SequenceViewerRuntime = Readonly<{
 }>;
 
 const zeroPlayhead: RationalTime = { value: int64String("0"), scale: 1 };
+const browserFrameBoundaryTolerance = 0.001;
 
 const browserRuntime: SequenceViewerRuntime = {
   now: () => Date.now(),
@@ -66,6 +67,7 @@ export class SequenceViewerController {
       this.setAvailableRevision(revision);
       return;
     }
+    this.#actuator?.pause();
     this.#snapshot = {
       status: "preparing",
       projectId,
@@ -93,6 +95,7 @@ export class SequenceViewerController {
     if (snapshot.availableRevision !== undefined && BigInt(revision) > BigInt(snapshot.availableRevision)) {
       throw new Error("cannot adopt an unobserved Sequence revision");
     }
+    this.pause();
     this.#snapshot = {
       status: "preparing",
       projectId: snapshot.projectId,
@@ -115,6 +118,7 @@ export class SequenceViewerController {
   restart(): void {
     const preparation = this.#snapshot.preparation;
     if (preparation?.status === "failed") return;
+    this.pause();
     this.#snapshot = { ...this.#snapshot, status: "preparing", playback: "paused", error: undefined };
     this.#emit();
     this.#begin(preparation?.continuation ? "continue" : "prepare");
@@ -129,6 +133,7 @@ export class SequenceViewerController {
     ) {
       throw new Error("Sequence preview is not retryable");
     }
+    this.pause();
     this.#snapshot = { ...this.#snapshot, status: "preparing", playback: "paused", error: undefined };
     this.#emit();
     this.#begin("retry");
@@ -136,8 +141,10 @@ export class SequenceViewerController {
 
   setPlayhead(playhead: RationalTime): void {
     const duration = this.#snapshot.preparation?.lease?.facts.semanticDuration;
-    this.#snapshot = { ...this.#snapshot, playhead: duration ? clampTime(playhead, duration) : playhead };
+    const settled = duration ? clampTime(playhead, duration) : playhead;
+    this.#snapshot = { ...this.#snapshot, playhead: settled };
     this.#emit();
+    this.#seekActuator(settled);
   }
 
   setPlaying(playing: boolean): void {
@@ -148,6 +155,62 @@ export class SequenceViewerController {
 
   attachActuator(actuator: MediaPlayerActuator | undefined): void {
     this.#actuator = actuator;
+  }
+
+  syncActuator(): void {
+    this.#seekActuator(this.#snapshot.playhead);
+  }
+
+  observePlaybackPosition(seconds: number): void {
+    const facts = this.#snapshot.preparation?.lease?.facts;
+    if (this.#snapshot.status !== "ready" || !facts || !Number.isFinite(seconds) || seconds < 0) return;
+    try {
+      const playhead = clampTime(frameTimeAtOrBefore(seconds, facts.frameRate), facts.semanticDuration);
+      if (sameTime(playhead, this.#snapshot.playhead)) return;
+      this.#snapshot = { ...this.#snapshot, playhead };
+      this.#emit();
+    } catch {
+      // A browser clock observation can be rounded or temporarily invalid; it
+      // never replaces the last exact logical playhead unless it maps cleanly.
+    }
+  }
+
+  async play(): Promise<void> {
+    const actuator = this.#actuator;
+    const duration = this.#snapshot.preparation?.lease?.facts.semanticDuration;
+    if (this.#snapshot.status !== "ready" || !actuator || !duration) {
+      throw new Error("Sequence playback is unavailable");
+    }
+    if (compareTime(this.#snapshot.playhead, duration) >= 0) this.setPlayhead(zeroPlayhead);
+    else this.#seekActuator(this.#snapshot.playhead);
+    await actuator.play();
+  }
+
+  async togglePlayback(): Promise<void> {
+    if (this.#snapshot.playback === "playing") {
+      this.pause();
+      return;
+    }
+    await this.play();
+  }
+
+  seekToStart(): void {
+    this.pause();
+    this.setPlayhead(zeroPlayhead);
+  }
+
+  stepFrame(direction: -1 | 1): void {
+    const facts = this.#snapshot.preparation?.lease?.facts;
+    if (this.#snapshot.status !== "ready" || !facts) throw new Error("Sequence frame-step is unavailable");
+    const coordinate = sequenceFrameCoordinate(this.#snapshot.playhead, facts.frameRate);
+    const frame =
+      direction < 0
+        ? coordinate.remainder === 0n
+          ? maximumBigInt(0n, coordinate.index - 1n)
+          : coordinate.index
+        : coordinate.index + 1n;
+    this.pause();
+    this.setPlayhead(clampTime(frameTime(frame, facts.frameRate), facts.semanticDuration));
   }
 
   pause(): void {
@@ -163,6 +226,7 @@ export class SequenceViewerController {
     this.#abort = undefined;
     this.#cancelTimer();
     this.#cancelTimer = () => undefined;
+    this.#actuator?.pause();
     this.#actuator = undefined;
     this.#snapshot = { status: "idle", playhead: zeroPlayhead, playback: "paused" };
     this.#emit();
@@ -259,6 +323,18 @@ export class SequenceViewerController {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+
+  #seekActuator(playhead: RationalTime): void {
+    if (!this.#actuator || this.#snapshot.status !== "ready") return;
+    const seconds = Number(playhead.value) / playhead.scale;
+    if (!Number.isFinite(seconds) || seconds < 0) return;
+    try {
+      this.#actuator.seekToSeconds(seconds);
+    } catch {
+      // Metadata can be between leases. onReady calls syncActuator once the
+      // replacement media timeline is available.
+    }
+  }
 }
 
 function clampTime(value: RationalTime, maximum: RationalTime): RationalTime {
@@ -266,4 +342,55 @@ function clampTime(value: RationalTime, maximum: RationalTime): RationalTime {
   const left = BigInt(value.value) * BigInt(maximum.scale);
   const right = BigInt(maximum.value) * BigInt(value.scale);
   return left > right ? maximum : value;
+}
+
+function sameTime(left: RationalTime, right: RationalTime): boolean {
+  return BigInt(left.value) * BigInt(right.scale) === BigInt(right.value) * BigInt(left.scale);
+}
+
+function compareTime(left: RationalTime, right: RationalTime): number {
+  const difference = BigInt(left.value) * BigInt(right.scale) - BigInt(right.value) * BigInt(left.scale);
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function frameTimeAtOrBefore(seconds: number, frameRate: RationalTime): RationalTime {
+  const rate = Number(frameRate.value) / frameRate.scale;
+  const position = seconds * rate;
+  if (!Number.isFinite(position) || position < 0 || !Number.isSafeInteger(Math.floor(position))) {
+    throw new Error("Sequence playback clock exceeds its exact range");
+  }
+  return frameTime(BigInt(Math.floor(position + browserFrameBoundaryTolerance)), frameRate);
+}
+
+function sequenceFrameCoordinate(
+  playhead: RationalTime,
+  frameRate: RationalTime,
+): Readonly<{ index: bigint; remainder: bigint }> {
+  const numerator = BigInt(playhead.value) * BigInt(frameRate.value);
+  const denominator = BigInt(playhead.scale) * BigInt(frameRate.scale);
+  return { index: numerator / denominator, remainder: numerator % denominator };
+}
+
+function frameTime(frame: bigint, frameRate: RationalTime): RationalTime {
+  return rational(frame * BigInt(frameRate.scale), BigInt(frameRate.value));
+}
+
+function rational(numerator: bigint, denominator: bigint): RationalTime {
+  if (denominator <= 0n) throw new Error("Sequence playback rational is invalid");
+  const divisor = greatestCommonDivisor(numerator, denominator);
+  const value = numerator / divisor;
+  const scale = denominator / divisor;
+  if (scale > 2_147_483_647n) throw new Error("Sequence playback rational scale exceeds its bound");
+  return { value: int64String(value.toString()), scale: Number(scale) };
+}
+
+function greatestCommonDivisor(left: bigint, right: bigint): bigint {
+  let a = left < 0n ? -left : left;
+  let b = right;
+  while (b !== 0n) [a, b] = [b, a % b];
+  return a;
+}
+
+function maximumBigInt(left: bigint, right: bigint): bigint {
+  return left > right ? left : right;
 }

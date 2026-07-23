@@ -37,15 +37,33 @@ describe("atomic components", () => {
 
   it("owns the native browser media surface behind one semantic atom", () => {
     const onActuator = vi.fn();
+    const onPlaybackPosition = vi.fn();
+    const onReady = vi.fn();
     const view = render(
-      <MediaPlayer label="Source preview" mimeType="video/webm" onActuator={onActuator} source="/api/media/opaque" />,
+      <MediaPlayer
+        label="Source preview"
+        mimeType="video/webm"
+        onActuator={onActuator}
+        onPlaybackPosition={onPlaybackPosition}
+        onReady={onReady}
+        source="/api/media/opaque"
+        transport={<span>Persistent transport</span>}
+      />,
     );
     const player = screen.getByLabelText("Source preview");
     expect(player.tagName).toBe("VIDEO");
     expect(player.getAttribute("src")).toBe("/api/media/opaque");
+    expect(screen.getByText("Persistent transport")).toBeTruthy();
     const actuator = onActuator.mock.calls.at(-1)?.[0];
     actuator.seekToSeconds(1.25);
     expect(actuator.readCurrentTimeSeconds()).toBe(1.25);
+    fireEvent.loadedMetadata(player);
+    expect(onReady).toHaveBeenCalledTimes(1);
+    fireEvent.timeUpdate(player);
+    expect(onPlaybackPosition).toHaveBeenLastCalledWith(1.25);
+    Object.defineProperty(player, "currentTime", { configurable: true, value: 2.5, writable: true });
+    fireEvent.pause(player);
+    expect(onPlaybackPosition).toHaveBeenLastCalledWith(2.5);
     view.unmount();
     expect(onActuator).toHaveBeenLastCalledWith(undefined);
   });

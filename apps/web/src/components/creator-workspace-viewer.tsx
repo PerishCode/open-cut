@@ -1,4 +1,4 @@
-import { Button, MediaPlayer, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, MediaPlayer, Stack, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
 import { useCallback, useState } from "react";
 
@@ -20,9 +20,11 @@ export function SequencePreviewSurface({
       : undefined;
   return (
     <Stack spacing="compact">
-      <Text>
-        {snapshot.pinnedRevision ? `Main Sequence · pinned r${snapshot.pinnedRevision}` : "Opening Main Sequence…"}
-      </Text>
+      {snapshot.status !== "ready" ? (
+        <Text>
+          {snapshot.pinnedRevision ? `Main Sequence · pinned r${snapshot.pinnedRevision}` : "Opening Main Sequence…"}
+        </Text>
+      ) : null}
       {newerRevision ? (
         <Button onPress={() => controller.adoptRevision(newerRevision)}>Adopt available r{newerRevision}</Button>
       ) : null}
@@ -44,6 +46,13 @@ function SequencePreparationSurface({
     (actuator: Parameters<SequenceViewerController["attachActuator"]>[0]) => controller.attachActuator(actuator),
     [controller],
   );
+  const [transportError, setTransportError] = useState<Error>();
+  const runTransport = (action: () => unknown) => {
+    setTransportError(undefined);
+    void Promise.resolve()
+      .then(action)
+      .catch((value) => setTransportError(value instanceof Error ? value : new Error(String(value))));
+  };
   if (snapshot.status === "idle" || snapshot.status === "preparing") {
     const progress = preparation?.job ? ` · ${preparation.job.progressBasisPoints / 100}%` : "";
     return <Text>Preparing immutable Sequence preview{progress}</Text>;
@@ -67,21 +76,37 @@ function SequencePreparationSurface({
     );
   }
   if (preparation?.status !== "ready" || !preparation.lease) return <Text>Reconciling Sequence preview…</Text>;
+  const facts = preparation.lease.facts;
+  const transport = (
+    <ControlStrip
+      hint={`${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      label="Sequence transport"
+      summary={`SEQUENCE r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
+    >
+      <Button onPress={() => runTransport(() => controller.seekToStart())}>Go to start</Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(-1))}>Previous frame</Button>
+      <Button onPress={() => runTransport(() => controller.togglePlayback())}>
+        {snapshot.playback === "playing" ? "Pause" : "Play"}
+      </Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(1))}>Next frame</Button>
+    </ControlStrip>
+  );
   return (
     <Stack spacing="compact">
       <MediaPlayer
+        controls={false}
         label={`Main Sequence revision ${preparation.sequenceRevision}`}
         mimeType={preparation.lease.mimeType}
         onActuator={attachActuator}
         onPlaybackError={() => controller.wake()}
         onPlaybackPause={() => controller.setPlaying(false)}
+        onPlaybackPosition={(seconds) => controller.observePlaybackPosition(seconds)}
         onPlaybackStart={() => controller.setPlaying(true)}
+        onReady={() => controller.syncActuator()}
         source={preparation.lease.sameOriginUrl}
+        transport={transport}
       />
-      <Text tone="eyebrow">
-        PLAN {preparation.lease.renderPlanDigest.slice(0, 19)}… · {preparation.lease.facts.canvasWidth} ×{" "}
-        {preparation.lease.facts.canvasHeight}
-      </Text>
+      {transportError ? <Text>{transportError.message}</Text> : null}
     </Stack>
   );
 }
@@ -209,4 +234,26 @@ function StreamSelection({
 
 function formatExact(value: { value: string; scale: number } | undefined): string {
   return value ? `${value.value}/${value.scale}s` : "—";
+}
+
+function formatClock(value: { value: string; scale: number }): string {
+  const scale = BigInt(value.scale);
+  const numerator = BigInt(value.value);
+  const hundredths = numerator <= 0n ? 0n : (numerator * 100n + scale / 2n) / scale;
+  const hours = hundredths / 360_000n;
+  const minutes = (hundredths % 360_000n) / 6_000n;
+  const seconds = (hundredths % 6_000n) / 100n;
+  const fraction = hundredths % 100n;
+  const clock = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${fraction
+    .toString()
+    .padStart(2, "0")}`;
+  return hours > 0 ? `${hours.toString().padStart(2, "0")}:${clock}` : clock;
+}
+
+function formatFrameRate(value: { value: string; scale: number }): string {
+  const scale = BigInt(value.scale);
+  const thousandths = (BigInt(value.value) * 1_000n + scale / 2n) / scale;
+  const whole = thousandths / 1_000n;
+  const fraction = (thousandths % 1_000n).toString().padStart(3, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
 }
