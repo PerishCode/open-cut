@@ -52,12 +52,11 @@ type sequenceExportDeliveryOpener interface {
 }
 
 type sequenceExportDeliveryLeaseRecord struct {
-	sessionHash string
-	apiInstance string
-	projectID   domain.ProjectID
-	artifactID  domain.ArtifactID
-	media       application.SequenceExportArtifactFile
-	expiresAt   time.Time
+	binding    uiLeaseBinding
+	projectID  domain.ProjectID
+	artifactID domain.ArtifactID
+	media      application.SequenceExportArtifactFile
+	expiresAt  time.Time
 }
 
 type SequenceExportDeliveryService struct {
@@ -114,7 +113,7 @@ func (service *SequenceExportDeliveryService) Create(
 		return SequenceExportDeliveryLease{}, err
 	}
 	record := sequenceExportDeliveryLeaseRecord{
-		sessionHash: binding.sessionHash, apiInstance: binding.apiInstance,
+		binding:   binding.leaseBinding(),
 		projectID: projectID, artifactID: artifactID, media: media, expiresAt: expiresAt,
 	}
 	service.mu.Lock()
@@ -153,7 +152,7 @@ func (service *SequenceExportDeliveryService) ServeContent(
 		delete(service.leases, key)
 	}
 	service.mu.Unlock()
-	if !exists || record.sessionHash != binding.sessionHash || record.apiInstance != binding.apiInstance {
+	if !exists || !record.binding.matches(binding) {
 		return ErrSequenceExportDeliveryInvalid
 	}
 	if !now.Before(record.expiresAt) {
