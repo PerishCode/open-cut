@@ -22,3 +22,8 @@ export {
   type TimelineSurfaceProps,
   type TimelineSurfaceTrack,
 } from "./primitives/timeline-surface.js";
+export {
+  TokenSelection,
+  type TokenSelectionItem,
+  type TokenSelectionProps,
+} from "./primitives/token-selection.js";

@@ -15,6 +15,7 @@ import {
   TextAreaField,
   TextField,
   TimelineSurface,
+  TokenSelection,
 } from "../src/index.js";
 
 describe("atomic components", () => {
@@ -109,6 +110,36 @@ describe("atomic components", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText(/<a href="https:\/\/example.com">unsafe<\/a>/)).toBeTruthy();
     expect(screen.getByText(/\[docs\]\(https:\/\/example.com\)/)).toBeTruthy();
+  });
+
+  it("keeps exact transcript tokens inline, selectable, and semantically pressed", () => {
+    const onSelect = vi.fn();
+    render(
+      <TokenSelection
+        items={[
+          { id: "hello", label: "Hello", selected: true, text: "Hello" },
+          { id: "space", label: "space", selected: false, text: " " },
+          { id: "world", label: "world", selected: false, text: "world" },
+        ]}
+        label="Transcript segment 1 tokens"
+        onSelect={onSelect}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Transcript segment 1 tokens" });
+    expect(group.textContent).toBe("Hello␠world");
+    const hello = screen.getByRole("button", { name: "Selected token 1 · Hello" });
+    expect(hello.getAttribute("aria-pressed")).toBe("true");
+    expect(hello.tabIndex).toBe(0);
+    const world = screen.getByRole("button", { name: "Select token 3 · world" });
+    expect(world.getAttribute("aria-pressed")).toBe("false");
+    expect(world.tabIndex).toBe(-1);
+    fireEvent.focus(hello);
+    fireEvent.keyDown(hello, { key: "End" });
+    expect(document.activeElement).toBe(world);
+    expect(world.tabIndex).toBe(0);
+    fireEvent.click(world);
+    expect(onSelect).toHaveBeenCalledWith("world");
   });
 
   it("groups a scannable resource identity, state, detail, and actions", () => {
