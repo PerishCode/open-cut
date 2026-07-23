@@ -182,9 +182,14 @@ describe("CreatorAgentPane", () => {
     expect(await screen.findByText("Creative change committed")).toBeTruthy();
     expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
+    expect(screen.queryByText("OUTCOME · #1")).toBeNull();
+    expect(screen.queryByText(transactionId)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 receipt" }));
     expect(screen.getByText("OUTCOME · #1")).toBeTruthy();
     expect(screen.getByText("Activity #12")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Focus caption" }));
+    expect(screen.queryByText(transactionId)).toBeNull();
+    expect(screen.getByText("Transaction")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Focus Caption" }));
     expect(focus).toHaveBeenCalledWith({ kind: "caption", id: receiptId, revision: "1" });
     expect(await screen.findByText("Caption receipt r1; current workspace is r2.")).toBeTruthy();
   });

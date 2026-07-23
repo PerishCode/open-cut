@@ -73,6 +73,8 @@ export function CreatorAgentPane({
   const [state, setState] = useState<AgentPaneState>(initialState);
   const [message, setMessage] = useState("");
   const [contextKeys, setContextKeys] = useState<ContextKeys>([]);
+  const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
+  const [receiptsExpanded, setReceiptsExpanded] = useState(false);
 
   const loadRun = useCallback(
     async (runId: DurableID, signal?: AbortSignal) => {
@@ -158,6 +160,8 @@ export function CreatorAgentPane({
   const selectRun = useCallback(
     async (runId: DurableID) => {
       setState((current) => ({ ...current, loading: true, error: undefined }));
+      setRecentRunsExpanded(false);
+      setReceiptsExpanded(false);
       try {
         await loadRun(runId);
       } catch (value) {
@@ -220,6 +224,7 @@ export function CreatorAgentPane({
           });
       setMessage("");
       setContextKeys([]);
+      setReceiptsExpanded(false);
       setState((current) => ({
         ...current,
         runs: [submission.run, ...current.runs.filter((run) => run.id !== submission.run.id)],
@@ -319,6 +324,7 @@ export function CreatorAgentPane({
     async (turn: AgentTurn) => {
       if (!state.selected || state.loading || turn.id === state.selectedTurn?.id) return;
       setState((current) => ({ ...current, loading: true, error: undefined }));
+      setReceiptsExpanded(false);
       try {
         const page = await contracts.agent.receipts(projectId, state.selected.id, turn.id, { limit: 100 });
         setState((current) => ({
@@ -363,6 +369,7 @@ export function CreatorAgentPane({
     : false;
   const canSubmit = state.availability?.state === "available" && !state.submitting && (!state.selected || canContinue);
   const latestOutcome = [...state.receipts].reverse().find((receipt) => receipt.class === "outcome");
+  const recentRuns = state.runs.filter((run) => run.id !== state.selected?.id);
 
   return (
     <PanelDock
@@ -446,6 +453,8 @@ export function CreatorAgentPane({
               }));
               setMessage("");
               setContextKeys([]);
+              setRecentRunsExpanded(false);
+              setReceiptsExpanded(false);
             }}
           >
             New task
@@ -456,32 +465,27 @@ export function CreatorAgentPane({
     >
       <Stack spacing="compact">
         {state.selected ? (
-          <ResourceCard
-            actions={
-              active ? (
-                <>
-                  <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
-                    Stop
-                  </Button>
-                  <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-                    Cancel task
-                  </Button>
-                </>
-              ) : !terminal ? (
+          <ControlStrip
+            label="Selected Agent task"
+            summary={`TASK · TURN ${state.selected.currentTurn.generation} · ${state.selected.intent}`}
+          >
+            {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
+            <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
+            {active ? (
+              <>
+                <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
+                  Stop
+                </Button>
                 <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
                   Cancel task
                 </Button>
-              ) : undefined
-            }
-            details={[`${state.messages.length} durable messages · ${state.receipts.length} receipts in selected Turn`]}
-            eyebrow={`SELECTED TASK · TURN ${state.selected.currentTurn.generation}`}
-            selected
-            status={<Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>}
-            title={`Task: ${state.selected.intent}`}
-          >
-            {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
-            {terminal ? <Text>This task is closed. Choose New task to start another Run.</Text> : null}
-          </ResourceCard>
+              </>
+            ) : !terminal ? (
+              <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
+                Cancel task
+              </Button>
+            ) : null}
+          </ControlStrip>
         ) : (
           <Text>Describe a new writing or editing task.</Text>
         )}
@@ -492,19 +496,6 @@ export function CreatorAgentPane({
             status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             title={outcomeTitle(latestOutcome)}
           />
-        ) : null}
-        {state.runs.length > 0 ? (
-          <ControlStrip hint={`${state.runs.length} loaded`} label="Recent Agent tasks" summary="RECENT TASKS">
-            {state.runs.map((run) => (
-              <Button
-                disabled={state.loading || state.submitting || run.id === state.selected?.id}
-                key={run.id}
-                onPress={() => void selectRun(run.id)}
-              >
-                {runLabel(run)}
-              </Button>
-            ))}
-          </ControlStrip>
         ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
         {state.messages.map((entry) => (
@@ -524,7 +515,32 @@ export function CreatorAgentPane({
             {state.loading ? "Loading…" : "Load more conversation"}
           </Button>
         ) : null}
-        {state.selected && state.turns.length > 0 ? (
+        {recentRuns.length > 0 ? (
+          <ControlStrip
+            hint={`${recentRuns.length} other ${recentRuns.length === 1 ? "task" : "tasks"}`}
+            label="Recent Agent tasks"
+            summary="RECENT TASKS"
+          >
+            <Button
+              disabled={state.loading || state.submitting}
+              onPress={() => setRecentRunsExpanded((value) => !value)}
+            >
+              {recentRunsExpanded ? "Hide recent tasks" : `Show ${recentRuns.length} recent tasks`}
+            </Button>
+            {recentRunsExpanded
+              ? recentRuns.map((run) => (
+                  <Button
+                    disabled={state.loading || state.submitting}
+                    key={run.id}
+                    onPress={() => void selectRun(run.id)}
+                  >
+                    {runLabel(run)}
+                  </Button>
+                ))
+              : null}
+          </ControlStrip>
+        ) : null}
+        {state.selected && (state.turns.length > 1 || state.turnNextBefore) ? (
           <>
             <Text tone="eyebrow">TURNS</Text>
             <ControlStrip
@@ -555,39 +571,50 @@ export function CreatorAgentPane({
         ) : null}
         {state.selected && state.selectedTurn ? (
           <>
-            <Text tone="eyebrow">COMMAND RECEIPTS · TURN {state.selectedTurn.generation}</Text>
-            {state.receipts.length === 0 ? (
-              <Status state={active ? "pending" : "ready"}>
-                {active
-                  ? "Waiting for the first durable command receipt."
-                  : "No durable command receipts for this Turn."}
-              </Status>
-            ) : null}
-            {state.receipts.map((receipt) => (
-              <ResourceCard
-                actions={
-                  onFocusReceiptRef && receipt.resultRefs.length > 0
-                    ? receipt.resultRefs.map((ref, index) => (
-                        <Button
-                          key={`${receipt.id}:focus:${index}`}
-                          onPress={() => {
-                            const focusNotice = onFocusReceiptRef(ref);
-                            setState((current) => ({ ...current, focusNotice }));
-                          }}
-                        >
-                          Focus {ref.kind}
-                        </Button>
-                      ))
-                    : undefined
-                }
-                details={receiptDetails(receipt)}
-                eyebrow={`${receipt.class.toUpperCase()} · #${receipt.ordinal}`}
-                key={receipt.id}
-                status={<Status state={receiptStatusState(receipt)}>{receiptStatusLabel(receipt)}</Status>}
-                title={receipt.command}
-              />
-            ))}
-            {state.receiptNextAfter ? (
+            <ControlStrip
+              hint={`${state.receipts.length} recorded`}
+              label={`Command receipts for Turn ${state.selectedTurn.generation}`}
+              summary={`COMMAND RECEIPTS · TURN ${state.selectedTurn.generation}`}
+            >
+              {state.receipts.length === 0 ? (
+                <Status state={active ? "pending" : "ready"}>
+                  {active ? "Waiting for the first command receipt." : "No command receipts for this Turn."}
+                </Status>
+              ) : (
+                <Button disabled={state.loading} onPress={() => setReceiptsExpanded((value) => !value)}>
+                  {receiptsExpanded
+                    ? "Hide receipts"
+                    : `Show ${state.receipts.length} ${state.receipts.length === 1 ? "receipt" : "receipts"}`}
+                </Button>
+              )}
+            </ControlStrip>
+            {receiptsExpanded
+              ? state.receipts.map((receipt) => (
+                  <ResourceCard
+                    actions={
+                      onFocusReceiptRef && receipt.resultRefs.length > 0
+                        ? receipt.resultRefs.map((ref, index) => (
+                            <Button
+                              key={`${receipt.id}:focus:${index}`}
+                              onPress={() => {
+                                const focusNotice = onFocusReceiptRef(ref);
+                                setState((current) => ({ ...current, focusNotice }));
+                              }}
+                            >
+                              Focus {receiptRefLabel(ref)}
+                            </Button>
+                          ))
+                        : undefined
+                    }
+                    details={receiptDetails(receipt)}
+                    eyebrow={`${receipt.class.toUpperCase()} · #${receipt.ordinal}`}
+                    key={receipt.id}
+                    status={<Status state={receiptStatusState(receipt)}>{receiptStatusLabel(receipt)}</Status>}
+                    title={receipt.command}
+                  />
+                ))
+              : null}
+            {receiptsExpanded && state.receiptNextAfter ? (
               <Button disabled={state.loading} onPress={() => void loadMoreReceipts()}>
                 {state.loading ? "Loading…" : "Load more receipts"}
               </Button>
@@ -660,12 +687,7 @@ function outcomeTitle(receipt: CommandReceipt): string {
 }
 
 function outcomeDetails(receipt: CommandReceipt): readonly string[] {
-  const details = [
-    receipt.projectRevision ? `${receipt.command} · Project r${receipt.projectRevision}` : receipt.command,
-  ];
-  const transaction = receipt.resultRefs.find((ref) => ref.kind === "transaction");
-  if (transaction) details.push(`Transaction · ${transaction.id}`);
-  return details;
+  return [receipt.projectRevision ? `${receipt.command} · Project r${receipt.projectRevision}` : receipt.command];
 }
 
 function receiptDetails(receipt: CommandReceipt): readonly string[] {
@@ -673,9 +695,17 @@ function receiptDetails(receipt: CommandReceipt): readonly string[] {
   if (receipt.projectRevision) details.push(`Project r${receipt.projectRevision}`);
   if (receipt.activityCursor) details.push(`Activity #${receipt.activityCursor}`);
   for (const ref of receipt.resultRefs) {
-    details.push(`${ref.kind} · ${ref.id}${ref.revision ? ` · r${ref.revision}` : ""}`);
+    details.push(`${receiptRefLabel(ref)}${ref.revision ? ` · r${ref.revision}` : ""}`);
   }
   return details;
+}
+
+function receiptRefLabel(ref: CommandReceiptRef): string {
+  return ref.kind
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function attachmentLabel(attachment: AgentContextAttachment): string {
