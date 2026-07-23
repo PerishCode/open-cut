@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/lifecycle"
-	"github.com/PerishCode/open-cut/product/application"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
@@ -239,9 +239,9 @@ func rawPCMDecodeProcessSpec(spec RawPCMDecoderSpec) lifecycle.ProcessSpec {
 
 func rawPCMInputCodec(profile string) (string, error) {
 	switch profile {
-	case application.SourceProxyProfile:
+	case rendercontract.SourceProxyProfile:
 		return "libopus", nil
-	case application.RenderInputProfile:
+	case rendercontract.RenderInputProfile:
 		return "pcm_s16le", nil
 	default:
 		return "", fmt.Errorf("raw PCM decoder input profile is invalid")

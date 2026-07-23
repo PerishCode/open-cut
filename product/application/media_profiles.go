@@ -7,13 +7,14 @@ import (
 	"io"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
 	FullIdentityProfile       = "sha256-full-v1"
 	MediaFactsProfile         = "ffprobe-facts-v1"
-	SourceProxyProfile        = "webm-vp9-opus-source-v1"
-	RenderInputProfile        = "matroska-ffv1-pcm-render-input-v1"
+	SourceProxyProfile        = rendercontract.SourceProxyProfile
+	RenderInputProfile        = rendercontract.RenderInputProfile
 	WaveformProfile           = "waveform-rms-peak-v1"
 	TranscriptProfile         = "whisper-small-multilingual-v1"
 	SourceProxyArtifactSchema = "open-cut/source-proxy-artifact/v2"

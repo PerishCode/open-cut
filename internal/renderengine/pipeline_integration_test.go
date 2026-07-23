@@ -31,7 +31,7 @@ func TestPinnedRawAVPipelineIsByteStable(t *testing.T) {
 	plan := captionRenderPlanWithFormat(t, format)
 	fontRoot := normalizeMaterialPath(t.TempDir())
 	manifest, _, err := CompileExecutionManifest(
-		plan,
+		plan.Plan,
 		application.SequencePreviewRendererIdentity{Version: "fixture-renderer-v1", Target: target.Host().String()},
 		ExecutionClosure{
 			SHA256: domain.Digest("sha256:" + strings.Repeat("c", 64)),

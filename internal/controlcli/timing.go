@@ -99,7 +99,9 @@ func newTimingCommand(stdout, stderr io.Writer) *cobra.Command {
 	cacheReport := &cobra.Command{Use: "cache-report", Short: "Record cache restore cohorts", Args: cobra.NoArgs}
 	output := cacheReport.Flags().String("output", "", "timing report JSON path")
 	target := cacheReport.Flags().String("target", "", "public build target")
-	caches := cacheReport.Flags().StringArray("cache", nil, "name,primary-key,matched-key,cache-hit tuple")
+	caches := cacheReport.Flags().StringArray(
+		"cache", nil, "name,primary-key,matched-key,cache-hit tuple; hit may be not-needed",
+	)
 	attributes := cacheReport.Flags().StringArray("attribute", nil, "name=value report attribute")
 	cacheReport.RunE = func(*cobra.Command, []string) error {
 		if *output == "" || *target == "" || len(*caches) == 0 {
@@ -125,7 +127,9 @@ func newTimingCommand(stdout, stderr io.Writer) *cobra.Command {
 				return exitCodeError{code: 2}
 			}
 			cohort := "miss"
-			if fields[3] == "true" {
+			if fields[3] == "not-needed" {
+				cohort = "not-needed"
+			} else if fields[3] == "true" {
 				cohort = "exact"
 			} else if fields[2] != "" {
 				cohort = "fallback"

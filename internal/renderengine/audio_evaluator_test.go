@@ -199,7 +199,7 @@ func newAudioEvaluatorFixture(t *testing.T, closure ExecutionClosure) audioEvalu
 	artifactRoots := []string{normalizeMaterialPath(t.TempDir()), normalizeMaterialPath(t.TempDir())}
 	fontRoot := normalizeMaterialPath(t.TempDir())
 	manifest, _, err := CompileExecutionManifest(
-		published,
+		published.Plan,
 		application.SequencePreviewRendererIdentity{Version: "fixture-renderer-v1", Target: target.Host().String()},
 		closure,
 		MaterialPaths{

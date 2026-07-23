@@ -56,8 +56,32 @@ func TestCacheKeysSeparateArchivesFromTheBuiltClosure(t *testing.T) {
 	if edited.SourceKey != base.SourceKey {
 		t.Fatal("a renderer edit must not discard the pinned archives")
 	}
+	if edited.CBuildKey != base.CBuildKey {
+		t.Fatal("a renderer edit must not discard the codec C tree")
+	}
 	if edited.ClosureKey == base.ClosureKey {
 		t.Fatal("a renderer edit must discard the built closure")
+	}
+}
+
+func TestApplicationEditDoesNotInvalidateMediaArtifacts(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := cacheKeys(t, "environment-one")
+	victim := filepath.Join(root, "product", "application", "edit_normalize.go")
+	original, err := os.ReadFile(victim)
+	if err != nil {
+		t.Skipf("application source probe unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = os.WriteFile(victim, original, 0o644) })
+	if err := os.WriteFile(victim, append(original, []byte("\n// cache key probe\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	edited := cacheKeys(t, "environment-one")
+	if edited != base {
+		t.Fatalf("an application edit changed media artifact identities: %+v vs %+v", base, edited)
 	}
 }
 

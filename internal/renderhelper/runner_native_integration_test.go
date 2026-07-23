@@ -47,7 +47,7 @@ func TestPinnedNativeHelperProducesStableCaptionOnlyWebM(t *testing.T) {
 	for attempt := 0; attempt < 2; attempt++ {
 		root := physicalTempDir(t)
 		manifest, encoded, err := renderengine.CompileExecutionManifest(
-			plan,
+			plan.Plan,
 			application.SequencePreviewRendererIdentity{
 				Version: "native-helper-smoke-v1", Target: target.Host().String(),
 			},

@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 var sequencePreviewFailureCode = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
-type RenderExecutorIdentity struct {
-	Version string
-	Target  string
-}
+type RenderExecutorIdentity = rendercontract.ExecutorIdentity
 
 type SequencePreviewRendererIdentity = RenderExecutorIdentity
 

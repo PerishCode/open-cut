@@ -45,7 +45,7 @@ func TestCaptionedVideoEvaluatorRendersCaptionOnlyFrames(t *testing.T) {
 	published := captionRenderPlan(t)
 	fontRoot := normalizeMaterialPath(t.TempDir())
 	manifest, _, err := CompileExecutionManifest(
-		published,
+		published.Plan,
 		application.SequencePreviewRendererIdentity{Version: "fixture-renderer-v1", Target: target.Host().String()},
 		executionClosure(t),
 		MaterialPaths{ArtifactRoots: map[string]string{}, Resources: map[string]string{
@@ -219,7 +219,7 @@ func newVideoEvaluatorFixture(t *testing.T, closure ExecutionClosure) videoEvalu
 	published.Plan.Payload, published.Plan.Digest = payload, planDigest
 	fontRoot := normalizeMaterialPath(t.TempDir())
 	manifest, _, err := CompileExecutionManifest(
-		published,
+		published.Plan,
 		application.SequencePreviewRendererIdentity{
 			Version: "fixture-renderer-v1", Target: target.Host().String(),
 		},

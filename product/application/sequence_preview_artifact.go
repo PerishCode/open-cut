@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 const (
 	MaximumSequencePreviewManifestSize = 1 << 20
-	MaximumSequencePreviewVideoFrames  = 10_000_000
-	MaximumSequencePreviewAudioSamples = 2_000_000_000
+	MaximumSequencePreviewVideoFrames  = rendercontract.MaximumPreviewVideoFrames
+	MaximumSequencePreviewAudioSamples = rendercontract.MaximumPreviewAudioSamples
 	MaximumSequencePreviewArtifactSize = 16 << 30
 )
 

@@ -2,13 +2,17 @@ package mediatoolchain
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/PerishCode/open-cut/internal/toolchainclosure"
+	"github.com/PerishCode/open-cut/utils/tool"
 )
 
 // rendererSourceFingerprintName holds a dev-side digest of the renderer's
@@ -26,9 +30,23 @@ const rendererSourceInputsName = "renderer-source.inputs"
 // identity can never collide with another group's, even if both ever resolved
 // to the same package set.
 func RendererSourceFingerprint(ctx context.Context, repositoryRoot string) (string, error) {
-	return toolchainclosure.GoSourceClosureFingerprint(
-		ctx, repositoryRoot, "renderer-source-closure-v2", RendererBuildTag, RendererBuildPackage,
-	)
+	entries, err := rendererSourceFingerprintInputs(ctx, repositoryRoot)
+	if err != nil {
+		return "", err
+	}
+	goTool, err := tool.Resolve("go")
+	if err != nil {
+		return "", err
+	}
+	goVersion, err := toolchainclosure.GoToolVersion(ctx, goTool)
+	if err != nil {
+		return "", err
+	}
+	overall := sha256.New()
+	overall.Write([]byte("renderer-source-closure-v2\n"))
+	overall.Write([]byte(goVersion + "\n"))
+	overall.Write([]byte(strings.Join(entries, "\n")))
+	return "sha256:" + hex.EncodeToString(overall.Sum(nil)), nil
 }
 
 func rendererSourceFingerprintMatches(ctx context.Context, repositoryRoot, artifactRoot string) bool {
@@ -57,7 +75,7 @@ func writeRendererSourceFingerprint(ctx context.Context, repositoryRoot, artifac
 	// actually changed. A digest alone can only say that something did, which
 	// is not enough to tell a genuine source change from a fingerprint that is
 	// unstable across environments.
-	entries, err := toolchainclosure.FingerprintInputs(ctx, repositoryRoot, RendererBuildTag, RendererBuildPackage)
+	entries, err := rendererSourceFingerprintInputs(ctx, repositoryRoot)
 	if err != nil {
 		return err
 	}
@@ -75,7 +93,7 @@ func explainRendererFingerprintMismatch(ctx context.Context, repositoryRoot, art
 	if err != nil {
 		return "recorded inputs are unavailable"
 	}
-	current, err := toolchainclosure.FingerprintInputs(ctx, repositoryRoot, RendererBuildTag, RendererBuildPackage)
+	current, err := rendererSourceFingerprintInputs(ctx, repositoryRoot)
 	if err != nil {
 		return "current inputs are uncomputable"
 	}
@@ -111,4 +129,58 @@ func explainRendererFingerprintMismatch(ctx context.Context, repositoryRoot, art
 		)
 	}
 	return strings.Join(differences, ", ")
+}
+
+func rendererSourceFingerprintInputs(ctx context.Context, repositoryRoot string) ([]string, error) {
+	packages, _, err := rendererSourceGraph(
+		ctx, repositoryRoot, "", "", io.Discard, io.Discard,
+	)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]string, 0, 256)
+	modules := make(map[string]struct{})
+	for _, current := range packages {
+		if current.Module == nil {
+			continue
+		}
+		if !current.Module.Main {
+			modules["module\x00"+current.Module.Path+"\x00"+current.Module.Version+"\x00"+current.Module.Sum] =
+				struct{}{}
+			continue
+		}
+		for _, name := range rendererPackageFiles(current) {
+			source := filepath.Join(current.Dir, name)
+			relative, err := filepath.Rel(repositoryRoot, source)
+			if err != nil {
+				return nil, err
+			}
+			digest, err := rendererSourceFileDigest(source)
+			if err != nil {
+				return nil, fmt.Errorf("fingerprint renderer source %s: %w", relative, err)
+			}
+			entries = append(entries, "file\x00"+filepath.ToSlash(relative)+"\x00"+digest)
+		}
+	}
+	for module := range modules {
+		entries = append(entries, module)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("renderer source closure is empty")
+	}
+	sort.Strings(entries)
+	return entries, nil
+}
+
+func rendererSourceFileDigest(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
 }

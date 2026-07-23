@@ -312,7 +312,7 @@ func rendererConformanceManifest(
 		return renderengine.ExecutionManifest{}, err
 	}
 	manifest, _, err := renderengine.CompileExecutionManifest(
-		fixture.Plan,
+		fixture.Plan.Plan,
 		application.SequencePreviewRendererIdentity{Version: "conformance-plan-v1", Target: target.Host().String()},
 		renderengine.ExecutionClosure{
 			SHA256: domain.Digest("sha256:" + string(bytes.Repeat([]byte{'c'}, 64))),
@@ -343,7 +343,7 @@ func runRendererConformanceFixture(
 		return renderengine.ResultDocument{}, err
 	}
 	manifest, encoded, err := renderengine.CompileExecutionManifest(
-		fixture.Plan,
+		fixture.Plan.Plan,
 		application.SequencePreviewRendererIdentity{
 			Version: toolchainVersion + "@renderer-conformance", Target: buildTarget.String(),
 		},
