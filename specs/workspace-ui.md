@@ -364,6 +364,23 @@ session, clears placement marks/draft, adopts and seeks the new paused Sequence
 revision, switches to Sequence mode and refreshes global history. It never
 creates a Narrative Alignment, Track, pane-local Undo stack or Agent attachment.
 
+## Export delivery
+
+Export is a revision-pinned delivery center rather than a fire-and-forget
+button. The compact next-export strip names the exact Sequence revision, output
+filename and registered preset before work starts. Recent lineage cards keep
+durable job history visible and project one mutually exclusive action state:
+
+- blocked, queued or running work exposes cancellation only;
+- a ready artifact exposes Save As and an explicit two-gesture delete;
+- deleted or recoverable terminal work exposes retry;
+- a successful Save As exposes its receipt-bound Reveal action.
+
+Delete confirmation exists only for a concrete ready artifact. A missing
+artifact never compares equal to an empty UI selection, and running work never
+renders permanent deletion controls. Deleting removes exported media while
+retaining the durable job lineage.
+
 ## Progressive complexity
 
 Default mode emphasizes intent, assets, transcript, viewer, and a compact rough
