@@ -77,7 +77,8 @@ export function CreatorAgentPane({
   const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
   const [receiptsExpanded, setReceiptsExpanded] = useState(false);
   const latestMessageRef = useRef<HTMLElement>(null);
-  const lastRevealedMessageIdRef = useRef<DurableID | undefined>(undefined);
+  const latestOutcomeRef = useRef<HTMLElement>(null);
+  const lastRevealedItemRef = useRef<DurableID | undefined>(undefined);
 
   const loadRun = useCallback(
     async (runId: DurableID, signal?: AbortSignal) => {
@@ -375,14 +376,15 @@ export function CreatorAgentPane({
   const recentRuns = state.runs.filter((run) => run.id !== state.selected?.id);
   const latestMessage = state.messages.at(-1);
   const latestRevealMessageId = latestMessage?.role === "creator" ? undefined : latestMessage?.id;
+  const latestRevealItem = latestOutcome?.id ?? latestRevealMessageId;
 
   useEffect(() => {
-    if (!latestRevealMessageId || lastRevealedMessageIdRef.current === latestRevealMessageId) return;
-    const target = latestMessageRef.current;
+    if (!latestRevealItem || lastRevealedItemRef.current === latestRevealItem) return;
+    const target = latestOutcome ? latestOutcomeRef.current : latestMessageRef.current;
     if (!target) return;
-    lastRevealedMessageIdRef.current = latestRevealMessageId;
-    target.scrollIntoView({ block: "start", inline: "nearest" });
-  }, [latestRevealMessageId]);
+    lastRevealedItemRef.current = latestRevealItem;
+    target.scrollIntoView({ block: latestOutcome ? "nearest" : "start", inline: "nearest" });
+  }, [latestOutcome, latestRevealItem]);
 
   return (
     <PanelDock
@@ -436,7 +438,7 @@ export function CreatorAgentPane({
                 ? "Tell the Agent what to write or change…"
                 : "Wait for this Turn to finish."
             }
-            rows={5}
+            rows={3}
             value={message}
             onChange={setMessage}
             onKeyDown={(event) => {
@@ -520,6 +522,7 @@ export function CreatorAgentPane({
         {latestOutcome ? (
           <ResourceCard
             details={outcomeDetails(latestOutcome)}
+            elementRef={latestOutcomeRef}
             emphasis="strong"
             eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
             status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
@@ -527,26 +530,24 @@ export function CreatorAgentPane({
           />
         ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
-        {state.messages.map((entry) => {
-          return (
-            <ResourceCard
-              details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
-              elementRef={entry.id === latestRevealMessageId ? latestMessageRef : undefined}
-              emphasis={entry.role === "agent" ? "default" : "quiet"}
-              eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
-              key={entry.id}
-              title={messageTitle(entry)}
-            >
-              {entry.role === "agent" ? (
-                <MessageContent text={entry.text} />
-              ) : (
-                <Text>
-                  {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-                </Text>
-              )}
-            </ResourceCard>
-          );
-        })}
+        {state.messages.map((entry) => (
+          <ResourceCard
+            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+            elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
+            emphasis={entry.role === "agent" ? "default" : "quiet"}
+            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
+            key={entry.id}
+            title={messageTitle(entry)}
+          >
+            {entry.role === "agent" ? (
+              <MessageContent text={entry.text} />
+            ) : (
+              <Text>
+                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+              </Text>
+            )}
+          </ResourceCard>
+        ))}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
             {state.loading ? "Loading…" : "Load more conversation"}
@@ -724,7 +725,21 @@ function outcomeTitle(receipt: CommandReceipt): string {
 }
 
 function outcomeDetails(receipt: CommandReceipt): readonly string[] {
-  return [receipt.projectRevision ? `${receipt.command} · Project r${receipt.projectRevision}` : receipt.command];
+  const detail = outcomeProjection(receipt) ?? receipt.command;
+  return [receipt.projectRevision ? `${detail} · Project r${receipt.projectRevision}` : detail];
+}
+
+function outcomeProjection(receipt: CommandReceipt): string | undefined {
+  const surfaces: string[] = [];
+  const addSurface = (surface: string) => !surfaces.includes(surface) && surfaces.push(surface);
+  for (const ref of receipt.resultRefs) {
+    if (ref.kind === "narrative-document" || ref.kind === "narrative-node") addSurface("Story");
+    else if (ref.kind === "clip" || ref.kind === "sequence" || ref.kind === "track") addSurface("Timeline");
+    else if (ref.kind === "caption") addSurface("Captions");
+    else if (ref.kind === "asset" || ref.kind === "asset-media-state") addSurface("Media");
+    else if (ref.kind === "export-artifact") addSurface("Export");
+  }
+  return surfaces.length > 0 ? `${surfaces.join(" + ")} updated` : undefined;
 }
 
 function receiptDetails(receipt: CommandReceipt): readonly string[] {

@@ -1,4 +1,4 @@
-import { Button, ResourceCard, Stack, Status, Text } from "@open-cut/components";
+import { Button, EmptyState, ResourceCard, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -106,26 +106,40 @@ export function TranscriptSurface({
   onSelectDefault: () => void;
   state: TranscriptState;
 }) {
-  if (!asset) return <Text>Select an Asset to inspect its original transcript.</Text>;
+  if (!asset) return null;
   if (state.status === "idle" || state.assetId !== asset.id) {
     if (!asset.artifacts.some((artifact) => artifact.kind === "transcript" && artifact.state === "ready")) {
-      return <Text>{transcriptJobStatus(asset)}</Text>;
+      return <EmptyState hint={transcriptJobStatus(asset)} title="Transcript not ready" />;
     }
-    return <Button onPress={() => onLoad?.()}>Load original transcript</Button>;
+    return (
+      <EmptyState
+        action={<Button onPress={() => onLoad?.()}>Open transcript</Button>}
+        hint={`Review recognized words from ${asset.displayName}, select an exact range, then use it in your edit or Agent context.`}
+        title="Transcript ready"
+      />
+    );
   }
-  if (state.status === "loading") return <Text>Loading bounded transcript recognition…</Text>;
+  if (state.status === "loading") {
+    return (
+      <EmptyState
+        hint={`Reading the bounded recognition result for ${asset.displayName}.`}
+        title="Loading transcript"
+      />
+    );
+  }
   if (state.status === "unavailable") {
     return (
-      <Stack spacing="compact">
-        <Text>{state.error.message}</Text>
-        <Button onPress={() => onLoad?.()}>Retry transcript read</Button>
-      </Stack>
+      <EmptyState
+        action={<Button onPress={() => onLoad?.()}>Retry transcript read</Button>}
+        hint={state.error.message}
+        title="Transcript unavailable"
+      />
     );
   }
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">
-        {state.page.artifact.detectedLanguage} · {state.page.artifact.modelVersion}
+        {asset.displayName} · {state.page.artifact.detectedLanguage} · {state.page.artifact.modelVersion}
         {state.page.artifact.isDefault ? " · DEFAULT" : ""}
       </Text>
       {asset.artifacts

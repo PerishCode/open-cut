@@ -1,4 +1,4 @@
-import { Button, EditorShell, EmptyState, Stack, Status, Tabs, Text } from "@open-cut/components";
+import { EditorShell, EmptyState, Stack, Status, Tabs, Text } from "@open-cut/components";
 import {
   type AgentContextAttachment,
   type Asset,
@@ -58,7 +58,7 @@ import {
   uniqueSourceStream,
   updateSourceStreamSelection,
 } from "./creator-workspace-presentation.js";
-import { SequencePreviewSurface, SourcePreviewSurface } from "./creator-workspace-viewer.js";
+import { SequencePreviewSurface, SourcePreviewSurface, SourceViewerLayout } from "./creator-workspace-viewer.js";
 import { ManualCaptionEditor } from "./manual-caption-editor.js";
 import { ProductAvailability, type ProductAvailabilityState } from "./product-availability.js";
 import { ProductResources } from "./product-resources.js";
@@ -74,7 +74,6 @@ type WorkspaceState =
       sequence: SequenceWindow;
       assets: AssetPage;
     }>;
-type ReadyWorkspaceState = Extract<WorkspaceState, Readonly<{ status: "ready" }>>;
 type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
 export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
@@ -149,7 +148,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           contracts.media.read.list(project.id, { limit: 50 }, signal),
         ]);
         if (!signal?.aborted) {
-          const readyState: ReadyWorkspaceState = { status: "ready", overview, narrative, sequence, assets };
+          const readyState = { status: "ready" as const, overview, narrative, sequence, assets };
           setState(readyState);
           return readyState;
         }
@@ -211,8 +210,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const ready = state.status === "ready" ? state : undefined;
   const selectedAsset = ready?.assets.assets.find((asset) => asset.id === selectedAssetId);
   const sourceAsset = ready?.assets.assets.find((asset) => asset.id === sourceStreamSelection?.assetId);
-  const sourceVideo = sourceAsset?.facts?.streams.find((stream) => stream.id === sourceStreamSelection?.videoStreamId)
-    ?.descriptor.video;
   const sequencePreviewAvailable =
     productAvailability.status === "ready" &&
     isProductFeatureAvailable(productAvailability.snapshot, "sequence-preview");
@@ -275,7 +272,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       current && assets.some((asset) => asset.id === current) ? current : assets[0]?.id,
     );
   }, [ready?.assets.assets]);
-  const openSourceAsset = useCallback((asset: Asset) => {
+  const openSourceAsset = (asset: Asset) => {
     const streams = asset.facts?.streams ?? [];
     const video = uniqueSourceStream(streams, "video");
     const audio = uniqueSourceStream(streams, "audio");
@@ -285,8 +282,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       ...(video ? { videoStreamId: video.id } : {}),
       ...(audio ? { audioStreamId: audio.id } : {}),
     });
+    if (sourceViewer.getSnapshot().selection?.assetId === asset.id) sourceViewer.restart();
     setViewerMode("source");
-  }, []);
+  };
   useEffect(() => {
     if (!sourcePreviewAvailable) {
       sourceViewer.close();
@@ -465,13 +463,14 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Media",
               content: (
                 <Stack spacing="compact">
-                  <SourceImportSurface
-                    disabled={!ready || importing}
-                    error={importError}
-                    onSelect={(file) => void importFootage(file)}
-                  />
-                  {ready && ready.assets.assets.length === 0 ? (
-                    <EmptyState hint="Add local footage to begin." title="No media yet" />
+                  {!ready || ready.assets.assets.length === 0 ? (
+                    <SourceImportSurface
+                      disabled={!ready || importing}
+                      error={importError}
+                      onSelect={(file) => void importFootage(file)}
+                    />
+                  ) : importError ? (
+                    <Status state="unavailable">Could not add footage · {importError.message}</Status>
                   ) : null}
                   {ready?.assets.assets.map((asset) => (
                     <AssetSummary
@@ -739,56 +738,59 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       timelineScrollKey={timelinePanel}
       title={project.name}
       viewer={
-        <Stack spacing="compact">
-          <Text tone="eyebrow">{viewerMode === "sequence" ? "SEQUENCE · VIEWER" : "SOURCE · VIEWER"}</Text>
-          <Text>
-            {viewerMode === "source"
-              ? sourceVideo
-                ? `${sourceVideo.width} × ${sourceVideo.height}`
-                : sourceAsset?.facts
-                  ? "Audio source"
-                  : "Preparing source"
-              : ready
-                ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}`
-                : "Preparing Sequence"}
-          </Text>
-          {viewerMode === "source" ? (
-            <Button onPress={() => setViewerMode("sequence")}>Open Sequence Viewer</Button>
-          ) : null}
-          {viewerMode === "sequence" ? (
-            sequencePreviewAvailable ? (
-              <SequencePreviewSurface controller={sequenceViewer} snapshot={sequencePreview} />
-            ) : (
-              <Text>Sequence preview is unavailable in the active product build.</Text>
-            )
+        viewerMode === "sequence" ? (
+          sequencePreviewAvailable ? (
+            <SequencePreviewSurface
+              canvasLabel={
+                ready ? `${ready.overview.format.canvasWidth} × ${ready.overview.format.canvasHeight}` : undefined
+              }
+              controller={sequenceViewer}
+              snapshot={sequencePreview}
+            />
           ) : (
-            <SourcePreviewSurface
-              asset={sourceAsset}
-              audioStreamId={sourceStreamSelection?.audioStreamId}
-              controller={sourceViewer}
-              onAudioStreamChange={(streamId) =>
-                setSourceStreamSelection((current) => updateSourceStreamSelection(current, "audio", streamId))
-              }
-              onVideoStreamChange={(streamId) =>
-                setSourceStreamSelection((current) => updateSourceStreamSelection(current, "video", streamId))
-              }
-              snapshot={sourcePreview}
-              videoStreamId={sourceStreamSelection?.videoStreamId}
-            />
-          )}
-          {viewerMode === "source" && ready && sourceAsset ? (
-            <CreatorSourcePlacement
-              onCommitted={recordAndRefreshCreativeCommit}
-              onShowSequence={() => setViewerMode("sequence")}
-              sequenceId={ready.overview.project.mainSequenceId}
-              sequenceSnapshot={sequencePreview}
-              sequenceViewer={sequenceViewer}
-              sourceSnapshot={sourcePreview}
-              sourceViewer={sourceViewer}
-              tracks={ready.overview.tracks}
-            />
-          ) : null}
-        </Stack>
+            <Text>Sequence preview is unavailable in the active product build.</Text>
+          )
+        ) : (
+          <SourceViewerLayout
+            asset={sourceAsset}
+            onBack={() => {
+              sequenceViewer.restart();
+              setViewerMode("sequence");
+            }}
+            placement={
+              ready && sourceAsset ? (
+                <CreatorSourcePlacement
+                  onCommitted={recordAndRefreshCreativeCommit}
+                  onShowSequence={() => setViewerMode("sequence")}
+                  sequenceId={ready.overview.project.mainSequenceId}
+                  sequenceSnapshot={sequencePreview}
+                  sequenceViewer={sequenceViewer}
+                  sourceSnapshot={sourcePreview}
+                  sourceViewer={sourceViewer}
+                  tracks={ready.overview.tracks}
+                />
+              ) : (
+                <Text>Preparing source placement…</Text>
+              )
+            }
+            preview={
+              <SourcePreviewSurface
+                asset={sourceAsset}
+                audioStreamId={sourceStreamSelection?.audioStreamId}
+                controller={sourceViewer}
+                onAudioStreamChange={(streamId) =>
+                  setSourceStreamSelection((current) => updateSourceStreamSelection(current, "audio", streamId))
+                }
+                onVideoStreamChange={(streamId) =>
+                  setSourceStreamSelection((current) => updateSourceStreamSelection(current, "video", streamId))
+                }
+                snapshot={sourcePreview}
+                videoStreamId={sourceStreamSelection?.videoStreamId}
+              />
+            }
+            videoStreamId={sourceStreamSelection?.videoStreamId}
+          />
+        )
       }
       viewerLabel="Viewer"
     />

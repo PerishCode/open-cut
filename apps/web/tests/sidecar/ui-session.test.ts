@@ -15,6 +15,7 @@ afterEach(async () => {
 
 describe("development UI session bootstrap", () => {
   it("signs the API challenge through the lifecycle Unix socket", async () => {
+    const clientInstances: string[] = [];
     const socket = join(mkdtempSync(join(tmpdir(), "open-cut-signer-")), "signer.sock");
     const signer = createServer(
       asyncHandler(async (request, response) => {
@@ -44,6 +45,9 @@ describe("development UI session bootstrap", () => {
         response.setHeader("content-type", "application/json");
         if (request.url === "/v1/auth/ui/challenges") {
           expect(body).toMatchObject({ origin: "http://127.0.0.1:4173" });
+          const clientInstance = (body as { clientInstance?: unknown }).clientInstance;
+          expect(clientInstance).toMatch(/^web-sidecar-[0-9a-f-]{36}$/);
+          clientInstances.push(clientInstance as string);
           response.end(
             JSON.stringify({
               schema: "open-cut/ui-challenge/v1",
@@ -69,8 +73,12 @@ describe("development UI session bootstrap", () => {
     );
 
     const session = await bootstrapDevelopmentUISession(api, "http://127.0.0.1:4173", socket);
+    const renewed = await bootstrapDevelopmentUISession(api, "http://127.0.0.1:4173", socket);
     expect(session.apiSession).toBe("oc_ui_api-session");
+    expect(renewed.apiSession).toBe("oc_ui_api-session");
     expect(session.browserBinding).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(clientInstances).toHaveLength(2);
+    expect(clientInstances[1]).toBe(clientInstances[0]);
   });
 });
 

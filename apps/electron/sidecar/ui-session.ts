@@ -4,13 +4,18 @@ import { request as requestHttp } from "node:http";
 
 const signerSocketEnvironment = "OC_LIFECYCLE_SIGNER_SOCKET";
 const platformHostEnvironment = "OC_PLATFORM_HOST";
+// Credential rotation preserves the renderer identity for this sidecar process.
+const processClientInstance = `electron-${randomUUID()}`;
 
 export type UISession = Readonly<{ token: string; expiresAt: number }>;
 
-export async function bootstrapUISession(apiEndpoint: string): Promise<UISession> {
+export async function bootstrapUISession(
+  apiEndpoint: string,
+  clientInstance = processClientInstance,
+): Promise<UISession> {
   const challenge = asRecord(
     await postJSON(new URL("v1/auth/ui/challenges", apiEndpoint), {
-      clientInstance: `electron-${randomUUID()}`,
+      clientInstance,
       origin: "oc://app",
     }),
   );

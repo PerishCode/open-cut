@@ -83,6 +83,7 @@ describe("CreatorAgentPane", () => {
 
     const composer = screen.getByRole("textbox", { name: "Continue this task · Ctrl/⌘ Enter" });
     expect(composer.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
+    expect(composer.getAttribute("rows")).toBe("3");
     fireEvent.change(composer, {
       target: { value: "Make it warmer" },
     });
@@ -232,8 +233,13 @@ describe("CreatorAgentPane", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Turn 1 · completed" }));
-    expect(await screen.findByText("Creative change committed")).toBeTruthy();
-    expect(screen.getByText("edit apply · Project r9")).toBeTruthy();
+    const outcome = await screen.findByText("Creative change committed");
+    const latestResponse = screen.getByText("Agent response").closest("article");
+    expect(latestResponse).toBeTruthy();
+    expect(outcome.closest("article")?.compareDocumentPosition(latestResponse as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.getByText("Captions updated · Project r9")).toBeTruthy();
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
     expect(screen.queryByText("OUTCOME · #1")).toBeNull();
     expect(screen.queryByText(transactionId)).toBeNull();
@@ -245,7 +251,8 @@ describe("CreatorAgentPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus Caption" }));
     expect(focus).toHaveBeenCalledWith({ kind: "caption", id: receiptId, revision: "1" });
     expect(await screen.findByText("Caption receipt r1; current workspace is r2.")).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
   });
 });
 

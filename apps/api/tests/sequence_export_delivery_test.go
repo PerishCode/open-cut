@@ -17,7 +17,7 @@ import (
 	"github.com/PerishCode/open-cut/product/domain"
 )
 
-func TestSequenceExportDeliveryLeaseIsSessionBoundOneShotAndExact(t *testing.T) {
+func TestSequenceExportDeliveryLeaseIsClientBoundOneShotAndExact(t *testing.T) {
 	parallelAPITest(t)
 	now := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
 	projectID, _ := domain.ParseProjectID("018f0a60-7b80-7a01-8000-000000000301")
@@ -43,14 +43,24 @@ func TestSequenceExportDeliveryLeaseIsSessionBoundOneShotAndExact(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuing := leaseCreatorContext(t, now, "export-delivery-issuing")
+	issuing, renewed, copied := leaseCreatorRotationContexts(t, now, "export-delivery-issuing")
 	lease, err := delivery.Create(issuing, projectID, artifactID)
 	if err != nil || lease.ArtifactID != artifactID || lease.ByteLength != byteSize ||
 		lease.ContentSHA256 != digest || !strings.Contains(lease.ContentURL, "oc_export_") {
 		t.Fatalf("lease=%+v err=%v", lease, err)
 	}
 	token := strings.TrimPrefix(lease.ContentURL, "/v1/internal/platform/export-content/")
-	copied := leaseCreatorContext(t, now, "export-delivery-copied")
+	renewedResponse := httptest.NewRecorder()
+	if err := delivery.ServeContent(renewed, renewedResponse, token); err != nil ||
+		renewedResponse.Code != 200 || renewedResponse.Body.String() != string(content) {
+		t.Fatalf("rotated session status=%d body=%q err=%v", renewedResponse.Code, renewedResponse.Body.String(), err)
+	}
+
+	lease, err = delivery.Create(issuing, projectID, artifactID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token = strings.TrimPrefix(lease.ContentURL, "/v1/internal/platform/export-content/")
 	if err := delivery.ServeContent(copied, httptest.NewRecorder(), token); !errors.Is(
 		err, service.ErrSequenceExportDeliveryInvalid,
 	) {

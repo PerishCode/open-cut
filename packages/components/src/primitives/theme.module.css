@@ -130,7 +130,7 @@
 }
 
 .editorViewer .editorPaneContent {
-  /* Media stays dark in both system themes. */
+  /* Media owns a stricter black well inside the stable matte workspace. */
   --oc-ink: var(--oc-media-ink);
   --oc-ink-strong: var(--oc-media-ink-strong);
   --oc-ink-mid: var(--oc-media-ink-mid);
@@ -167,6 +167,28 @@
 .editorTimelineContent {
   overflow: auto;
   padding: 12px;
+}
+
+.editorSplit {
+  display: grid;
+  width: min(100%, 1080px);
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 36%);
+  gap: 14px;
+}
+
+.editorSplitPrimary,
+.editorSplitSecondary {
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editorSplitSecondary {
+  padding-left: 14px;
+  border-left: 1px solid var(--oc-hairline);
 }
 
 .editorResizeVertical,
@@ -208,17 +230,18 @@
   display: grid;
   height: 100%;
   overflow: auto;
-  padding: 48px;
+  padding: clamp(20px, 4vw, 40px);
   place-items: center;
 }
 
 .panel {
-  width: min(760px, 100%);
-  padding: 64px;
+  width: min(680px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 36px;
   border: 1px solid var(--oc-hairline-strong);
   background: var(--oc-surface-panel);
   box-shadow: var(--oc-shadow-panel);
-  backdrop-filter: blur(18px);
 }
 
 .stack,
@@ -347,6 +370,10 @@
   box-shadow: 0 -12px 28px rgb(0 0 0 / 6%);
 }
 
+.panelDockFooter > .stackCompact {
+  gap: 12px;
+}
+
 .eyebrow,
 .body,
 .heading {
@@ -362,10 +389,10 @@
 }
 
 .heading {
-  font-size: clamp(48px, 8vw, 84px);
-  font-weight: 590;
-  letter-spacing: -0.065em;
-  line-height: 0.92;
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
 }
 
 .body {
@@ -465,6 +492,11 @@
   padding: 3px 6px;
   border: 0;
   background: transparent;
+}
+
+.controlStrip:focus-visible {
+  outline: 1px solid var(--oc-accent-border-focus);
+  outline-offset: -1px;
 }
 
 .controlStripMeta {
@@ -650,50 +682,6 @@
 
 .unavailable {
   background: var(--oc-status-unavailable);
-}
-
-.tabs {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto 1fr;
-  gap: 14px;
-}
-
-.tabList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--oc-hairline-mid);
-  background: var(--oc-surface-input);
-}
-
-.tab {
-  min-height: 28px;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--oc-ink-dim);
-  cursor: pointer;
-  font: 600 11px / 1.2 var(--oc-font-sans);
-}
-
-.tabActive {
-  border-color: var(--oc-hairline-strong);
-  background: var(--oc-surface-raised);
-  box-shadow: inset 0 -2px 0 var(--oc-accent);
-  color: var(--oc-ink-strong);
-}
-
-.tab:focus-visible {
-  box-shadow: 0 0 0 3px var(--oc-focus-ring);
-  outline: none;
-}
-
-.tabPanel {
-  min-height: 0;
-  overflow: auto;
 }
 
 .emptyState {

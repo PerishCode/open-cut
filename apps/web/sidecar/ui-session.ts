@@ -3,6 +3,8 @@ import { request as requestHttp } from "node:http";
 
 const signerSocketEnvironment = "OC_LIFECYCLE_SIGNER_SOCKET";
 const signerPath = "/v1/sign";
+// Credential rotation preserves the browser proxy identity for this sidecar process.
+const processClientInstance = `web-sidecar-${randomUUID()}`;
 
 export type ProxyUISession = Readonly<{
   apiSession: string;
@@ -14,10 +16,11 @@ export async function bootstrapDevelopmentUISession(
   apiEndpoint: string,
   origin: string,
   signerSocket = process.env[signerSocketEnvironment],
+  clientInstance = processClientInstance,
 ): Promise<ProxyUISession> {
   if (!signerSocket) throw new Error(`${signerSocketEnvironment} is required for browser development`);
   const challenge = await postJSON(new URL("v1/auth/ui/challenges", apiEndpoint), {
-    clientInstance: `web-sidecar-${randomUUID()}`,
+    clientInstance,
     origin,
   });
   const challengeRecord = asRecord(challenge);

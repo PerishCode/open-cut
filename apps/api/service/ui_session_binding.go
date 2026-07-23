@@ -13,6 +13,12 @@ type uiSessionBinding struct {
 	apiInstance    string
 }
 
+type uiLeaseBinding struct {
+	clientInstance string
+	origin         string
+	apiInstance    string
+}
+
 type uiSessionBindingContextKey struct{}
 
 type UISessionContextBinder interface {
@@ -49,4 +55,18 @@ func uiSessionBindingFromContext(ctx context.Context) (uiSessionBinding, error) 
 		return uiSessionBinding{}, ErrUnauthorized
 	}
 	return binding, nil
+}
+
+func (binding uiSessionBinding) leaseBinding() uiLeaseBinding {
+	return uiLeaseBinding{
+		clientInstance: binding.clientInstance,
+		origin:         binding.origin,
+		apiInstance:    binding.apiInstance,
+	}
+}
+
+func (lease uiLeaseBinding) matches(binding uiSessionBinding) bool {
+	return lease.clientInstance == binding.clientInstance &&
+		lease.origin == binding.origin &&
+		lease.apiInstance == binding.apiInstance
 }

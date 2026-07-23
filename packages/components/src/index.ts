@@ -1,6 +1,7 @@
 export { Button, type ButtonProps, type ButtonVariant } from "./primitives/button.js";
 export { ControlStrip, type ControlStripProps } from "./primitives/control-strip.js";
 export { EditorShell, type EditorShellProps } from "./primitives/editor-shell.js";
+export { EditorSplit, type EditorSplitProps } from "./primitives/editor-split.js";
 export { EmptyState, type EmptyStateProps } from "./primitives/empty-state.js";
 export { FileField, type FileFieldProps } from "./primitives/file-field.js";
 export { Heading, type HeadingProps } from "./primitives/heading.js";

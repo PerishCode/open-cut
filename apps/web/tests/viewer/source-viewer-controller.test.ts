@@ -82,6 +82,25 @@ describe("SourceViewerController", () => {
     expect(controller.getSnapshot()).toMatchObject({ status: "preparing", marks: {} });
   });
 
+  it("restarts the same pinned selection before remounting its lease", async () => {
+    const port = viewerPort();
+    vi.mocked(port.prepareSourcePreview).mockResolvedValue(readyPreparation());
+    const controller = new SourceViewerController(port, new FakeRuntime());
+    controller.open(selection());
+    await settle();
+    controller.useFullSelectedSource();
+
+    controller.restart();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      status: "preparing",
+      marks: { in: { value: "-1", scale: 1 }, out: { value: "3", scale: 1 } },
+    });
+    expect(port.prepareSourcePreview).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(controller.getSnapshot().status).toBe("ready");
+  });
+
   it("blocks full-source inference when a selected lane has no finite duration", async () => {
     const port = viewerPort();
     const preparation = readyPreparation();

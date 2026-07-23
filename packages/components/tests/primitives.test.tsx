@@ -5,6 +5,7 @@ import {
   Button,
   ControlStrip,
   EditorShell,
+  EditorSplit,
   FileField,
   Heading,
   MediaPlayer,
@@ -221,6 +222,20 @@ describe("atomic components", () => {
     expect(within(panel).getByRole("button", { name: "Send" })).toBeTruthy();
   });
 
+  it("owns a bounded primary and secondary editor work area", () => {
+    render(
+      <EditorSplit
+        primary="Preview and range"
+        primaryLabel="Source preview"
+        secondary="Placement settings"
+        secondaryLabel="Source placement"
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Source preview" }).textContent).toBe("Preview and range");
+    expect(screen.getByRole("complementary", { name: "Source placement" }).textContent).toBe("Placement settings");
+  });
+
   it("normalizes file selection and drop behind one semantic atom", () => {
     const onSelect = vi.fn();
     render(<FileField label="Drop footage or browse" accept="video/*,audio/*" onSelect={onSelect} />);
@@ -295,12 +310,27 @@ describe("atomic components", () => {
 
     expect(screen.getByText("V1")).toBeTruthy();
     expect(screen.getByText("A1")).toBeTruthy();
+    const toolbar = screen.getByRole("toolbar", { name: "Timeline view controls" });
+    expect(toolbar.tabIndex).toBe(0);
+    expect(toolbar.getAttribute("aria-keyshortcuts")).toBe("Home 0 - =");
+    expect(screen.getByRole("group", { name: "Timeline zoom" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select Opening shot" }));
     expect(onItemSelect).toHaveBeenCalledWith("clip-1");
     fireEvent.click(screen.getByRole("button", { name: "Seek A1" }));
     expect(onSeek).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole("button", { name: "Zoom timeline in" }));
     expect(screen.getByText("8×")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Fit timeline" }));
+    expect(screen.getByText("1×")).toBeTruthy();
+    fireEvent.keyDown(toolbar, { key: "=" });
+    expect(screen.getByText("2×")).toBeTruthy();
+    fireEvent.keyDown(toolbar, { key: "-" });
+    expect(screen.getByText("1×")).toBeTruthy();
+    onSeek.mockClear();
+    fireEvent.keyDown(toolbar, { key: "Home" });
+    expect(onSeek).toHaveBeenCalledWith(0);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Zoom timeline in" }), { key: "=" });
+    expect(screen.getByText("1×")).toBeTruthy();
   });
 
   it("exposes move and trim affordances only when gestures are enabled", () => {
@@ -434,11 +464,14 @@ describe("atomic components", () => {
   });
 
   it("keeps a compact control strip near the canvas without consumer styling props", () => {
+    const onKeyDown = vi.fn();
     render(
       <ControlStrip
         hint="Choose scope and Alignment"
+        keyboardShortcuts="ArrowLeft ArrowRight"
         label="Timeline selection policy"
         summary="SELECTED · V1 · Timeline 00:00 → 00:02.10"
+        onKeyDown={onKeyDown}
       >
         <button type="button">Linked A/V</button>
         <button type="button">Preserve</button>
@@ -450,6 +483,10 @@ describe("atomic components", () => {
     expect(within(strip).getByText("Choose scope and Alignment")).toBeTruthy();
     expect(within(strip).getByRole("button", { name: "Linked A/V" })).toBeTruthy();
     expect(within(strip).getByRole("button", { name: "Preserve" })).toBeTruthy();
+    expect(strip.getAttribute("aria-keyshortcuts")).toBe("ArrowLeft ArrowRight");
+    expect(strip.tabIndex).toBe(0);
+    fireEvent.keyDown(strip, { key: "ArrowLeft" });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
   it("renders the policy accessory inside the same Timeline editor unit as the canvas", () => {

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { type Asset, digestString, durableID, int64String, revisionString } from "@open-cut/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { type Asset, digestString, durableID, int64String, revisionString, uint64String } from "@open-cut/contracts";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AssetSummary } from "../../src/components/creator-workspace-media.js";
+import { AssetSummary, TranscriptSurface } from "../../src/components/creator-workspace-media.js";
 
 afterEach(cleanup);
 
@@ -40,6 +40,58 @@ describe("AssetSummary", () => {
     expect(screen.getByText("Ready")).toBeTruthy();
     expect(screen.getByText("Transcript is waiting for local transcription support. Check System.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Open source" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("TranscriptSurface", () => {
+  it("orients the ready transcript before loading its bounded content", () => {
+    const ready = asset(true);
+    const onLoad = vi.fn();
+    render(
+      <TranscriptSurface
+        asset={{
+          ...ready,
+          artifacts: [
+            {
+              id: durableID("018f0a60-7b80-7a01-8000-000000000305"),
+              kind: "transcript",
+              producerVersion: `transcript@sha256:${"b".repeat(64)}`,
+              inputFingerprint: digestString(`sha256:${"a".repeat(64)}`),
+              state: "ready",
+              byteSize: uint64String("1024"),
+              contentDigest: digestString(`sha256:${"c".repeat(64)}`),
+              createdAt: "2026-07-22T00:00:00Z",
+            },
+          ],
+        }}
+        onContext={vi.fn()}
+        onInspect={vi.fn()}
+        onLoad={onLoad}
+        onLoadMore={vi.fn()}
+        onSelectDefault={vi.fn()}
+        state={{ status: "idle" }}
+      />,
+    );
+
+    expect(screen.getByRole("note").textContent).toContain("Transcript ready");
+    expect(screen.getByRole("note").textContent).toContain("story.webm");
+    fireEvent.click(screen.getByRole("button", { name: "Open transcript" }));
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the no-source presentation to the owning panel", () => {
+    const view = render(
+      <TranscriptSurface
+        asset={undefined}
+        onContext={vi.fn()}
+        onInspect={vi.fn()}
+        onLoad={undefined}
+        onLoadMore={vi.fn()}
+        onSelectDefault={vi.fn()}
+        state={{ status: "idle" }}
+      />,
+    );
+    expect(view.container.childElementCount).toBe(0);
   });
 });
 

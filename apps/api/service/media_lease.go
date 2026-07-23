@@ -104,8 +104,7 @@ type sourceProxyMediaOpener interface {
 
 type mediaLeaseRecord struct {
 	resourceID     domain.ResourceID
-	sessionHash    string
-	apiInstance    string
+	binding        uiLeaseBinding
 	projectID      domain.ProjectID
 	assetID        domain.AssetID
 	assetRevision  domain.Revision
@@ -236,7 +235,7 @@ func (service *MediaLeaseService) CreateSourcePreview(
 		return MediaLeaseResult{}, err
 	}
 	record := mediaLeaseRecord{
-		resourceID: resourceID, sessionHash: binding.sessionHash, apiInstance: binding.apiInstance,
+		resourceID: resourceID, binding: binding.leaseBinding(),
 		projectID: projectID, assetID: assetID, assetRevision: preparation.AssetRevision,
 		artifactID:     preparation.Artifact.ID,
 		artifactDigest: preparation.Artifact.ContentDigest, media: media, manifest: manifest, expiresAt: expiresAt,
@@ -443,7 +442,7 @@ func (service *MediaLeaseService) ServeContent(
 	service.cleanupLocked(now)
 	record, exists := service.leases[tokenHash(token)]
 	service.mu.Unlock()
-	if !exists || record.sessionHash != binding.sessionHash || record.apiInstance != binding.apiInstance {
+	if !exists || !record.binding.matches(binding) {
 		return ErrMediaLeaseInvalid
 	}
 	if !now.Before(record.expiresAt) {

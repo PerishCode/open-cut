@@ -1,14 +1,49 @@
-import { Button, ControlStrip, MediaPlayer, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
-import { useCallback, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
+import { formatClock } from "./creator-workspace-presentation.js";
+
+export function SourceViewerLayout({
+  asset,
+  onBack,
+  placement,
+  preview,
+  videoStreamId,
+}: {
+  asset: Asset | undefined;
+  onBack: () => void;
+  placement: ReactNode;
+  preview: ReactNode;
+  videoStreamId: DurableID | undefined;
+}) {
+  const video = asset?.facts?.streams.find((stream) => stream.id === videoStreamId)?.descriptor.video;
+  const dimensions = video ? `${video.width} × ${video.height}` : asset?.facts ? "Audio source" : "Preparing source";
+  return (
+    <EditorSplit
+      primary={
+        <Stack spacing="compact">
+          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={dimensions}>
+            <Button onPress={onBack}>Back to Sequence</Button>
+          </ControlStrip>
+          {preview}
+        </Stack>
+      }
+      primaryLabel="Source preview and range"
+      secondary={placement}
+      secondaryLabel="Source placement"
+    />
+  );
+}
 
 export function SequencePreviewSurface({
+  canvasLabel,
   controller,
   snapshot,
 }: {
+  canvasLabel?: string;
   controller: SequenceViewerController;
   snapshot: SequenceViewerSnapshot;
 }) {
@@ -28,16 +63,23 @@ export function SequencePreviewSurface({
       {newerRevision ? (
         <Button onPress={() => controller.adoptRevision(newerRevision)}>Adopt available r{newerRevision}</Button>
       ) : null}
-      <SequencePreparationSurface controller={controller} preparation={snapshot.preparation} snapshot={snapshot} />
+      <SequencePreparationSurface
+        canvasLabel={canvasLabel}
+        controller={controller}
+        preparation={snapshot.preparation}
+        snapshot={snapshot}
+      />
     </Stack>
   );
 }
 
 function SequencePreparationSurface({
+  canvasLabel,
   controller,
   preparation,
   snapshot,
 }: {
+  canvasLabel?: string;
   controller: SequenceViewerController;
   preparation: SequencePreviewPreparation | undefined;
   snapshot: SequenceViewerSnapshot;
@@ -52,6 +94,32 @@ function SequencePreparationSurface({
     void Promise.resolve()
       .then(action)
       .catch((value) => setTransportError(value instanceof Error ? value : new Error(String(value))));
+  };
+  const onTransportKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    const action =
+      event.key === "Home"
+        ? () => controller.seekToStart()
+        : event.key === "ArrowLeft"
+          ? () => controller.stepFrame(-1)
+          : event.key === " "
+            ? () => controller.togglePlayback()
+            : event.key === "ArrowRight"
+              ? () => controller.stepFrame(1)
+              : undefined;
+    if (!action) return;
+    event.preventDefault();
+    runTransport(action);
   };
   if (snapshot.status === "idle" || snapshot.status === "preparing") {
     const progress = preparation?.job ? ` · ${preparation.job.progressBasisPoints / 100}%` : "";
@@ -79,16 +147,18 @@ function SequencePreparationSurface({
   const facts = preparation.lease.facts;
   const transport = (
     <ControlStrip
-      hint={`${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      hint={`${canvasLabel ? `${canvasLabel} · ` : ""}${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      keyboardShortcuts="Home ArrowLeft Space ArrowRight"
       label="Sequence transport"
       summary={`SEQUENCE r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
+      onKeyDown={onTransportKeyDown}
     >
-      <Button onPress={() => runTransport(() => controller.seekToStart())}>Go to start</Button>
-      <Button onPress={() => runTransport(() => controller.stepFrame(-1))}>Previous frame</Button>
+      <Button onPress={() => runTransport(() => controller.seekToStart())}>Start</Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(-1))}>−1 frame</Button>
       <Button onPress={() => runTransport(() => controller.togglePlayback())}>
         {snapshot.playback === "playing" ? "Pause" : "Play"}
       </Button>
-      <Button onPress={() => runTransport(() => controller.stepFrame(1))}>Next frame</Button>
+      <Button onPress={() => runTransport(() => controller.stepFrame(1))}>+1 frame</Button>
     </ControlStrip>
   );
   return (
@@ -178,22 +248,28 @@ export function SourcePreviewSurface({
             onPlaybackStart={() => controller.setPlaying(true)}
             source={lease.sameOriginUrl}
           />
-          <Text tone="eyebrow">
-            SOURCE {formatExact(snapshot.playhead)} · PROXY {formatExact(snapshot.proxyPlayhead)}
-          </Text>
-          <Button onPress={() => run(() => controller.step("previous"))}>Previous source boundary</Button>
-          <Button onPress={() => run(() => controller.step("next"))}>Next source boundary</Button>
-          <Button onPress={() => run(() => controller.captureIn())}>Mark In at settled position</Button>
-          <Button onPress={() => run(() => controller.captureOut())}>Mark Out after displayed boundary</Button>
-          <Button disabled={!canUseFullSource} onPress={() => run(() => controller.useFullSelectedSource())}>
-            Use full selected source
-          </Button>
+          <ControlStrip
+            hint={`IN ${formatExact(snapshot.marks.in)} · OUT ${formatExact(snapshot.marks.out)}${
+              range ? ` · ${formatExact(range.duration)}` : ""
+            }`}
+            label="Source range controls"
+            summary={`SOURCE ${formatExact(snapshot.playhead)} · PROXY ${formatExact(snapshot.proxyPlayhead)}`}
+          >
+            <Button onPress={() => run(() => controller.step("previous"))}>Previous boundary</Button>
+            <Button onPress={() => run(() => controller.step("next"))}>Next boundary</Button>
+            <Button onPress={() => run(() => controller.captureIn())}>Mark In</Button>
+            <Button onPress={() => run(() => controller.captureOut())}>Mark Out</Button>
+            <Button disabled={!canUseFullSource} onPress={() => run(() => controller.useFullSelectedSource())}>
+              Use full range
+            </Button>
+            <Button
+              disabled={snapshot.marks.in === undefined && snapshot.marks.out === undefined}
+              onPress={() => controller.clearMarks()}
+            >
+              Clear marks
+            </Button>
+          </ControlStrip>
           {!canUseFullSource ? <Text>Full range unavailable; mark In and Out explicitly.</Text> : null}
-          <Button onPress={() => controller.clearMarks()}>Clear source marks</Button>
-          <Text>
-            In {formatExact(snapshot.marks.in)} · Out {formatExact(snapshot.marks.out)}
-            {range ? ` · duration ${formatExact(range.duration)}` : " · select a positive range"}
-          </Text>
           <Text tone="eyebrow">NORMALIZED SOURCE PROXY · {lease.byteLength} BYTES</Text>
         </>
       ) : null}
@@ -216,10 +292,18 @@ function StreamSelection({
   selected: DurableID | undefined;
   streams: readonly SourceStream[];
 }) {
+  const selectedStream = streams.find((stream) => stream.id === selected);
   return (
-    <Stack spacing="compact">
-      <Text tone="eyebrow">{label}</Text>
-      <Button onPress={() => onChange(undefined)}>{selected ? "Clear selection" : "None selected"}</Button>
+    <ControlStrip
+      hint={
+        selectedStream ? `#${selectedStream.descriptor.index} · ${selectedStream.descriptor.codec}` : "None selected"
+      }
+      label={`${label} source stream`}
+      summary={label}
+    >
+      <Button disabled={!selected} onPress={() => onChange(undefined)}>
+        Clear
+      </Button>
       {streams.map((stream) => (
         <Button key={stream.id} onPress={() => onChange(stream.id)}>
           {selected === stream.id ? "Selected · " : ""}#{stream.descriptor.index} {stream.descriptor.codec}
@@ -228,26 +312,12 @@ function StreamSelection({
         </Button>
       ))}
       {streams.length === 0 ? <Text>No compatible stream declared.</Text> : null}
-    </Stack>
+    </ControlStrip>
   );
 }
 
 function formatExact(value: { value: string; scale: number } | undefined): string {
   return value ? `${value.value}/${value.scale}s` : "—";
-}
-
-function formatClock(value: { value: string; scale: number }): string {
-  const scale = BigInt(value.scale);
-  const numerator = BigInt(value.value);
-  const hundredths = numerator <= 0n ? 0n : (numerator * 100n + scale / 2n) / scale;
-  const hours = hundredths / 360_000n;
-  const minutes = (hundredths % 360_000n) / 6_000n;
-  const seconds = (hundredths % 6_000n) / 100n;
-  const fraction = hundredths % 100n;
-  const clock = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${fraction
-    .toString()
-    .padStart(2, "0")}`;
-  return hours > 0 ? `${hours.toString().padStart(2, "0")}:${clock}` : clock;
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {

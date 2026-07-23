@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 
-import styles from "./theme.module.css";
+import styles from "./tabs.module.css";
 
 export type TabDefinition = {
   id: string;

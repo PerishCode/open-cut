@@ -99,8 +99,7 @@ type sequencePreviewMediaOpener interface {
 
 type sequencePreviewLeaseRecord struct {
 	resourceID       domain.ResourceID
-	sessionHash      string
-	apiInstance      string
+	binding          uiLeaseBinding
 	projectID        domain.ProjectID
 	sequenceID       domain.SequenceID
 	sequenceRevision domain.Revision
@@ -291,7 +290,7 @@ func (service *SequencePreviewLeaseService) Create(
 		return SequencePreviewLeaseResult{}, err
 	}
 	record := sequencePreviewLeaseRecord{
-		resourceID: resourceID, sessionHash: binding.sessionHash, apiInstance: binding.apiInstance,
+		resourceID: resourceID, binding: binding.leaseBinding(),
 		projectID: projectID, sequenceID: sequenceID, sequenceRevision: request.ExpectedSequenceRevision,
 		planDigest: *planDigest, jobID: preparation.Job.ID,
 		artifactID: artifact.ID, artifactDigest: artifact.ContentDigest,
@@ -481,7 +480,7 @@ func (service *SequencePreviewLeaseService) ServeContent(
 	service.cleanupLocked(now)
 	record, exists := service.leases[tokenHash(token)]
 	service.mu.Unlock()
-	if !exists || record.sessionHash != binding.sessionHash || record.apiInstance != binding.apiInstance {
+	if !exists || !record.binding.matches(binding) {
 		return ErrMediaLeaseInvalid
 	}
 	if !now.Before(record.expiresAt) {
