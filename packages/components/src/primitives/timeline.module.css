@@ -47,6 +47,11 @@
   gap: 6px;
 }
 
+.timelineToolbar:focus-visible {
+  outline: 1px solid var(--oc-accent-border-focus);
+  outline-offset: -1px;
+}
+
 .timelineTimecode,
 .timelineToolbarMeta,
 .timelineZoomLabel {
@@ -70,6 +75,16 @@
   flex: 1;
 }
 
+.timelineToolGroup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 4px;
+}
+
 .timelineToolButton {
   display: grid;
   width: 20px;
@@ -81,6 +96,13 @@
   cursor: pointer;
   font: 13px / 1 var(--oc-font-sans);
   place-items: center;
+}
+
+.timelineFitButton {
+  width: auto;
+  padding: 0 5px;
+  font: 700 8px / 1 var(--oc-font-mono);
+  letter-spacing: 0.04em;
 }
 
 .timelineToolButton:disabled {

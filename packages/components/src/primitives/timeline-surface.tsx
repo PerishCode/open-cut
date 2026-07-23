@@ -228,35 +228,84 @@ export function TimelineSurface({
   };
 
   const visibleGhost = gesture ? visibleGhostGeometry(gesture, items) : undefined;
+  const onToolbarKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    if (event.key === "Home" && !event.shiftKey) {
+      event.preventDefault();
+      onSeek(startSeconds);
+      return;
+    }
+    if (event.key === "0" && !event.shiftKey) {
+      event.preventDefault();
+      setZoomIndex(0);
+      return;
+    }
+    if (event.key === "-" && !event.shiftKey) {
+      event.preventDefault();
+      setZoomIndex((current) => Math.max(0, current - 1));
+      return;
+    }
+    if ((event.key === "=" && !event.shiftKey) || (event.key === "+" && event.shiftKey)) {
+      event.preventDefault();
+      setZoomIndex((current) => Math.min(zoomLevels.length - 1, current + 1));
+    }
+  };
 
   return (
     <section aria-label="Timeline editor" className={styles.timelineSurface}>
       <section aria-label="Timeline canvas" className={styles.timelineCanvas} data-timeline-canvas>
-        <header className={styles.timelineToolbar}>
+        <header
+          aria-keyshortcuts="Home 0 - ="
+          aria-label="Timeline view controls"
+          className={styles.timelineToolbar}
+          role="toolbar"
+          tabIndex={0}
+          onKeyDown={onToolbarKeyDown}
+        >
           <span className={styles.timelineTimecode}>{formatClock(playheadSeconds)}</span>
           <span className={styles.timelineToolbarMeta}>
             {formatClock(startSeconds)} — {formatClock(startSeconds + safeDuration)}
           </span>
           <span className={styles.timelineToolbarSpacer} />
-          <button
-            aria-label="Zoom timeline out"
-            className={styles.timelineToolButton}
-            disabled={zoomIndex === 0}
-            type="button"
-            onClick={() => setZoomIndex((current) => Math.max(0, current - 1))}
-          >
-            −
-          </button>
-          <span className={styles.timelineZoomLabel}>{zoom}×</span>
-          <button
-            aria-label="Zoom timeline in"
-            className={styles.timelineToolButton}
-            disabled={zoomIndex === zoomLevels.length - 1}
-            type="button"
-            onClick={() => setZoomIndex((current) => Math.min(zoomLevels.length - 1, current + 1))}
-          >
-            +
-          </button>
+          <fieldset aria-label="Timeline zoom" className={styles.timelineToolGroup}>
+            <button
+              aria-label="Fit timeline"
+              className={`${styles.timelineToolButton} ${styles.timelineFitButton}`}
+              disabled={zoomIndex === 0}
+              type="button"
+              onClick={() => setZoomIndex(0)}
+            >
+              FIT
+            </button>
+            <button
+              aria-label="Zoom timeline out"
+              className={styles.timelineToolButton}
+              disabled={zoomIndex === 0}
+              type="button"
+              onClick={() => setZoomIndex((current) => Math.max(0, current - 1))}
+            >
+              −
+            </button>
+            <span className={styles.timelineZoomLabel}>{zoom}×</span>
+            <button
+              aria-label="Zoom timeline in"
+              className={styles.timelineToolButton}
+              disabled={zoomIndex === zoomLevels.length - 1}
+              type="button"
+              onClick={() => setZoomIndex((current) => Math.min(zoomLevels.length - 1, current + 1))}
+            >
+              +
+            </button>
+          </fieldset>
         </header>
         <div className={styles.timelineViewport}>
           <div className={styles.timelineStage} style={stageStyle}>

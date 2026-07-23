@@ -310,12 +310,27 @@ describe("atomic components", () => {
 
     expect(screen.getByText("V1")).toBeTruthy();
     expect(screen.getByText("A1")).toBeTruthy();
+    const toolbar = screen.getByRole("toolbar", { name: "Timeline view controls" });
+    expect(toolbar.tabIndex).toBe(0);
+    expect(toolbar.getAttribute("aria-keyshortcuts")).toBe("Home 0 - =");
+    expect(screen.getByRole("group", { name: "Timeline zoom" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select Opening shot" }));
     expect(onItemSelect).toHaveBeenCalledWith("clip-1");
     fireEvent.click(screen.getByRole("button", { name: "Seek A1" }));
     expect(onSeek).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole("button", { name: "Zoom timeline in" }));
     expect(screen.getByText("8×")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Fit timeline" }));
+    expect(screen.getByText("1×")).toBeTruthy();
+    fireEvent.keyDown(toolbar, { key: "=" });
+    expect(screen.getByText("2×")).toBeTruthy();
+    fireEvent.keyDown(toolbar, { key: "-" });
+    expect(screen.getByText("1×")).toBeTruthy();
+    onSeek.mockClear();
+    fireEvent.keyDown(toolbar, { key: "Home" });
+    expect(onSeek).toHaveBeenCalledWith(0);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Zoom timeline in" }), { key: "=" });
+    expect(screen.getByText("1×")).toBeTruthy();
   });
 
   it("exposes move and trim affordances only when gestures are enabled", () => {
