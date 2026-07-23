@@ -5,6 +5,7 @@ import {
   Button,
   ControlStrip,
   EditorShell,
+  EditorSplit,
   FileField,
   Heading,
   MediaPlayer,
@@ -219,6 +220,20 @@ describe("atomic components", () => {
     expect(within(panel).getByText("Agent ready")).toBeTruthy();
     expect(within(panel).getByText("Conversation")).toBeTruthy();
     expect(within(panel).getByRole("button", { name: "Send" })).toBeTruthy();
+  });
+
+  it("owns a bounded primary and secondary editor work area", () => {
+    render(
+      <EditorSplit
+        primary="Preview and range"
+        primaryLabel="Source preview"
+        secondary="Placement settings"
+        secondaryLabel="Source placement"
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Source preview" }).textContent).toBe("Preview and range");
+    expect(screen.getByRole("complementary", { name: "Source placement" }).textContent).toBe("Placement settings");
   });
 
   it("normalizes file selection and drop behind one semantic atom", () => {

@@ -1,9 +1,40 @@
-import { Button, ControlStrip, MediaPlayer, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
+
+export function SourceViewerLayout({
+  hasFacts,
+  onBack,
+  placement,
+  preview,
+  video,
+}: {
+  hasFacts: boolean;
+  onBack: () => void;
+  placement: ReactNode;
+  preview: ReactNode;
+  video: Readonly<{ height: number; width: number }> | undefined;
+}) {
+  const dimensions = video ? `${video.width} × ${video.height}` : hasFacts ? "Audio source" : "Preparing source";
+  return (
+    <EditorSplit
+      primary={
+        <Stack spacing="compact">
+          <Text tone="eyebrow">SOURCE · VIEWER</Text>
+          <Text>{dimensions}</Text>
+          <Button onPress={onBack}>Back to Sequence</Button>
+          {preview}
+        </Stack>
+      }
+      primaryLabel="Source preview and range"
+      secondary={placement}
+      secondaryLabel="Source placement"
+    />
+  );
+}
 
 export function SequencePreviewSurface({
   controller,

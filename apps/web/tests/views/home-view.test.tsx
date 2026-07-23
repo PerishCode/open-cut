@@ -562,7 +562,12 @@ describe("HomeView", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     expect(await screen.findByText("SOURCE · VIEWER")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Source preview and range" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Source placement" })).toBeTruthy();
     expect(sourceRequests).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Back to Sequence" }));
+    expect(await screen.findByText("The pinned Sequence is empty.")).toBeTruthy();
+    expect(sequenceRequests).toBe(2);
     fireEvent.click(screen.getByRole("tab", { name: "System" }));
     expect(await screen.findByRole("button", { name: "Approve scope upgrade" })).toBeTruthy();
     expect(screen.getByText("Requested scopes: activity:read, project:read, run:write")).toBeTruthy();
