@@ -21,30 +21,37 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
         A project is one story: its script and its sequence, side by side.
       </Text>
       {onOpen && projects.projects.length > 0 ? (
-        <ProjectList
-          label="Projects"
-          projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
-          onOpen={(id) => {
-            const match = projects.projects.find((project) => project.id === id);
-            if (match) onOpen(match.id);
-          }}
-        />
+        <Stack spacing="compact">
+          <Text tone="eyebrow">PROJECTS</Text>
+          <ProjectList
+            label="Projects"
+            projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
+            onOpen={(id) => {
+              const match = projects.projects.find((project) => project.id === id);
+              if (match) onOpen(match.id);
+            }}
+          />
+        </Stack>
       ) : null}
-      <TextField
-        disabled={write.pending}
-        label="Name your story"
-        maxLength={200}
-        placeholder="Product demo, short film, essay…"
-        value={name}
-        onChange={setName}
-      />
-      <Button
-        disabled={write.pending || name.trim().length === 0}
-        onPress={() => void createAndOpen().catch(() => undefined)}
-      >
-        {write.pending ? "Creating…" : "Create and open"}
-      </Button>
-      {write.error ? <Text>Could not create project: {write.error.message}</Text> : null}
+      <Stack spacing="compact">
+        <Text tone="eyebrow">NEW PROJECT</Text>
+        <TextField
+          disabled={write.pending}
+          label="Name your story"
+          maxLength={200}
+          placeholder="Product demo, short film, essay…"
+          value={name}
+          onChange={setName}
+        />
+        <Button
+          disabled={write.pending || name.trim().length === 0}
+          variant="primary"
+          onPress={() => void createAndOpen().catch(() => undefined)}
+        >
+          {write.pending ? "Creating…" : "Create and open"}
+        </Button>
+        {write.error ? <Text>Could not create project: {write.error.message}</Text> : null}
+      </Stack>
     </Stack>
   );
 }
