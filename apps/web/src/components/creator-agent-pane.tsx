@@ -77,7 +77,8 @@ export function CreatorAgentPane({
   const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
   const [receiptsExpanded, setReceiptsExpanded] = useState(false);
   const latestMessageRef = useRef<HTMLElement>(null);
-  const lastRevealedMessageIdRef = useRef<DurableID | undefined>(undefined);
+  const latestOutcomeRef = useRef<HTMLElement>(null);
+  const lastRevealedItemRef = useRef<DurableID | undefined>(undefined);
 
   const loadRun = useCallback(
     async (runId: DurableID, signal?: AbortSignal) => {
@@ -375,14 +376,15 @@ export function CreatorAgentPane({
   const recentRuns = state.runs.filter((run) => run.id !== state.selected?.id);
   const latestMessage = state.messages.at(-1);
   const latestRevealMessageId = latestMessage?.role === "creator" ? undefined : latestMessage?.id;
+  const latestRevealItem = latestOutcome?.id ?? latestRevealMessageId;
 
   useEffect(() => {
-    if (!latestRevealMessageId || lastRevealedMessageIdRef.current === latestRevealMessageId) return;
-    const target = latestMessageRef.current;
+    if (!latestRevealItem || lastRevealedItemRef.current === latestRevealItem) return;
+    const target = latestOutcome ? latestOutcomeRef.current : latestMessageRef.current;
     if (!target) return;
-    lastRevealedMessageIdRef.current = latestRevealMessageId;
-    target.scrollIntoView({ block: "start", inline: "nearest" });
-  }, [latestRevealMessageId]);
+    lastRevealedItemRef.current = latestRevealItem;
+    target.scrollIntoView({ block: latestOutcome ? "nearest" : "start", inline: "nearest" });
+  }, [latestOutcome, latestRevealItem]);
 
   return (
     <PanelDock
@@ -517,36 +519,35 @@ export function CreatorAgentPane({
         ) : (
           <Text>Describe a new writing or editing task.</Text>
         )}
-        {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
-        {state.messages.map((entry) => {
-          return (
-            <ResourceCard
-              details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
-              elementRef={entry.id === latestRevealMessageId ? latestMessageRef : undefined}
-              emphasis={entry.role === "agent" ? "default" : "quiet"}
-              eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
-              key={entry.id}
-              title={messageTitle(entry)}
-            >
-              {entry.role === "agent" ? (
-                <MessageContent text={entry.text} />
-              ) : (
-                <Text>
-                  {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-                </Text>
-              )}
-            </ResourceCard>
-          );
-        })}
         {latestOutcome ? (
           <ResourceCard
             details={outcomeDetails(latestOutcome)}
+            elementRef={latestOutcomeRef}
             emphasis="strong"
             eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
             status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             title={outcomeTitle(latestOutcome)}
           />
         ) : null}
+        {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
+        {state.messages.map((entry) => (
+          <ResourceCard
+            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+            elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
+            emphasis={entry.role === "agent" ? "default" : "quiet"}
+            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
+            key={entry.id}
+            title={messageTitle(entry)}
+          >
+            {entry.role === "agent" ? (
+              <MessageContent text={entry.text} />
+            ) : (
+              <Text>
+                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+              </Text>
+            )}
+          </ResourceCard>
+        ))}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
             {state.loading ? "Loading…" : "Load more conversation"}

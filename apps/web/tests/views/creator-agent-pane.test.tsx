@@ -235,7 +235,7 @@ describe("CreatorAgentPane", () => {
     const outcome = await screen.findByText("Creative change committed");
     const latestResponse = screen.getByText("Agent response").closest("article");
     expect(latestResponse).toBeTruthy();
-    expect(latestResponse?.compareDocumentPosition(outcome.closest("article") as Node)).toBe(
+    expect(outcome.closest("article")?.compareDocumentPosition(latestResponse as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(screen.getByText("Captions updated · Project r9")).toBeTruthy();
@@ -250,7 +250,8 @@ describe("CreatorAgentPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus Caption" }));
     expect(focus).toHaveBeenCalledWith({ kind: "caption", id: receiptId, revision: "1" });
     expect(await screen.findByText("Caption receipt r1; current workspace is r2.")).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
   });
 });
 
