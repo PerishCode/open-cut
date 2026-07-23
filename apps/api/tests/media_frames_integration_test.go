@@ -328,6 +328,19 @@ func TestRealFrameCommandPublishesArtifactAndTurnScopedLeases(t *testing.T) {
 		position.Boundary != service.SourcePositionVideoPresentation {
 		t.Fatalf("source position status=%d result=%+v", positionResponse.Code, position)
 	}
+	now = now.Add(time.Second)
+	renewedUISession := issueTestUISession(t, sessions, privateKey, "electron-media-1")
+	renewedPosition := postJSON(
+		t, server,
+		"/v1/projects/"+created.Project.Project.ID.String()+"/assets/"+registered.Asset.Asset.ID.String()+"/source-position",
+		service.SourcePositionRequest{
+			ResourceID: leaseResult.Lease.ResourceID, Operation: service.SourcePositionSettle, Target: zero,
+		},
+		renewedUISession,
+	)
+	if renewedPosition.Code != http.StatusOK {
+		t.Fatalf("rotated UI session lost its media lease: %s", renewedPosition.Body.String())
+	}
 	crossSessionPosition := postJSON(
 		t, server,
 		"/v1/projects/"+created.Project.Project.ID.String()+"/assets/"+registered.Asset.Asset.ID.String()+"/source-position",

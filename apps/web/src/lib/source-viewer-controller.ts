@@ -209,6 +209,14 @@ export class SourceViewerController {
     this.#begin();
   }
 
+  restart(): void {
+    if (!this.#snapshot.selection || this.#snapshot.status === "failed") return;
+    this.pause();
+    this.#snapshot = { ...this.#snapshot, status: "preparing", playback: "paused", error: undefined };
+    this.#emit();
+    this.#begin();
+  }
+
   close(): void {
     this.#generation += 1;
     this.#abort?.abort();

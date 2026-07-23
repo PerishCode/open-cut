@@ -69,7 +69,8 @@ func (service *MediaLeaseService) ResolveSourcePosition(
 	record, found := service.sourcePositionLeaseLocked(request.ResourceID)
 	service.mu.Unlock()
 	if !found || record.projectID != projectID || record.assetID != assetID ||
-		record.sessionHash != binding.sessionHash || record.apiInstance != binding.apiInstance {
+		record.clientInstance != binding.clientInstance || record.origin != binding.origin ||
+		record.apiInstance != binding.apiInstance {
 		return SourcePositionResult{}, ErrMediaLeaseInvalid
 	}
 	if !now.Before(record.expiresAt) {

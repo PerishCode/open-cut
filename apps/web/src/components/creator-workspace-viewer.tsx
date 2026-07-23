@@ -6,26 +6,27 @@ import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/se
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
 
 export function SourceViewerLayout({
-  hasFacts,
+  asset,
   onBack,
   placement,
   preview,
-  video,
+  videoStreamId,
 }: {
-  hasFacts: boolean;
+  asset: Asset | undefined;
   onBack: () => void;
   placement: ReactNode;
   preview: ReactNode;
-  video: Readonly<{ height: number; width: number }> | undefined;
+  videoStreamId: DurableID | undefined;
 }) {
-  const dimensions = video ? `${video.width} × ${video.height}` : hasFacts ? "Audio source" : "Preparing source";
+  const video = asset?.facts?.streams.find((stream) => stream.id === videoStreamId)?.descriptor.video;
+  const dimensions = video ? `${video.width} × ${video.height}` : asset?.facts ? "Audio source" : "Preparing source";
   return (
     <EditorSplit
       primary={
         <Stack spacing="compact">
-          <Text tone="eyebrow">SOURCE · VIEWER</Text>
-          <Text>{dimensions}</Text>
-          <Button onPress={onBack}>Back to Sequence</Button>
+          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={dimensions}>
+            <Button onPress={onBack}>Back to Sequence</Button>
+          </ControlStrip>
           {preview}
         </Stack>
       }
@@ -209,22 +210,28 @@ export function SourcePreviewSurface({
             onPlaybackStart={() => controller.setPlaying(true)}
             source={lease.sameOriginUrl}
           />
-          <Text tone="eyebrow">
-            SOURCE {formatExact(snapshot.playhead)} · PROXY {formatExact(snapshot.proxyPlayhead)}
-          </Text>
-          <Button onPress={() => run(() => controller.step("previous"))}>Previous source boundary</Button>
-          <Button onPress={() => run(() => controller.step("next"))}>Next source boundary</Button>
-          <Button onPress={() => run(() => controller.captureIn())}>Mark In at settled position</Button>
-          <Button onPress={() => run(() => controller.captureOut())}>Mark Out after displayed boundary</Button>
-          <Button disabled={!canUseFullSource} onPress={() => run(() => controller.useFullSelectedSource())}>
-            Use full selected source
-          </Button>
+          <ControlStrip
+            hint={`IN ${formatExact(snapshot.marks.in)} · OUT ${formatExact(snapshot.marks.out)}${
+              range ? ` · ${formatExact(range.duration)}` : ""
+            }`}
+            label="Source range controls"
+            summary={`SOURCE ${formatExact(snapshot.playhead)} · PROXY ${formatExact(snapshot.proxyPlayhead)}`}
+          >
+            <Button onPress={() => run(() => controller.step("previous"))}>Previous boundary</Button>
+            <Button onPress={() => run(() => controller.step("next"))}>Next boundary</Button>
+            <Button onPress={() => run(() => controller.captureIn())}>Mark In</Button>
+            <Button onPress={() => run(() => controller.captureOut())}>Mark Out</Button>
+            <Button disabled={!canUseFullSource} onPress={() => run(() => controller.useFullSelectedSource())}>
+              Use full range
+            </Button>
+            <Button
+              disabled={snapshot.marks.in === undefined && snapshot.marks.out === undefined}
+              onPress={() => controller.clearMarks()}
+            >
+              Clear marks
+            </Button>
+          </ControlStrip>
           {!canUseFullSource ? <Text>Full range unavailable; mark In and Out explicitly.</Text> : null}
-          <Button onPress={() => controller.clearMarks()}>Clear source marks</Button>
-          <Text>
-            In {formatExact(snapshot.marks.in)} · Out {formatExact(snapshot.marks.out)}
-            {range ? ` · duration ${formatExact(range.duration)}` : " · select a positive range"}
-          </Text>
           <Text tone="eyebrow">NORMALIZED SOURCE PROXY · {lease.byteLength} BYTES</Text>
         </>
       ) : null}
@@ -247,10 +254,18 @@ function StreamSelection({
   selected: DurableID | undefined;
   streams: readonly SourceStream[];
 }) {
+  const selectedStream = streams.find((stream) => stream.id === selected);
   return (
-    <Stack spacing="compact">
-      <Text tone="eyebrow">{label}</Text>
-      <Button onPress={() => onChange(undefined)}>{selected ? "Clear selection" : "None selected"}</Button>
+    <ControlStrip
+      hint={
+        selectedStream ? `#${selectedStream.descriptor.index} · ${selectedStream.descriptor.codec}` : "None selected"
+      }
+      label={`${label} source stream`}
+      summary={label}
+    >
+      <Button disabled={!selected} onPress={() => onChange(undefined)}>
+        Clear
+      </Button>
       {streams.map((stream) => (
         <Button key={stream.id} onPress={() => onChange(stream.id)}>
           {selected === stream.id ? "Selected · " : ""}#{stream.descriptor.index} {stream.descriptor.codec}
@@ -259,7 +274,7 @@ function StreamSelection({
         </Button>
       ))}
       {streams.length === 0 ? <Text>No compatible stream declared.</Text> : null}
-    </Stack>
+    </ControlStrip>
   );
 }
 

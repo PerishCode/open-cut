@@ -210,8 +210,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const ready = state.status === "ready" ? state : undefined;
   const selectedAsset = ready?.assets.assets.find((asset) => asset.id === selectedAssetId);
   const sourceAsset = ready?.assets.assets.find((asset) => asset.id === sourceStreamSelection?.assetId);
-  const sourceVideo = sourceAsset?.facts?.streams.find((stream) => stream.id === sourceStreamSelection?.videoStreamId)
-    ?.descriptor.video;
   const sequencePreviewAvailable =
     productAvailability.status === "ready" &&
     isProductFeatureAvailable(productAvailability.snapshot, "sequence-preview");
@@ -274,7 +272,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       current && assets.some((asset) => asset.id === current) ? current : assets[0]?.id,
     );
   }, [ready?.assets.assets]);
-  const openSourceAsset = useCallback((asset: Asset) => {
+  const openSourceAsset = (asset: Asset) => {
     const streams = asset.facts?.streams ?? [];
     const video = uniqueSourceStream(streams, "video");
     const audio = uniqueSourceStream(streams, "audio");
@@ -284,8 +282,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       ...(video ? { videoStreamId: video.id } : {}),
       ...(audio ? { audioStreamId: audio.id } : {}),
     });
+    if (sourceViewer.getSnapshot().selection?.assetId === asset.id) sourceViewer.restart();
     setViewerMode("source");
-  }, []);
+  };
   useEffect(() => {
     if (!sourcePreviewAvailable) {
       sourceViewer.close();
@@ -754,7 +753,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
           </Stack>
         ) : (
           <SourceViewerLayout
-            hasFacts={sourceAsset?.facts !== undefined}
+            asset={sourceAsset}
             onBack={() => {
               sequenceViewer.restart();
               setViewerMode("sequence");
@@ -790,7 +789,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 videoStreamId={sourceStreamSelection?.videoStreamId}
               />
             }
-            video={sourceVideo}
+            videoStreamId={sourceStreamSelection?.videoStreamId}
           />
         )
       }
