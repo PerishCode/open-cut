@@ -2,10 +2,31 @@
  * toolbar 25 + ruler 18 + 3×28 tracks = 127 canvas
  * accessory ≈42 (meta row + button row) + surface borders 2 ≈ 171 */
 .timelineSurface {
+  --oc-surface: var(--oc-surface-media);
+  --oc-surface-header: var(--oc-surface-media-chrome);
+  --oc-surface-raised: var(--oc-media-input);
+  --oc-surface-input: var(--oc-media-input);
+  --oc-ink: var(--oc-media-ink);
+  --oc-ink-strong: var(--oc-media-ink-strong);
+  --oc-ink-mid: var(--oc-media-ink-mid);
+  --oc-ink-soft: var(--oc-media-ink-soft);
+  --oc-ink-dim: var(--oc-media-ink-dim);
+  --oc-ink-faint: var(--oc-media-ink-faint);
+  --oc-hairline: var(--oc-media-border);
+  --oc-hairline-mid: var(--oc-media-border-mid);
+  --oc-hairline-strong: var(--oc-media-border-strong);
+  --oc-hairline-input: var(--oc-media-border-input);
+  --oc-input-wash: var(--oc-media-input);
+  --oc-accent: var(--oc-media-accent);
+  --oc-accent-ink: var(--oc-media-accent-ink);
+  --oc-accent-border: var(--oc-media-accent-border);
+  --oc-accent-wash: var(--oc-media-accent-wash);
+
   display: grid;
   overflow: hidden;
   border: 1px solid var(--oc-hairline-strong);
   background: var(--oc-surface-timeline, rgb(0 0 0 / 12%));
+  color: var(--oc-ink);
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
