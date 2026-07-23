@@ -139,18 +139,23 @@ export function CreatorTranscriptExcerpt({
           ? receipt.changes.find((change) => change.kind === "narrative-node" && change.id === parent)
           : undefined;
         if (!target || !parentChange) throw new Error("Creator edit receipt omitted the Narrative insertion parent");
-        target.onCommitReceipt(receipt);
-        target.onInserted({
+        const insertedAnchor = {
           parentId: parent,
           parentRevision: parentChange.revision,
           afterNodeId: allocation.id,
-          label: "after inserted SourceExcerpt",
-        });
-        await target.onReload();
+          label: "after inserted excerpt",
+        } satisfies NarrativeInsertionAnchor;
+        target.onCommitReceipt(receipt);
         attemptRef.current = undefined;
         setSelection(undefined);
         setPhase("idle");
-        setNotice("SourceExcerpt committed · durable Undo is available in Workspace history");
+        setNotice("Excerpt added to Story");
+        try {
+          await target.onReload();
+          target.onInserted(insertedAnchor);
+        } catch {
+          setNotice("Excerpt added to Story · refresh reads to view it");
+        }
       } catch (value) {
         const insertError = asError(value);
         setError(insertError);
@@ -179,7 +184,7 @@ export function CreatorTranscriptExcerpt({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">SOURCE RECOGNITION · EXACT TOKEN SELECTION</Text>
+      <Text tone="eyebrow">TRANSCRIPT · EXACT TOKEN SELECTION</Text>
       {segments.map((segment) => (
         <Stack key={segment.id} spacing="compact">
           <Text tone="eyebrow">

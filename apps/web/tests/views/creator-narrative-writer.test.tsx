@@ -336,14 +336,40 @@ describe("CreatorNarrativeWriter", () => {
     expect(screen.getAllByRole("textbox", { name: "New Narrative paragraph" })).toContain(document.activeElement);
     expect((screen.getByRole("button", { name: "Remove empty Section" }) as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it("reopens the exact selected Section path after the Story surface remounts", async () => {
+    const reads: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        reads.push(String(input));
+        return jsonResponse(emptySectionSubtree());
+      }),
+    );
+
+    renderWriter(
+      vi.fn(async () => undefined),
+      narrativeWithSection(),
+      [durableID(ids.section)],
+    );
+
+    await waitFor(() => expect(reads).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Collapse Section" })).toBeTruthy();
+    expect(screen.getAllByRole("textbox", { name: "New Narrative paragraph" })).toHaveLength(2);
+  });
 });
 
-function renderWriter(onReload: () => Promise<void>, value: NarrativeSubtree = narrative()) {
+function renderWriter(
+  onReload: () => Promise<void>,
+  value: NarrativeSubtree = narrative(),
+  activeSectionPath?: readonly ReturnType<typeof durableID>[],
+) {
   const base = createContracts();
   const contracts = { ...base, start: () => undefined, close: () => undefined };
   return render(
     <ContractsProvider contracts={contracts}>
       <CreatorNarrativeWriter
+        activeSectionPath={activeSectionPath}
         narrative={value}
         onReload={onReload}
         onSelect={() => undefined}

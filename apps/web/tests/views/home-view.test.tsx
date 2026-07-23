@@ -28,10 +28,17 @@ describe("HomeView", () => {
     const transcriptTokenId = "018f0a60-7b80-7a01-8000-00000000000b";
     const transcriptCorrectionId = "018f0a60-7b80-7a01-8000-00000000000f";
     const excerptId = "018f0a60-7b80-7a01-8000-000000000010";
+    const alternateTranscriptSegmentId = "018f0a60-7b80-7a01-8000-000000000011";
+    const alternateTranscriptTokenId = "018f0a60-7b80-7a01-8000-000000000012";
+    const insertedExcerptId = "018f0a60-7b80-7a01-8000-000000000013";
+    const proposalId = "018f0a60-7b80-7a01-8000-000000000014";
+    const transactionId = "018f0a60-7b80-7a01-8000-000000000015";
+    const creatorId = "018f0a60-7b80-7a01-8000-000000000016";
     let sequenceRequests = 0;
     let sourceRequests = 0;
     let exportRequests = 0;
     let exportHistoryRequests = 0;
+    let excerptInserted = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -71,14 +78,14 @@ describe("HomeView", () => {
           return jsonResponse({
             project: {
               id: projectId,
-              revision: "2",
+              revision: excerptInserted ? "3" : "2",
               lifecycleRevision: "1",
               name: "Alpha",
               status: "active",
               narrativeDocumentId: documentId,
               mainSequenceId: sequenceId,
             },
-            narrativeDocumentRevision: "2",
+            narrativeDocumentRevision: excerptInserted ? "3" : "2",
             narrativeRootNodeId: rootId,
             mainSequenceRevision: "2",
             format: {
@@ -97,8 +104,8 @@ describe("HomeView", () => {
         if (url.includes(`/narratives/${documentId}/subtree`)) {
           return jsonResponse({
             documentId,
-            documentRevision: "2",
-            parent: { id: rootId, revision: "1", title: "Story", language: "en" },
+            documentRevision: excerptInserted ? "3" : "2",
+            parent: { id: rootId, revision: excerptInserted ? "2" : "1", title: "Story", language: "en" },
             nodes: [
               {
                 kind: "authored-text",
@@ -136,6 +143,33 @@ describe("HomeView", () => {
                   tombstoned: false,
                 },
               },
+              ...(excerptInserted
+                ? [
+                    {
+                      kind: "source-excerpt",
+                      evidenceStatus: "exact",
+                      sourceExcerpt: {
+                        id: insertedExcerptId,
+                        revision: "1",
+                        documentId,
+                        parentId: rootId,
+                        afterNodeId: excerptId,
+                        assetId,
+                        acceptedFingerprint: `sha256:${"a".repeat(64)}`,
+                        sourceRange: { start: { value: "0", scale: 1 }, duration: { value: "2", scale: 1 } },
+                        language: "en",
+                        effectiveText: "An alternate recognition.",
+                        evidence: {
+                          artifactId: alternateTranscriptArtifactId,
+                          sourceStreamId: transcriptStreamId,
+                          segmentIds: [alternateTranscriptSegmentId],
+                          correctionRevisions: [],
+                        },
+                        tombstoned: false,
+                      },
+                    },
+                  ]
+                : []),
             ],
             activityCursor: "7",
           });
@@ -343,13 +377,13 @@ describe("HomeView", () => {
             },
             segments: [
               {
-                id: "018f0a60-7b80-7a01-8000-00000000000d",
+                id: alternateTranscriptSegmentId,
                 ordinal: 0,
                 sourceRange: { start: { value: "0", scale: 1 }, duration: { value: "2", scale: 1 } },
                 text: "An alternate recognition.",
                 tokens: [
                   {
-                    id: "018f0a60-7b80-7a01-8000-00000000000e",
+                    id: alternateTranscriptTokenId,
                     sourceRange: { start: { value: "0", scale: 1 }, duration: { value: "2", scale: 1 } },
                     text: "An alternate recognition.",
                   },
@@ -371,6 +405,38 @@ describe("HomeView", () => {
             artifactId: alternateTranscriptArtifactId,
             previousArtifactId: transcriptArtifactId,
             selectedAt: "2026-07-15T10:01:00Z",
+            activityCursor: "8",
+            replayed: false,
+          });
+        }
+        if (url === `/api/v1/projects/${projectId}/sequences/${sequenceId}/edits`) {
+          const body = JSON.parse(String(init?.body)) as {
+            requestId: string;
+            operations: Array<{ createAs: string }>;
+          };
+          excerptInserted = true;
+          return jsonResponse({
+            proposal: {
+              id: proposalId,
+              projectId,
+              sequenceId,
+              requestId: body.requestId,
+              actor: { kind: "creator", creatorId },
+              status: "applied",
+              appliedTransactionId: transactionId,
+              allocation: [{ local: body.operations[0]?.createAs, kind: "narrative-node", id: insertedExcerptId }],
+            },
+            transaction: {
+              id: transactionId,
+              proposalId,
+              projectId,
+              actor: { kind: "creator", creatorId },
+              committedProjectRevision: "3",
+              changes: [
+                { kind: "narrative-node", id: rootId, before: "1", after: "2" },
+                { kind: "narrative-node", id: insertedExcerptId, before: "0", after: "1" },
+              ],
+            },
             activityCursor: "8",
             replayed: false,
           });
@@ -477,6 +543,12 @@ describe("HomeView", () => {
     expect(await screen.findByText("An alternate recognition.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make this the Creator default" }));
     expect(await screen.findByText("en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Select token 1 · An alternate recognition." }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
+    expect((await screen.findByRole("tab", { name: "Story" })).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByText("Added from Transcript")).toBeTruthy();
+    expect(screen.getByText("An alternate recognition.")).toBeTruthy();
+    expect(screen.getByText("Ready to write")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     expect(await screen.findByText("SOURCE · VIEWER")).toBeTruthy();

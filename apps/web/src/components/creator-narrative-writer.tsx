@@ -43,6 +43,7 @@ type DraftState = Readonly<{
 }>;
 
 type WriterProps = Readonly<{
+  activeSectionPath?: readonly DurableID[];
   projectId: DurableID;
   sequenceId: DurableID;
   projectRevision: RevisionString;
@@ -52,10 +53,13 @@ type WriterProps = Readonly<{
   onAddToRoughCut?(sourceExcerpt: SourceExcerpt, evidenceStatus: "exact" | "stale"): void;
   onCreateCaptions?(sourceExcerpt: SourceExcerpt, evidenceStatus: "exact" | "stale"): void;
   onReload(): Promise<AsyncResult>;
-  onSelect(node: NarrativeNode, anchor: NarrativeInsertionAnchor): void;
+  onSelect(node: NarrativeNode, anchor: NarrativeInsertionAnchor, sectionPath: readonly DurableID[]): void;
+  recentlyAddedNodeId?: DurableID;
+  sectionPath?: readonly DurableID[];
 }>;
 
 export function CreatorNarrativeWriter({
+  activeSectionPath,
   projectId,
   sequenceId,
   projectRevision,
@@ -66,6 +70,8 @@ export function CreatorNarrativeWriter({
   onCreateCaptions,
   onReload,
   onSelect,
+  recentlyAddedNodeId,
+  sectionPath = [],
 }: WriterProps) {
   const contracts = useContracts();
   const [promotedDrafts, setPromotedDrafts] = useState<PromotedDrafts>({});
@@ -125,13 +131,17 @@ export function CreatorNarrativeWriter({
     emptyAfterNodeId === null || narrative.nodes.some((node) => narrativeNodeID(node) === emptyAfterNodeId);
   const selectNode = useCallback(
     (node: NarrativeNode) =>
-      onSelect(node, {
-        parentId: narrative.parent.id,
-        parentRevision: narrative.parent.revision,
-        afterNodeId: narrativeNodeID(node),
-        label: `after ${narrativeNodeLabel(node)}`,
-      }),
-    [narrative.parent.id, narrative.parent.revision, onSelect],
+      onSelect(
+        node,
+        {
+          parentId: narrative.parent.id,
+          parentRevision: narrative.parent.revision,
+          afterNodeId: narrativeNodeID(node),
+          label: `after ${narrativeNodeLabel(node)}`,
+        },
+        sectionPath,
+      ),
+    [narrative.parent.id, narrative.parent.revision, onSelect, sectionPath],
   );
 
   return (
@@ -180,6 +190,7 @@ export function CreatorNarrativeWriter({
               />
             ) : node.kind === "section" ? (
               <CreatorNarrativeSection
+                autoExpand={activeSectionPath?.[sectionPath.length] === node.section.id}
                 autoFocus={focusParagraphId === node.section.id}
                 canMoveDown={moveDownAfterNode !== undefined}
                 canMoveUp={previousNode !== undefined}
@@ -196,6 +207,7 @@ export function CreatorNarrativeWriter({
                 read={contracts.editing.read}
                 renderChildren={(children, reloadChildren, focusChildParagraph) => (
                   <CreatorNarrativeWriter
+                    activeSectionPath={activeSectionPath}
                     focusEmpty={focusChildParagraph}
                     narrative={children}
                     onAddToRoughCut={onAddToRoughCut}
@@ -205,6 +217,8 @@ export function CreatorNarrativeWriter({
                     onSelect={onSelect}
                     projectId={projectId}
                     projectRevision={projectRevision}
+                    recentlyAddedNodeId={recentlyAddedNodeId}
+                    sectionPath={[...sectionPath, node.section.id]}
                     sequenceId={sequenceId}
                   />
                 )}
@@ -214,24 +228,27 @@ export function CreatorNarrativeWriter({
               />
             ) : (
               <Stack spacing="compact">
+                {nodeId === recentlyAddedNodeId ? <Status state="ready">Added from Transcript</Status> : null}
                 <Text tone="eyebrow">
                   {String(index + 1).padStart(2, "0")} · {narrativeNodeLabel(node)}
                 </Text>
                 <Text>{narrativeNodeText(node)}</Text>
-                <Button onPress={() => selectNode(node)}>Select Narrative node</Button>
+                <Button onPress={() => selectNode(node)}>
+                  {node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
+                </Button>
                 {node.kind === "source-excerpt" ? (
                   <Stack spacing="compact">
                     <Button
                       disabled={node.evidenceStatus !== "exact" || !onAddToRoughCut}
                       onPress={() => onAddToRoughCut?.(node.sourceExcerpt, node.evidenceStatus)}
                     >
-                      Add exact SourceExcerpt to rough cut
+                      Add excerpt to rough cut
                     </Button>
                     <Button
                       disabled={node.evidenceStatus !== "exact" || !onCreateCaptions}
                       onPress={() => onCreateCaptions?.(node.sourceExcerpt, node.evidenceStatus)}
                     >
-                      Create captions from exact SourceExcerpt
+                      Create captions from excerpt
                     </Button>
                   </Stack>
                 ) : null}
