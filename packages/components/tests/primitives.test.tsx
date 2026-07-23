@@ -7,6 +7,7 @@ import {
   FileField,
   Heading,
   MediaPlayer,
+  MessageContent,
   PanelDock,
   ResourceCard,
   Status,
@@ -77,6 +78,27 @@ describe("atomic components", () => {
     expect(input.getAttribute("rows")).toBe("5");
     fireEvent.change(input, { target: { value: "Draft a clear opening" } });
     expect(onChange).toHaveBeenCalledWith("Draft a clear opening");
+  });
+
+  it("presents a safe bounded message subset without activating HTML or links", () => {
+    const { container } = render(
+      <MessageContent
+        text={
+          'Changed the ending with `edit apply`.\n\n- Kept the final beat\n- Preserved `A1`\n\n1. Review\n2. Export\n\n```json\n{"status":"ready"}\n```\n\n<a href="https://example.com">unsafe</a> [docs](https://example.com)'
+        }
+      />,
+    );
+
+    expect(screen.getByText("edit apply").tagName).toBe("CODE");
+    const lists = screen.getAllByRole("list");
+    expect(lists.map((list) => list.tagName)).toEqual(["UL", "OL"]);
+    expect(within(lists[0] as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(lists[1] as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText('{"status":"ready"}').parentElement?.tagName).toBe("PRE");
+    expect(container.querySelector('[data-language="json"]')).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText(/<a href="https:\/\/example.com">unsafe<\/a>/)).toBeTruthy();
+    expect(screen.getByText(/\[docs\]\(https:\/\/example.com\)/)).toBeTruthy();
   });
 
   it("groups a scannable resource identity, state, detail, and actions", () => {

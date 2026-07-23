@@ -1,6 +1,7 @@
 import {
   Button,
   ControlStrip,
+  MessageContent,
   PanelDock,
   ResourceCard,
   Stack,
@@ -519,9 +520,13 @@ export function CreatorAgentPane({
               key={entry.id}
               title={messageTitle(entry)}
             >
-              <Text>
-                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-              </Text>
+              {entry.role === "agent" ? (
+                <MessageContent text={entry.text} />
+              ) : (
+                <Text>
+                  {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
+                </Text>
+              )}
             </ResourceCard>
           );
         })}

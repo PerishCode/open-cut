@@ -143,7 +143,7 @@ describe("CreatorAgentPane", () => {
                 turnId: secondTurnId,
                 ordinal: "1",
                 role: "creator",
-                text: "Make the ending concise.",
+                text: "Make the `ending` concise.",
                 attachments: [],
                 createdAt: "2026-07-16T07:00:00Z",
               },
@@ -154,7 +154,7 @@ describe("CreatorAgentPane", () => {
                 turnId: secondTurnId,
                 ordinal: "2",
                 role: "agent",
-                text: "The ending is now concise.",
+                text: "The ending is now concise.\n\nApplied with `edit apply`.",
                 attachments: [],
                 createdAt: "2026-07-16T07:00:01Z",
               },
@@ -219,6 +219,8 @@ describe("CreatorAgentPane", () => {
       </ContractsProvider>,
     );
     expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
+    expect(screen.getByText("Make the `ending` concise.").tagName).toBe("P");
+    expect(screen.getByText("edit apply").tagName).toBe("CODE");
     await waitFor(() =>
       expect(scrollIntoView).toHaveBeenCalledWith({
         block: "start",
