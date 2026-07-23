@@ -138,6 +138,27 @@ describe("CreatorTranscriptExcerpt", () => {
     expect((screen.getByRole("button", { name: "Insert excerpt" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("explains the Story-first handoff before and after an unanchored selection", () => {
+    renderExcerpt({
+      onInserted: vi.fn(),
+      onReload: vi.fn(async () => undefined),
+      target: false,
+    });
+
+    expect(
+      screen.getByText("Story insertion point required · choose one in Story before selecting words"),
+    ).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Insert excerpt" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select token 1 · Hello" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
+
+    expect(
+      screen.getByText("Story insertion point required · choose one in Story, then reselect this range"),
+    ).toBeTruthy();
+    expect(screen.getByText(/1 corrections · Story insertion point not set/)).toBeTruthy();
+  });
+
   it("preserves token evidence but blocks the stale target until Narrative is reselected", async () => {
     vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000712") });
     vi.stubGlobal(
@@ -153,11 +174,9 @@ describe("CreatorTranscriptExcerpt", () => {
 
     expect(await screen.findByText("Insert conflict · token selection preserved")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Selected token 1 · Hello" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh and reselect Narrative target" }));
-    expect(
-      await screen.findByText(/Transcript selection preserved · reselect the Narrative insertion anchor/),
-    ).toBeTruthy();
-    expect(screen.getByText(/1 corrections · select a Narrative target/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Story and reselect insertion point" }));
+    expect(await screen.findByText(/Transcript selection preserved · reselect the Story insertion point/)).toBeTruthy();
+    expect(screen.getByText(/1 corrections · Story insertion point not set/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Insert excerpt" }) as HTMLButtonElement).disabled).toBe(true);
     expect(onReload).toHaveBeenCalledOnce();
   });
@@ -167,10 +186,12 @@ function renderExcerpt({
   corrections = [correction(range(1, 1, 1, 1))],
   onInserted,
   onReload,
+  target = true,
 }: {
   corrections?: readonly TranscriptCorrection[];
   onInserted: CreatorExcerptTarget["onInserted"];
   onReload: CreatorExcerptTarget["onReload"];
+  target?: boolean;
 }) {
   const segments = transcriptSegments();
   const page: TranscriptReadPage = {
@@ -190,21 +211,25 @@ function renderExcerpt({
         onContext={() => undefined}
         page={page}
         segments={segments}
-        target={{
-          projectId: durableID(ids.project),
-          sequenceId: durableID(ids.sequence),
-          projectRevision: revisionString("8"),
-          anchor: {
-            parentId: durableID(ids.root),
-            parentRevision: revisionString("4"),
-            afterNodeId: durableID(ids.paragraph),
-            label: "after opening",
-          },
-          selectionEpoch: 0,
-          onCommitReceipt: () => undefined,
-          onInserted,
-          onReload,
-        }}
+        target={
+          target
+            ? {
+                projectId: durableID(ids.project),
+                sequenceId: durableID(ids.sequence),
+                projectRevision: revisionString("8"),
+                anchor: {
+                  parentId: durableID(ids.root),
+                  parentRevision: revisionString("4"),
+                  afterNodeId: durableID(ids.paragraph),
+                  label: "after opening",
+                },
+                selectionEpoch: 0,
+                onCommitReceipt: () => undefined,
+                onInserted,
+                onReload,
+              }
+            : undefined
+        }
       />
     </ContractsProvider>,
   );

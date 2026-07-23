@@ -174,7 +174,7 @@ export function CreatorTranscriptExcerpt({
     attemptRef.current = undefined;
     setPhase("idle");
     setError(undefined);
-    setNotice("Transcript selection preserved · reselect the Narrative insertion anchor before retrying");
+    setNotice("Transcript selection preserved · reselect the Story insertion point before retrying");
   }, [target]);
 
   const retryIdentical = useCallback(() => {
@@ -185,6 +185,15 @@ export function CreatorTranscriptExcerpt({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">TRANSCRIPT · EXACT TOKEN SELECTION</Text>
+      {!usableTarget && phase !== "conflict" ? (
+        <Status state="pending">
+          {evidenceResult.evidence
+            ? "Story insertion point required · choose one in Story, then reselect this range"
+            : "Story insertion point required · choose one in Story before selecting words"}
+        </Status>
+      ) : usableTarget && !selection ? (
+        <Text>Select words below to prepare an exact Story excerpt.</Text>
+      ) : null}
       {segments.map((segment, segmentIndex) => (
         <Stack key={segment.id} spacing="compact">
           <Text tone="eyebrow">
@@ -248,7 +257,7 @@ export function CreatorTranscriptExcerpt({
       {phase === "conflict" && error ? (
         <>
           <Status state="unavailable">Insert conflict · token selection preserved</Status>
-          <Button onPress={() => void refreshForReselect()}>Refresh and reselect Narrative target</Button>
+          <Button onPress={() => void refreshForReselect()}>Refresh Story and reselect insertion point</Button>
         </>
       ) : null}
       {notice ? <Status state="ready">{notice}</Status> : null}
@@ -261,10 +270,10 @@ function EvidenceSummary({
   target,
 }: Readonly<{ evidence: CreatorSourceExcerptEvidence; target?: CreatorExcerptTarget }>) {
   return (
-    <Status state={target ? "ready" : "unavailable"}>
+    <Status state={target ? "ready" : "pending"}>
       {formatTime(evidence.sourceRange.start)} → {formatTimeEnd(evidence.sourceRange)} · {evidence.segmentIds.length}
       {" segments · "}
-      {evidence.correctionRevisions.length} corrections · {target?.anchor.label ?? "select a Narrative target"}
+      {evidence.correctionRevisions.length} corrections · {target?.anchor.label ?? "Story insertion point not set"}
     </Status>
   );
 }
