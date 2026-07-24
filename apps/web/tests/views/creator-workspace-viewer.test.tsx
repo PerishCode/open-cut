@@ -93,6 +93,26 @@ describe("SequencePreviewSurface", () => {
     expect(screen.getByText("Update Open Cut to preview this Sequence.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry preview" })).toBeNull();
   });
+
+  it("keeps transport exceptions out of unavailable preview UI", () => {
+    const controller = sequenceController();
+    render(
+      <SequencePreviewSurface
+        controller={controller}
+        snapshot={{
+          ...readySnapshot(),
+          status: "unavailable",
+          preparation: undefined,
+          error: new Error("prepare sequence preview failed with status 500"),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sequence preview is unavailable.")).toBeTruthy();
+    expect(screen.queryByText(/status 500/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try preview again" }));
+    expect(controller.restart).toHaveBeenCalledOnce();
+  });
 });
 
 describe("SourcePreviewSurface", () => {
@@ -159,6 +179,46 @@ describe("SourcePreviewSurface", () => {
     expect(screen.getByRole("region", { name: "AUDIO source stream" })).toBeTruthy();
     expect(screen.queryByLabelText("interview.webm source preview")).toBeNull();
   });
+
+  it("separates retryable transport loss from a source that needs relinking", () => {
+    const controller = sourceController();
+    const view = render(
+      <SourcePreviewSurface
+        asset={sourceAsset()}
+        audioStreamId={undefined}
+        controller={controller}
+        onAudioStreamChange={() => undefined}
+        onVideoStreamChange={() => undefined}
+        snapshot={{
+          ...sourceReadySnapshot(),
+          status: "unavailable",
+          preparation: undefined,
+          error: new Error("prepare source preview failed with status 502"),
+        }}
+        videoStreamId={resourceId}
+      />,
+    );
+
+    expect(screen.getByText("Source preview is unavailable.")).toBeTruthy();
+    expect(screen.queryByText(/status 502/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try preview again" }));
+    expect(controller.wake).toHaveBeenCalledOnce();
+
+    view.rerender(
+      <SourcePreviewSurface
+        asset={sourceAsset()}
+        audioStreamId={undefined}
+        controller={controller}
+        onAudioStreamChange={() => undefined}
+        onVideoStreamChange={() => undefined}
+        snapshot={sourceFailedSnapshot()}
+        videoStreamId={resourceId}
+      />,
+    );
+    expect(screen.getByText("Relink this source before previewing it again.")).toBeTruthy();
+    expect(screen.queryByText(/proxy failed/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try preview again" })).toBeNull();
+  });
 });
 
 function sequenceController() {
@@ -198,6 +258,7 @@ function sourceController() {
     captureIn: ReturnType<typeof vi.fn>;
     captureOut: ReturnType<typeof vi.fn>;
     step: ReturnType<typeof vi.fn>;
+    wake: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -233,6 +294,43 @@ function sourceReadySnapshot(): SourceViewerSnapshot {
       },
     },
   } as SourceViewerSnapshot;
+}
+
+function sourceFailedSnapshot(): SourceViewerSnapshot {
+  return {
+    status: "failed",
+    marks: {},
+    playback: "paused",
+    preparation: {
+      status: "failed",
+      purpose: "source-preview",
+      projectId,
+      assetId: resourceId,
+      assetRevision: revisionString("1"),
+      fingerprint: digestString(`sha256:${"d".repeat(64)}`),
+      videoStreamId: resourceId,
+      diagnostics: [
+        {
+          code: "source-proxy-job-failed",
+          severity: "blocking",
+          subjectKind: "media-job",
+          subjectId: jobId,
+          recovery: "relink-source",
+        },
+      ],
+      stage: "proxy",
+      job: {
+        id: jobId,
+        kind: "proxy",
+        state: "failed",
+        progressBasisPoints: 10_000,
+        prerequisites: [],
+        terminalErrorCode: "proxy-failed",
+        createdAt: "2026-07-16T00:00:00Z",
+        updatedAt: "2026-07-16T00:00:01Z",
+      },
+    },
+  };
 }
 
 function readySnapshot(playhead = "8", duration = "9"): SequenceViewerSnapshot {

@@ -138,8 +138,8 @@ function SequencePreparationSurface({
   if (snapshot.status === "unavailable") {
     return (
       <Stack spacing="compact">
-        <Text>{snapshot.error?.message ?? "Sequence preview is unavailable."}</Text>
-        <Button onPress={() => controller.restart()}>Retry preparation</Button>
+        <Text>Sequence preview is unavailable.</Text>
+        <Button onPress={() => controller.restart()}>Try preview again</Button>
       </Stack>
     );
   }
@@ -271,11 +271,11 @@ export function SourcePreviewSurface({
       ) : null}
       {snapshot.status === "unavailable" ? (
         <Stack spacing="compact">
-          <Text>{snapshot.error?.message ?? "Source preview is unavailable."}</Text>
-          <Button onPress={() => controller.wake()}>Retry preview</Button>
+          <Text>Source preview is unavailable.</Text>
+          <Button onPress={() => controller.wake()}>Try preview again</Button>
         </Stack>
       ) : null}
-      {snapshot.status === "failed" ? <Text>Source preview proxy failed. Relink or retry the source.</Text> : null}
+      {snapshot.status === "failed" ? <Text>{sourceFailureText(preparation?.diagnostics[0]?.recovery)}</Text> : null}
       {snapshot.status === "ready" && lease ? (
         <>
           <MediaPlayer
@@ -398,6 +398,14 @@ function sequenceFailureText(recovery: MediaRecoveryAction | undefined): string 
   if (recovery === "adopt-revision") return "Adopt the available Sequence revision to continue previewing.";
   if (recovery === "update-runtime") return "Update Open Cut to preview this Sequence.";
   return "Sequence preview could not be prepared.";
+}
+
+function sourceFailureText(recovery: MediaRecoveryAction | undefined): string {
+  if (recovery === "automatic-retry") return "Source preview is retrying automatically.";
+  if (recovery === "relink-source") return "Relink this source before previewing it again.";
+  if (recovery === "acquire-resource") return "Install the required local resource, then try the preview again.";
+  if (recovery === "update-runtime") return "Update Open Cut to preview this source.";
+  return "Source preview could not be prepared.";
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {
