@@ -486,7 +486,12 @@ export function NewNarrativeSection({
     setDraft((current) => ({ ...current, phase: "dirty", error: undefined }));
   }, [onReload]);
 
-  if (!creating) return <Button onPress={() => setCreating(true)}>Add Section</Button>;
+  if (!creating)
+    return (
+      <Button variant="quiet" onPress={() => setCreating(true)}>
+        Add section
+      </Button>
+    );
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">NEW SECTION · {formatLanguageLabel(language)}</Text>

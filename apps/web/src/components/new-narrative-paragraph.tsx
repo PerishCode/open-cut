@@ -143,7 +143,12 @@ export function NewNarrativeParagraph({
     setDraft((current) => ({ ...current, phase: "dirty", error: undefined }));
   }, [onReload]);
 
-  if (!editing) return <Button onPress={() => setEditing(true)}>Add paragraph</Button>;
+  if (!editing)
+    return (
+      <Button variant="secondary" onPress={() => setEditing(true)}>
+        Add paragraph
+      </Button>
+    );
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">NEW · SPOKEN · {formatLanguageLabel(language)}</Text>
