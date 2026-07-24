@@ -22,6 +22,28 @@ afterEach(() => {
 });
 
 describe("CreatorVersions", () => {
+  it("keeps version storage failures private and retries the list", async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("sqlite: unable to open /Users/editor/Library/Application Support/Open Cut/project.db");
+        }
+        return jsonResponse({ versions: [], activityCursor: "11" });
+      }),
+    );
+
+    renderVersions();
+    expect(await screen.findByText("Could not load project versions.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("No versions yet")).toBeTruthy();
+    expect(attempts).toBe(2);
+  });
+
   it("creates a named lightweight checkpoint from the Versions panel", async () => {
     const requests: RequestInit[] = [];
     const entries = [version(ids.current, "8", "genesis", "Project created")];
@@ -41,7 +63,7 @@ describe("CreatorVersions", () => {
 
     renderVersions();
     expect(screen.getByText("Lightweight before Agent turns · named versions never copy Source media.")).toBeTruthy();
-    expect(await screen.findByText("Project created")).toBeTruthy();
+    expect(await screen.findByText(/CURRENT · AUTO · r8 · Project created/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Version name"), { target: { value: " Approved assembly " } });
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));
 
@@ -83,9 +105,11 @@ describe("CreatorVersions", () => {
     );
 
     renderVersions(onRestored);
-    expect(await screen.findByRole("button", { name: "Review restore" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Current version" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Review restore" }));
+    const review = await screen.findByRole("button", { name: "Review restore Approved assembly at r5" });
+    expect(review).toBeTruthy();
+    expect(screen.getByText("Current")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Current version" })).toBeNull();
+    fireEvent.click(review);
     expect(screen.getByText(/current state is checkpointed automatically first/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore as new revision" }));
 

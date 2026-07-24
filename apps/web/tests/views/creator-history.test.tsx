@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { ContractsProvider, createContracts, durableID } from "@open-cut/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorHistory } from "../../src/components/creator-history.js";
@@ -23,6 +23,28 @@ afterEach(() => {
 });
 
 describe("Creator Workspace history", () => {
+  it("keeps history storage failures private and retries the log", async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("sqlite: malformed database at /Users/editor/.open-cut/project.db");
+        }
+        return jsonResponse(history());
+      }),
+    );
+    renderHistory();
+
+    expect(await screen.findByText("Could not load project history.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|\/Users\/editor|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText(/Move selected Timeline Clip/)).toBeTruthy();
+    expect(attempts).toBe(2);
+  });
+
   it("presents the durable transaction log as read-only technical detail", async () => {
     vi.stubGlobal(
       "fetch",
@@ -32,14 +54,9 @@ describe("Creator Workspace history", () => {
         throw new Error(`unexpected request ${url}`);
       }),
     );
-    const base = createContracts();
-    render(
-      <ContractsProvider contracts={{ ...base, start: () => undefined, close: () => undefined }}>
-        <CreatorHistory projectId={durableID(ids.project)} refreshEpoch={0} />
-      </ContractsProvider>,
-    );
+    renderHistory();
 
-    expect(await screen.findByText("Move selected Timeline Clip")).toBeTruthy();
+    expect(await screen.findByText(/Move selected Timeline Clip/)).toBeTruthy();
     expect(screen.getByText(/LATEST · r8 · AGENT/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
@@ -49,17 +66,21 @@ describe("Creator Workspace history", () => {
       "fetch",
       vi.fn(async () => jsonResponse(history(true))),
     );
-    const base = createContracts();
-    render(
-      <ContractsProvider contracts={{ ...base, start: () => undefined, close: () => undefined }}>
-        <CreatorHistory projectId={durableID(ids.project)} refreshEpoch={0} />
-      </ContractsProvider>,
-    );
+    renderHistory();
 
     expect(await screen.findByText(/UNDO\/REDO/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
 });
+
+function renderHistory() {
+  const base = createContracts();
+  return render(
+    <ContractsProvider contracts={{ ...base, start: () => undefined, close: () => undefined }}>
+      <CreatorHistory projectId={durableID(ids.project)} refreshEpoch={0} />
+    </ContractsProvider>,
+  );
+}
 
 function history(undone = false) {
   return {

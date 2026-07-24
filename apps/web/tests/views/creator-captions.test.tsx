@@ -104,7 +104,10 @@ describe("Creator captions", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Apply reviewed captions" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry identical Caption apply" }));
+    const retry = await screen.findByRole("button", { name: "Retry identical Caption apply" });
+    expect(screen.getByText("Could not confirm the Caption update.")).toBeTruthy();
+    expect(screen.queryByText(/Creator edit failed|503|Unavailable/)).toBeNull();
+    fireEvent.click(retry);
 
     await waitFor(() => expect(applyBodies).toHaveLength(2));
     expect(applyBodies[1]).toBe(applyBodies[0]);

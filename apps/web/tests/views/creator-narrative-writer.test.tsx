@@ -7,7 +7,7 @@ import {
   type NarrativeSubtree,
   revisionString,
 } from "@open-cut/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorNarrativeWriter } from "../../src/components/creator-narrative-writer.js";
@@ -32,6 +32,19 @@ afterEach(() => {
 });
 
 describe("CreatorNarrativeWriter", () => {
+  it("keeps committed paragraphs compact until the Creator enters edit mode", () => {
+    renderWriter(vi.fn(async () => undefined));
+
+    const row = screen.getByRole("region", { name: "Narrative paragraph 1" });
+    expect(within(row).getByText("Committed text")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Narrative paragraph 1" })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Edit Narrative paragraph 1" }));
+
+    expect(screen.getByRole("textbox", { name: "Narrative paragraph 1" })).toBe(document.activeElement);
+    fireEvent.click(screen.getByRole("button", { name: "Finish editing Narrative paragraph 1" }));
+    expect(screen.queryByRole("textbox", { name: "Narrative paragraph 1" })).toBeNull();
+  });
+
   it("keeps newer dirty text while one complete-value checkpoint is in flight", async () => {
     const response = deferred<Response>();
     const bodies: unknown[] = [];
@@ -46,7 +59,7 @@ describe("CreatorNarrativeWriter", () => {
     const onReload = vi.fn(async () => undefined);
     renderWriter(onReload);
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" });
+    const editor = editParagraph(1);
     expect(screen.getByRole("region", { name: "Narrative paragraph 1 structure actions" })).toBeTruthy();
     fireEvent.change(editor, { target: { value: "First checkpoint" } });
     fireEvent.blur(editor);
@@ -81,7 +94,7 @@ describe("CreatorNarrativeWriter", () => {
     );
     renderWriter(vi.fn(async () => undefined));
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" });
+    const editor = editParagraph(1);
     fireEvent.change(editor, { target: { value: "Keep this local draft" } });
     fireEvent.blur(editor);
 
@@ -104,7 +117,7 @@ describe("CreatorNarrativeWriter", () => {
     );
     renderWriter(vi.fn(async () => undefined));
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" });
+    const editor = editParagraph(1);
     fireEvent.change(editor, { target: { value: "Retry exactly" } });
     fireEvent.blur(editor);
     fireEvent.click(await screen.findByRole("button", { name: "Retry identical checkpoint" }));
@@ -134,7 +147,7 @@ describe("CreatorNarrativeWriter", () => {
     );
     renderWriter(vi.fn(async () => undefined));
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" }) as HTMLTextAreaElement;
+    const editor = editParagraph(1);
     editor.setSelectionRange(9, 9);
     fireEvent.keyDown(editor, { key: "Enter" });
 
@@ -177,7 +190,7 @@ describe("CreatorNarrativeWriter", () => {
     );
     renderWriter(vi.fn(async () => undefined));
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 1" }) as HTMLTextAreaElement;
+    const editor = editParagraph(1);
     editor.setSelectionRange(9, 9);
     fireEvent.keyDown(editor, { key: "Enter" });
     fireEvent.click(await screen.findByRole("button", { name: "Retry identical checkpoint" }));
@@ -206,7 +219,7 @@ describe("CreatorNarrativeWriter", () => {
       narrativeWithTwoParagraphs(),
     );
 
-    const editor = screen.getByRole("textbox", { name: "Narrative paragraph 2" }) as HTMLTextAreaElement;
+    const editor = editParagraph(2);
     editor.setSelectionRange(0, 0);
     fireEvent.keyDown(editor, { key: "Backspace" });
 
@@ -338,6 +351,32 @@ describe("CreatorNarrativeWriter", () => {
     expect((screen.getByRole("button", { name: "Remove empty Section" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("keeps Section storage failures private and retries the child branch", async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("sqlite read failed at /Users/editor/Library/Application Support/Open Cut/project.db");
+        }
+        return jsonResponse(emptySectionSubtree());
+      }),
+    );
+    renderWriter(
+      vi.fn(async () => undefined),
+      narrativeWithSection(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Section" }));
+    expect(await screen.findByText("Could not load this Section.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry Section read" }));
+
+    await waitFor(() => expect(screen.queryByText("Could not load this Section.")).toBeNull());
+    expect(attempts).toBe(2);
+  });
+
   it("reopens the exact selected Section path after the Story surface remounts", async () => {
     const reads: string[] = [];
     vi.stubGlobal(
@@ -359,6 +398,13 @@ describe("CreatorNarrativeWriter", () => {
     expect(screen.getAllByRole("textbox", { name: "New Narrative paragraph" })).toHaveLength(2);
   });
 });
+
+function editParagraph(ordinal: number): HTMLTextAreaElement {
+  const existing = screen.queryByRole("textbox", { name: `Narrative paragraph ${ordinal}` });
+  if (existing) return existing as HTMLTextAreaElement;
+  fireEvent.click(screen.getByRole("button", { name: `Edit Narrative paragraph ${ordinal}` }));
+  return screen.getByRole("textbox", { name: `Narrative paragraph ${ordinal}` }) as HTMLTextAreaElement;
+}
 
 function renderWriter(
   onReload: () => Promise<void>,

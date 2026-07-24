@@ -79,6 +79,27 @@ describe("TranscriptSurface", () => {
     expect(onLoad).toHaveBeenCalledOnce();
   });
 
+  it("keeps transcript storage failures private and retains read recovery", () => {
+    const ready = asset(true);
+    const onLoad = vi.fn();
+    render(
+      <TranscriptSurface
+        asset={ready}
+        onContext={vi.fn()}
+        onInspect={vi.fn()}
+        onLoad={onLoad}
+        onLoadMore={vi.fn()}
+        onSelectDefault={vi.fn()}
+        state={{ status: "unavailable", assetId: ready.id }}
+      />,
+    );
+
+    expect(screen.getByText("Transcript data could not be loaded.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|\/Users\//i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry transcript read" }));
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+
   it("leaves the no-source presentation to the owning panel", () => {
     const view = render(
       <TranscriptSurface

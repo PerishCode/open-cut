@@ -10,7 +10,7 @@ import {
   revisionString,
   type Track,
 } from "@open-cut/contracts";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ManualCaptionEditor } from "../../src/components/manual-caption-editor.js";
@@ -37,6 +37,7 @@ describe("Manual Caption editor", () => {
   it("captures explicit Viewer In/Out marks and publishes one create receipt to Workspace", async () => {
     const previewBodies: Record<string, unknown>[] = [];
     const onCommitted = vi.fn(async () => undefined);
+    let applyAttempts = 0;
     vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000c08") });
     vi.stubGlobal(
       "fetch",
@@ -47,7 +48,16 @@ describe("Manual Caption editor", () => {
           previewBodies.push(body);
           return jsonResponse(createPreview(body));
         }
-        if (url.endsWith("/edits")) return jsonResponse(commitReceipt("caption", false));
+        if (url.endsWith("/edits")) {
+          applyAttempts += 1;
+          if (applyAttempts === 1) {
+            return new Response(JSON.stringify({ title: "Unavailable", status: 503 }), {
+              status: 503,
+              headers: { "content-type": "application/problem+json" },
+            });
+          }
+          return jsonResponse(commitReceipt("caption", false));
+        }
         throw new Error(`unexpected request ${url}`);
       }),
     );
@@ -63,7 +73,13 @@ describe("Manual Caption editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Capture Out at Viewer playhead" }));
     fireEvent.click(screen.getByRole("button", { name: "Create manual Caption" }));
 
+    const retry = await screen.findByRole("button", { name: "Retry identical Caption apply" });
+    expect(screen.getByText("Could not confirm the Caption update.")).toBeTruthy();
+    expect(screen.queryByText(/Creator edit failed|503|Unavailable/)).toBeNull();
+    fireEvent.click(retry);
+
     await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
+    expect(applyAttempts).toBe(2);
     expect(previewBodies[0]).toMatchObject({
       kind: "create",
       trackId: ids.track,
@@ -97,6 +113,9 @@ describe("Manual Caption editor", () => {
     const viewer = new SequenceViewerController(base.media.viewer);
     renderEditor(base, viewer, [caption()], onCommitted);
 
+    const cue = screen.getByRole("region", { name: `Caption ${ids.caption} actions` });
+    expect(within(cue).getByText("Original wording")).toBeTruthy();
+    expect(within(cue).getByText(/00:02.00 → 00:05.00 · r3 · MANUAL/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: `Edit Caption ${ids.caption}` }));
     fireEvent.change(screen.getByLabelText("Caption text"), { target: { value: "Creator-polished wording" } });
     expect(screen.getByText("Choose stale or unbind before checkpointing changed content")).toBeTruthy();

@@ -44,8 +44,6 @@ type AgentPaneState = Readonly<{
   error?: Error;
 }>;
 
-type ContextKeys = readonly string[];
-
 const initialState: AgentPaneState = {
   runs: [],
   messages: [],
@@ -73,7 +71,7 @@ export function CreatorAgentPane({
   const contracts = useContracts();
   const [state, setState] = useState<AgentPaneState>(initialState);
   const [message, setMessage] = useState("");
-  const [contextKeys, setContextKeys] = useState<ContextKeys>([]);
+  const [contextKeys, setContextKeys] = useState([] as readonly string[]);
   const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
   const [receiptsExpanded, setReceiptsExpanded] = useState(false);
   const latestMessageRef = useRef<HTMLElement>(null);
@@ -463,9 +461,11 @@ export function CreatorAgentPane({
       }
       header={
         <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
-          <Button disabled={state.loading || state.submitting} variant="quiet" onPress={() => void load()}>
-            Refresh
-          </Button>
+          {!state.loading && (state.error || state.availability?.state !== "available") ? (
+            <Button disabled={state.submitting} variant="quiet" onPress={() => void load()}>
+              Check again
+            </Button>
+          ) : null}
           <Button
             disabled={state.submitting}
             onPress={() => {
@@ -660,7 +660,7 @@ export function CreatorAgentPane({
           </>
         ) : null}
         {state.focusNotice ? <Status state="ready">{state.focusNotice}</Status> : null}
-        {state.error ? <Status state="unavailable">{state.error.message}</Status> : null}
+        {state.error ? <Status state="unavailable">Could not update Agent tasks. Choose Check again.</Status> : null}
       </Stack>
     </PanelDock>
   );
@@ -779,10 +779,10 @@ function asError(value: unknown): Error {
 
 function availabilityText(value: AgentAvailability | undefined): string {
   if (!value) return "Checking local Agent availability…";
-  if (value.state === "available") return `Ready · ${value.version}`;
-  if (value.state === "missing") return "A qualified Codex CLI was not found.";
-  if (value.state === "unauthenticated") return "Codex needs an OS keyring-backed sign-in.";
-  return "The local Agent or stable Open Cut CLI is incompatible.";
+  if (value.state === "available") return "Ready for tasks";
+  if (value.state === "missing") return "Codex is not available on this device.";
+  if (value.state === "unauthenticated") return "Sign in to Codex on this device.";
+  return "Update Codex or Open Cut to continue.";
 }
 
 function runLabel(run: AgentRun): string {

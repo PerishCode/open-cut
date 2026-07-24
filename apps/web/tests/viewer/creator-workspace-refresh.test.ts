@@ -1,6 +1,43 @@
+// @vitest-environment jsdom
+
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { createBackgroundWorkspaceInvalidation } from "../../src/lib/creator-workspace-refresh.js";
+import {
+  createBackgroundWorkspaceInvalidation,
+  useCreatorWorkspaceSync,
+  workspaceSyncStatus,
+} from "../../src/lib/creator-workspace-refresh.js";
+
+describe("useCreatorWorkspaceSync", () => {
+  it("keeps a ready workspace mounted during explicit sync", async () => {
+    const load = vi.fn(async () => ({ status: "ready" as const }));
+    const { result } = renderHook(() => useCreatorWorkspaceSync(load, true));
+
+    await act(() => result.current.run());
+
+    expect(load).toHaveBeenCalledWith(undefined, true);
+    expect(workspaceSyncStatus("ready", result.current)).toEqual({
+      state: "ready",
+      text: "All changes synced",
+    });
+  });
+
+  it("turns a failed ready-state sync into bounded recovery feedback", async () => {
+    const load = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const { result } = renderHook(() => useCreatorWorkspaceSync(load, true));
+
+    await act(() => result.current.run());
+
+    expect(result.current.failed).toBe(true);
+    expect(workspaceSyncStatus("ready", result.current)).toEqual({
+      state: "unavailable",
+      text: "Could not sync · current view kept",
+    });
+  });
+});
 
 describe("createBackgroundWorkspaceInvalidation", () => {
   it("reconciles project activity through the preserve-ready load path", async () => {

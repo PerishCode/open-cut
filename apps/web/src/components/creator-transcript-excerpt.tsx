@@ -56,7 +56,6 @@ export function CreatorTranscriptExcerpt({
   const contracts = useContracts();
   const [selection, setSelection] = useState<Selection>();
   const [phase, setPhase] = useState<InsertPhase>("idle");
-  const [error, setError] = useState<Error>();
   const [notice, setNotice] = useState(undefined as string | undefined);
   const [blockedSelectionEpoch, setBlockedSelectionEpoch] = useState(undefined as number | undefined);
   const attemptRef = useRef<InsertAttempt | undefined>(undefined);
@@ -66,7 +65,6 @@ export function CreatorTranscriptExcerpt({
     setSelection((current) => (current?.artifactId === page.artifact.id ? current : undefined));
     attemptRef.current = undefined;
     setPhase("idle");
-    setError(undefined);
     setNotice(undefined);
     setBlockedSelectionEpoch(undefined);
   }, [page.artifact.id]);
@@ -128,7 +126,6 @@ export function CreatorTranscriptExcerpt({
       attemptRef.current = attempt;
       inFlightRef.current = true;
       setPhase("saving");
-      setError(undefined);
       setNotice(undefined);
       try {
         const receipt = await contracts.editing.write.commit(attempt.input);
@@ -154,11 +151,10 @@ export function CreatorTranscriptExcerpt({
           await target.onReload();
           target.onInserted(insertedAnchor);
         } catch {
-          setNotice("Excerpt added to Story · refresh reads to view it");
+          setNotice("Excerpt added to Story · use Sync now to view it");
         }
       } catch (value) {
         const insertError = asError(value);
-        setError(insertError);
         setPhase(isConflict(insertError) ? "conflict" : "error");
       } finally {
         inFlightRef.current = false;
@@ -173,7 +169,6 @@ export function CreatorTranscriptExcerpt({
     await target.onReload();
     attemptRef.current = undefined;
     setPhase("idle");
-    setError(undefined);
     setNotice("Transcript selection preserved · reselect the Story insertion point before retrying");
   }, [target]);
 
@@ -216,7 +211,6 @@ export function CreatorTranscriptExcerpt({
               );
               attemptRef.current = undefined;
               setPhase("idle");
-              setError(undefined);
               setNotice(undefined);
             }}
           />
@@ -225,7 +219,9 @@ export function CreatorTranscriptExcerpt({
       ))}
       {segments.length === 0 ? <Text>No speech was recognized in this audio stream.</Text> : null}
       {evidenceResult.evidence ? <EvidenceSummary evidence={evidenceResult.evidence} target={usableTarget} /> : null}
-      {evidenceResult.error ? <Status state="unavailable">{evidenceResult.error.message}</Status> : null}
+      {evidenceResult.error ? (
+        <Status state="unavailable">{evidenceFailureMessage(evidenceResult.error)}</Status>
+      ) : null}
       {selection ? (
         <Button
           disabled={phase === "saving" || phase === "conflict"}
@@ -233,7 +229,6 @@ export function CreatorTranscriptExcerpt({
             setSelection(undefined);
             attemptRef.current = undefined;
             setPhase("idle");
-            setError(undefined);
           }}
         >
           Clear excerpt selection
@@ -249,13 +244,13 @@ export function CreatorTranscriptExcerpt({
         {phase === "saving" ? "Inserting excerpt…" : "Insert excerpt"}
       </Button>
       {!asset.acceptedFingerprint ? <Status state="unavailable">Asset fingerprint is not accepted.</Status> : null}
-      {phase === "error" && error ? (
+      {phase === "error" ? (
         <>
-          <Status state="unavailable">Insert failed · {error.message}</Status>
+          <Status state="unavailable">Could not confirm the Story insertion.</Status>
           {attemptRef.current ? <Button onPress={retryIdentical}>Retry identical excerpt insertion</Button> : null}
         </>
       ) : null}
-      {phase === "conflict" && error ? (
+      {phase === "conflict" ? (
         <>
           <Status state="unavailable">Insert conflict · token selection preserved</Status>
           <Button onPress={() => void refreshForReselect()}>Refresh Story and reselect insertion point</Button>
@@ -302,6 +297,19 @@ function sourceExcerptOperation(
 
 function isConflict(value: Error): boolean {
   return value instanceof CreatorEditError && value.code === "conflict";
+}
+
+function evidenceFailureMessage(error: Error): string {
+  if (error.message.includes("cuts through a TranscriptCorrection")) {
+    return "Include the entire corrected phrase or select outside it.";
+  }
+  if (error.message.includes("not contiguous") || error.message.includes("outside the loaded transcript")) {
+    return "This range crosses transcript text that is not loaded. Load more, then reselect it.";
+  }
+  if (error.message.includes("exceeds its budget")) {
+    return "This transcript selection is too large. Choose a shorter range.";
+  }
+  return "This transcript range cannot be used. Choose another range.";
 }
 
 function asError(value: unknown): Error {

@@ -66,7 +66,10 @@ describe("CreatorTranscriptExcerpt", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
     expect(screen.getByText(/00:00\.00 → 00:02\.00 · 1 segments · 1 corrections · after opening/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry identical excerpt insertion" }));
+    const retry = await screen.findByRole("button", { name: "Retry identical excerpt insertion" });
+    expect(screen.getByText("Could not confirm the Story insertion.")).toBeTruthy();
+    expect(screen.queryByText(/Creator edit failed|503|unavailable/i)).toBeNull();
+    fireEvent.click(retry);
 
     await waitFor(() => expect(bodies).toHaveLength(2));
     await waitFor(() => expect(onReload).toHaveBeenCalledOnce());
@@ -120,7 +123,7 @@ describe("CreatorTranscriptExcerpt", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
 
-    expect(await screen.findByText("Excerpt added to Story · refresh reads to view it")).toBeTruthy();
+    expect(await screen.findByText("Excerpt added to Story · use Sync now to view it")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry identical excerpt insertion" })).toBeNull();
     expect(onInserted).not.toHaveBeenCalled();
   });
@@ -134,7 +137,8 @@ describe("CreatorTranscriptExcerpt", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Select token 2 · space" }));
 
-    expect(screen.getByText("SourceExcerpt selection cuts through a TranscriptCorrection")).toBeTruthy();
+    expect(screen.getByText("Include the entire corrected phrase or select outside it.")).toBeTruthy();
+    expect(screen.queryByText(/SourceExcerpt|TranscriptCorrection/)).toBeNull();
     expect((screen.getByRole("button", { name: "Insert excerpt" }) as HTMLButtonElement).disabled).toBe(true);
   });
 

@@ -18,10 +18,13 @@ export function AgentAccess() {
             {!request.supported ? (
               <Status state="unavailable">Update Open Cut before reviewing additional permissions.</Status>
             ) : null}
-            <Button disabled={cli.pending || !request.supported} onPress={() => void cli.approve(pairing.id)}>
+            <Button
+              disabled={cli.pending || !request.supported}
+              onPress={() => void cli.approve(pairing.id).catch(() => undefined)}
+            >
               Approve CLI
             </Button>
-            <Button disabled={cli.pending} onPress={() => void cli.deny(pairing.id)}>
+            <Button disabled={cli.pending} onPress={() => void cli.deny(pairing.id).catch(() => undefined)}>
               Deny CLI
             </Button>
           </Stack>
@@ -40,11 +43,11 @@ export function AgentAccess() {
             ) : null}
             <Button
               disabled={cli.pending || !request.supported}
-              onPress={() => void cli.approveScopeUpgrade(upgrade.id)}
+              onPress={() => void cli.approveScopeUpgrade(upgrade.id).catch(() => undefined)}
             >
               Approve scope upgrade
             </Button>
-            <Button disabled={cli.pending} onPress={() => void cli.denyScopeUpgrade(upgrade.id)}>
+            <Button disabled={cli.pending} onPress={() => void cli.denyScopeUpgrade(upgrade.id).catch(() => undefined)}>
               Deny scope upgrade
             </Button>
           </Stack>
@@ -54,7 +57,11 @@ export function AgentAccess() {
         <Stack key={pairing.id} spacing="compact">
           <Status state="ready">CLI access active</Status>
           <Text>{cliScopeSummary(pairing.scopes).text}</Text>
-          <Button disabled={cli.pending} variant="danger" onPress={() => void cli.revoke(pairing.id)}>
+          <Button
+            disabled={cli.pending}
+            variant="danger"
+            onPress={() => void cli.revoke(pairing.id).catch(() => undefined)}
+          >
             Revoke CLI access
           </Button>
         </Stack>
@@ -62,7 +69,14 @@ export function AgentAccess() {
       {pendingPairings.length === 0 && pendingUpgrades.length === 0 && activePairings.length === 0 ? (
         <Text>No CLI access configured.</Text>
       ) : null}
-      {cli.error ? <Status state="unavailable">Could not load CLI access · {cli.error.message}</Status> : null}
+      {cli.error ? (
+        <Stack spacing="compact">
+          <Status state="unavailable">Could not update CLI access.</Status>
+          <Button disabled={cli.pending} onPress={() => void cli.refresh().catch(() => undefined)}>
+            Check again
+          </Button>
+        </Stack>
+      ) : null}
     </Stack>
   );
 }

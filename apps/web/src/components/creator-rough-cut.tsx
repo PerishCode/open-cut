@@ -61,7 +61,6 @@ export function CreatorRoughCutPanel({
   const contracts = useContracts();
   const [phase, setPhase] = useState<RoughCutPhase>("idle");
   const [review, setReview] = useState<CreatorRoughCutReview>();
-  const [error, setError] = useState<Error>();
   const [projectionWarning, setProjectionWarning] = useState(false);
   const applyAttemptRef = useRef<ApplyAttempt | undefined>(undefined);
   const inFlightRef = useRef(false);
@@ -82,7 +81,6 @@ export function CreatorRoughCutPanel({
       return;
     }
     setPhase("idle");
-    setError(undefined);
   }, [draftKey]);
 
   const blocker = firstOccurrenceBlocker(occurrences, assets, tracks);
@@ -91,7 +89,6 @@ export function CreatorRoughCutPanel({
     if (inFlightRef.current || blocker || occurrences.length === 0) return;
     inFlightRef.current = true;
     setPhase("previewing");
-    setError(undefined);
     setProjectionWarning(false);
     setReview(undefined);
     applyAttemptRef.current = undefined;
@@ -110,7 +107,6 @@ export function CreatorRoughCutPanel({
       setPhase("review");
     } catch (value) {
       const nextError = asError(value);
-      setError(nextError);
       setPhase(isConflict(nextError) ? "conflict" : "error");
     } finally {
       inFlightRef.current = false;
@@ -135,7 +131,6 @@ export function CreatorRoughCutPanel({
       applyAttemptRef.current = attempt;
       inFlightRef.current = true;
       setPhase("applying");
-      setError(undefined);
       try {
         const receipt = await contracts.editing.roughCut.apply(attempt.review, attempt.input);
         applyAttemptRef.current = undefined;
@@ -149,7 +144,6 @@ export function CreatorRoughCutPanel({
         }
       } catch (value) {
         const nextError = asError(value);
-        setError(nextError);
         if (isConflict(nextError)) {
           applyAttemptRef.current = undefined;
           setReview(undefined);
@@ -230,9 +224,13 @@ export function CreatorRoughCutPanel({
           {phase === "applying" ? "Adding rough cut…" : "Add rough cut to Timeline"}
         </Button>
       ) : null}
-      {phase === "error" && error ? (
+      {phase === "error" ? (
         <>
-          <Status state="unavailable">Rough cut failed · {error.message}</Status>
+          <Status state="unavailable">
+            {applyAttemptRef.current
+              ? "Could not confirm the Rough cut update."
+              : "Could not prepare a Rough cut review. Check the excerpt lanes and try again."}
+          </Status>
           {applyAttemptRef.current ? (
             <Button onPress={() => void applyReview(applyAttemptRef.current)}>Retry same rough cut</Button>
           ) : (
@@ -248,7 +246,7 @@ export function CreatorRoughCutPanel({
       ) : null}
       {phase === "success" ? (
         <Status state="ready">
-          {projectionWarning ? "Rough cut added · refresh reads to reveal it" : "Rough cut added to Timeline"}
+          {projectionWarning ? "Rough cut added · use Sync now to reveal it" : "Rough cut added to Timeline"}
         </Status>
       ) : null}
     </Stack>

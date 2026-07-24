@@ -18,7 +18,11 @@ import {
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CreatorCaptionSource } from "../lib/creator-caption-controller.js";
 import { adoptViewerSequenceFromCommit } from "../lib/creator-timeline-controller.js";
-import { createBackgroundWorkspaceInvalidation, workspaceStatus } from "../lib/creator-workspace-refresh.js";
+import {
+  createBackgroundWorkspaceInvalidation,
+  useCreatorWorkspaceSync,
+  workspaceSyncStatus,
+} from "../lib/creator-workspace-refresh.js";
 import { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import { SourceViewerController } from "../lib/source-viewer-controller.js";
 import { AgentAccess } from "./agent-access.js";
@@ -168,6 +172,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     return () => controller.abort();
   }, [load]);
   const refreshCommittedWorkspace = useCallback(() => load(undefined, true), [load]);
+  const sync = useCreatorWorkspaceSync(load, state.status === "ready");
   const reconcileBackgroundWorkspace = useMemo(() => createBackgroundWorkspaceInvalidation(load), [load]);
   const recordCreativeCommit = useCallback((_receipt: CreatorEditCommit) => {
     setHistoryRefreshEpoch((current) => current + 1);
@@ -336,12 +341,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
             selectingDefault: false,
           });
         }
-      } catch (value) {
+      } catch {
         if (!signal?.aborted) {
           setTranscript({
             status: "unavailable",
             assetId,
-            error: value instanceof Error ? value : new Error(String(value)),
           });
         }
       }
@@ -369,11 +373,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         loadingMore: false,
         selectingDefault: current.selectingDefault,
       });
-    } catch (value) {
+    } catch {
       setTranscript({
-        status: "unavailable",
-        assetId: current.assetId,
-        error: value instanceof Error ? value : new Error(String(value)),
+        ...current,
+        loadingMore: false,
+        loadingMoreError: true,
       });
     }
   }, [contracts, project.id, transcript]);
@@ -398,11 +402,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         defaultArtifactId: current.page.artifact.id,
         selectingDefault: false,
       });
-    } catch (value) {
+    } catch {
       setTranscript({
         ...current,
         selectingDefault: false,
-        selectionError: value instanceof Error ? value : new Error(String(value)),
+        selectionError: true,
       });
     }
   }, [contracts, project.id, transcript]);
@@ -426,16 +430,17 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, importing, load, project.id, state],
   );
-  const status = state.status === "loading" ? "pending" : state.status === "ready" ? "ready" : "unavailable";
+  const syncStatus = workspaceSyncStatus(state.status, sync);
   return (
     <EditorShell
       actions={
         <CreatorWorkspaceActions
           importing={importing}
           ready={Boolean(ready)}
+          syncing={sync.syncing}
           onExit={onExit}
           onImport={() => void importFootage()}
-          onRefresh={() => void load()}
+          onSync={() => void sync.run()}
         />
       }
       brand="OPEN CUT"
@@ -470,7 +475,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       onSelect={(file) => void importFootage(file)}
                     />
                   ) : importError ? (
-                    <Status state="unavailable">Could not add footage · {importError.message}</Status>
+                    <Status state="unavailable">Footage could not be added. Choose the file again.</Status>
                   ) : null}
                   {ready?.assets.assets.map((asset) => (
                     <AssetSummary
@@ -533,7 +538,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                     />
                   ) : null}
                   {state.status === "loading" ? <Text>Loading story…</Text> : null}
-                  {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
+                  {state.status === "unavailable" ? (
+                    <Text>Project data could not be loaded. Choose Sync now to try again.</Text>
+                  ) : null}
                 </Stack>
               ),
             },
@@ -578,7 +585,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         />
       }
       sidebarLabel="Sources"
-      status={<Status state={status}>{workspaceStatus(state.status)}</Status>}
+      status={<Status state={syncStatus.state}>{syncStatus.text}</Status>}
       timeline={
         <Tabs
           activeTabId={timelinePanel}

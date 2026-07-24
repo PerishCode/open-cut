@@ -13,6 +13,7 @@ import {
   useContracts,
 } from "@open-cut/contracts";
 import { Fragment, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { CommittedNarrativeParagraph, NarrativeParagraphStructureControls } from "./committed-narrative-paragraph.js";
 import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
 import {
   formatLanguageLabel,
@@ -20,6 +21,7 @@ import {
   narrativeNodeLabel,
   narrativeNodeText,
 } from "./creator-workspace-presentation.js";
+import { narrativeDraftStatusState, narrativeDraftStatusText } from "./narrative-draft-presentation.js";
 import { CreatorNarrativeSection, NewNarrativeSection } from "./narrative-section-writer.js";
 import { NewNarrativeParagraph } from "./new-narrative-paragraph.js";
 
@@ -353,6 +355,7 @@ function NarrativeParagraphEditor({
   const attemptRef = useRef<UpdateAttempt | undefined>(undefined);
   const structuralAttemptRef = useRef<StructuralAttempt | undefined>(undefined);
   const [structuralSaving, setStructuralSaving] = useState(false);
+  const [editing, setEditing] = useState(autoFocus || initialDraft !== undefined);
   const adoptedRef = useRef(false);
   const onPhaseChangeRef = useRef(onPhaseChange);
   const latestPreviousAuthoredTextRef = useRef(previousAuthoredText);
@@ -374,6 +377,10 @@ function NarrativeParagraphEditor({
   }, [node, parentRevision, projectRevision]);
 
   useEffect(() => onPhaseChangeRef.current(draft.phase), [draft.phase]);
+
+  useEffect(() => {
+    if (autoFocus) setEditing(true);
+  }, [autoFocus]);
 
   useEffect(() => {
     if (initialDraft === undefined || adoptedRef.current) return;
@@ -685,6 +692,25 @@ function NarrativeParagraphEditor({
     setDraft((current) => ({ ...current, phase: "dirty", error: undefined }));
   }, [commitStructure, onReload, parentId]);
 
+  if (!editing && draft.phase === "clean") {
+    return (
+      <CommittedNarrativeParagraph
+        canMoveDown={canMoveDown}
+        canMoveUp={canMoveUp}
+        node={node}
+        onEdit={() => {
+          setEditing(true);
+          onSelect();
+        }}
+        onMoveDown={() => void moveParagraph(moveDownAfterNodeId)}
+        onMoveUp={() => void moveParagraph(moveUpAfterNodeId)}
+        onRemove={() => void removeParagraph()}
+        ordinal={ordinal}
+        value={draft.value}
+      />
+    );
+  }
+
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">
@@ -693,7 +719,7 @@ function NarrativeParagraphEditor({
       </Text>
       <TextAreaField
         disabled={structuralSaving}
-        focusRequest={autoFocus ? node.id : undefined}
+        focusRequest={editing ? node.id : undefined}
         label={`Narrative paragraph ${ordinal}`}
         maxLength={262_144}
         onBlur={() => void checkpoint()}
@@ -710,26 +736,17 @@ function NarrativeParagraphEditor({
         rows={5}
         value={draft.value}
       />
-      <Status state={draftStatusState(draft.phase)}>{draftStatusText(draft.phase)}</Status>
-      <ControlStrip label={`Narrative paragraph ${ordinal} structure actions`}>
-        <Button
-          disabled={!canMoveUp || draft.phase !== "clean"}
-          label="Move paragraph up"
-          onPress={() => void moveParagraph(moveUpAfterNodeId)}
-        >
-          Up
-        </Button>
-        <Button
-          disabled={!canMoveDown || draft.phase !== "clean"}
-          label="Move paragraph down"
-          onPress={() => void moveParagraph(moveDownAfterNodeId)}
-        >
-          Down
-        </Button>
-        <Button disabled={draft.phase !== "clean"} label="Remove paragraph" onPress={() => void removeParagraph()}>
-          Remove
-        </Button>
-      </ControlStrip>
+      <Status state={narrativeDraftStatusState(draft.phase)}>{narrativeDraftStatusText(draft.phase)}</Status>
+      <NarrativeParagraphStructureControls
+        canMoveDown={canMoveDown}
+        canMoveUp={canMoveUp}
+        clean={draft.phase === "clean"}
+        onDone={() => setEditing(false)}
+        onMoveDown={() => void moveParagraph(moveDownAfterNodeId)}
+        onMoveUp={() => void moveParagraph(moveUpAfterNodeId)}
+        onRemove={() => void removeParagraph()}
+        ordinal={ordinal}
+      />
       {draft.phase === "error" ? (
         <>
           {structuralAttemptRef.current?.visibleValue === draft.value || attemptRef.current?.value === draft.value ? (
@@ -761,21 +778,6 @@ function useIdleCheckpoint(phase: DraftPhase, value: string, checkpoint: () => P
     const timer = setTimeout(() => void checkpoint(), 750);
     return () => clearTimeout(timer);
   }, [checkpoint, phase, value]);
-}
-
-function draftStatusState(phase: DraftPhase): "ready" | "pending" | "unavailable" {
-  if (phase === "clean") return "ready";
-  if (phase === "conflict" || phase === "error") return "unavailable";
-  return "pending";
-}
-
-function draftStatusText(phase: DraftPhase): string {
-  if (phase === "clean") return "Committed";
-  if (phase === "dirty") return "Unsaved · checkpoints after 750 ms";
-  if (phase === "saving") return "Saving checkpoint…";
-  if (phase === "saving-dirty") return "Saving older checkpoint · newer text remains unsaved";
-  if (phase === "conflict") return "Conflict · local text preserved";
-  return "Checkpoint failed · local text preserved";
 }
 
 function creatorEditRequestID(kind: string): string {

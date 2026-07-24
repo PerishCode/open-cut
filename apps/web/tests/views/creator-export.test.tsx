@@ -13,6 +13,69 @@ afterEach(() => {
 });
 
 describe("CreatorExport", () => {
+  it("keeps export history failures private and retries the list", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000241");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000242");
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error("sqlite read failed at /Users/editor/Library/Application Support/Open Cut/project.db");
+          }
+          return jsonResponse({ lineages: [], activityCursor: "1" });
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=1`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    renderExport(projectId, sequenceId, "Recovery story", "1");
+    expect(await screen.findByText("Could not load export history.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("No exports yet")).toBeTruthy();
+    expect(attempts).toBe(2);
+  });
+
+  it("contains export action failures without an unhandled adapter error", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000251");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000252");
+    vi.stubGlobal("crypto", { randomUUID: () => "018f0a60-7b80-7a01-8000-000000000253" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          return jsonResponse({ lineages: [], activityCursor: "1" });
+        }
+        if (url === `/api/v1/projects/${projectId}/exports`) {
+          return new Response(
+            JSON.stringify({
+              title: "Internal Server Error",
+              status: 500,
+              detail: "renderer failed at /Users/editor/.open-cut/export.webm",
+            }),
+            { status: 500, headers: { "content-type": "application/problem+json" } },
+          );
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=1`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    renderExport(projectId, sequenceId, "Failed story", "2");
+    await screen.findByText("No exports yet");
+    fireEvent.click(screen.getByRole("button", { name: "Export current revision" }));
+
+    expect(await screen.findByText("Could not start this export. Try again.")).toBeTruthy();
+    expect(screen.queryByText(/Internal Server Error|renderer failed|\/Users\//i)).toBeNull();
+  });
+
   it("rediscovers ready history and requires a second gesture before durable deletion", async () => {
     const projectId = durableID("018f0a60-7b80-7a01-8000-000000000201");
     const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000202");
@@ -78,20 +141,34 @@ describe("CreatorExport", () => {
         />
       </ContractsProvider>,
     );
-    const saveAsButton = await screen.findByRole("button", { name: "Save As…" });
+    const saveAsButton = await screen.findByRole("button", {
+      name: "Save export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC as",
+    });
     expect(screen.getByText("DESTINATION AFTER RENDER · WEBM · VP9 / OPUS")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     fireEvent.click(saveAsButton);
     expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reveal in folder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal saved export History-story-r7.webm in folder" }));
     expect(await screen.findByText("Revealed History-story-r7.webm")).toBeTruthy();
     expect(revealRequests).toBe(1);
-    fireEvent.click(screen.getByRole("button", { name: "Delete export…" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    );
     expect(deleteRequests).toBe(0);
     expect(screen.getByText("This removes the exported media but keeps its job history.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete export permanently" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC permanently",
+      }),
+    );
     expect(await screen.findByText("Media deleted")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Retry export" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Retry export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    ).toBeTruthy();
     expect(deleteRequests).toBe(1);
     view.unmount();
   });
@@ -130,10 +207,14 @@ describe("CreatorExport", () => {
 
     expect(await screen.findByText("Rendering")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Export in progress" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Cancel export" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save As…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete export permanently" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Keep export" })).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Cancel export Running-story-r8.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Save export/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Delete export .* permanently/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Keep export/ })).toBeNull();
     expect(screen.queryByText("This removes the exported media but keeps its job history.")).toBeNull();
   });
 
@@ -170,6 +251,21 @@ describe("CreatorExport", () => {
     expect(screen.getByText("Add a clip or caption to the Sequence before exporting.")).toBeTruthy();
   });
 });
+
+function renderExport(projectId: string, sequenceId: string, projectName: string, revision: string) {
+  return render(
+    <ContractsProvider>
+      <CreatorExport
+        available
+        hasContent
+        projectId={durableID(projectId)}
+        projectName={projectName}
+        sequenceId={durableID(sequenceId)}
+        sequenceRevision={revisionString(revision)}
+      />
+    </ContractsProvider>,
+  );
+}
 
 function historyLineage(projectId: string, sequenceId: string, jobId: string, artifactId: string, deleted: boolean) {
   return {

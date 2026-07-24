@@ -38,7 +38,7 @@ export function ManualCaptionEditor({
     [contracts.editing.manualCaptions, viewer],
   );
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  const [validationError, setValidationError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
 
   useEffect(() => {
     controller.setProjection({ projectId, sequenceId, captions, tracks });
@@ -47,12 +47,19 @@ export function ManualCaptionEditor({
 
   const run = useCallback(
     async (operation: () => Promise<CreatorEditCommit | undefined>) => {
-      setValidationError(undefined);
+      setActionError(undefined);
+      let receipt: CreatorEditCommit | undefined;
       try {
-        const receipt = await operation();
-        if (receipt) await onCommitted(receipt);
-      } catch (value) {
-        setValidationError(value instanceof Error ? value : new Error(String(value)));
+        receipt = await operation();
+      } catch {
+        setActionError("This Caption action is no longer available. Review the draft and try again.");
+        return;
+      }
+      if (!receipt) return;
+      try {
+        await onCommitted(receipt);
+      } catch {
+        setActionError("The Caption was committed, but the workspace could not refresh. Choose Sync now to reload it.");
       }
     },
     [onCommitted],
@@ -104,25 +111,23 @@ export function ManualCaptionEditor({
         </Button>
       </ControlStrip>
       {snapshot.captions.map((caption) => (
-        <Stack key={caption.id} spacing="compact">
-          <Text tone="eyebrow">
-            {formatClock(caption.range.start)} → {formatClockEnd(caption.range)} · r{caption.revision} ·{" "}
-            {captionProvenanceLabel(caption)}
-          </Text>
-          <Text>{caption.text}</Text>
-          <ControlStrip label={`Caption ${caption.id} actions`}>
-            <Button
-              disabled={busy}
-              label={`Edit Caption ${caption.id}`}
-              onPress={() => controller.selectCaption(caption.id)}
-            >
-              Edit
-            </Button>
-            <Button label="Use this Caption as @ context" onPress={() => onContextCaption(caption)}>
-              @ Agent
-            </Button>
-          </ControlStrip>
-        </Stack>
+        <ControlStrip
+          hint={caption.text}
+          key={caption.id}
+          label={`Caption ${caption.id} actions`}
+          summary={`${formatClock(caption.range.start)} → ${formatClockEnd(caption.range)} · r${caption.revision} · ${captionProvenanceLabel(caption)}`}
+        >
+          <Button
+            disabled={busy}
+            label={`Edit Caption ${caption.id}`}
+            onPress={() => controller.selectCaption(caption.id)}
+          >
+            Edit
+          </Button>
+          <Button label="Use this Caption as @ context" onPress={() => onContextCaption(caption)}>
+            @ Agent
+          </Button>
+        </ControlStrip>
       ))}
       {snapshot.captions.length === 0 ? <Text>No Caption cues in the first 60 seconds.</Text> : null}
 
@@ -243,7 +248,11 @@ export function ManualCaptionEditor({
       ) : null}
       {snapshot.phase === "error" && snapshot.error ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Caption checkpoint failed · {snapshot.error.message}</Status>
+          <Status state="unavailable">
+            {snapshot.canRetryIdenticalApply
+              ? "Could not confirm the Caption update."
+              : "Could not prepare this Caption checkpoint. Review the draft and try again."}
+          </Status>
           {snapshot.canRetryIdenticalApply ? (
             <Button onPress={() => void run(() => controller.retryIdenticalApply())}>
               Retry identical Caption apply
@@ -251,7 +260,7 @@ export function ManualCaptionEditor({
           ) : null}
         </Stack>
       ) : null}
-      {validationError ? <Status state="unavailable">Caption draft invalid · {validationError.message}</Status> : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
     </Stack>
   );
 }

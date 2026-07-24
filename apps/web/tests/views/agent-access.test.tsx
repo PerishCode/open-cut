@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { ContractsProvider } from "@open-cut/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentAccess } from "../../src/components/agent-access.js";
@@ -13,6 +13,33 @@ afterEach(() => {
 });
 
 describe("AgentAccess", () => {
+  it("keeps local CLI failures private and reloads authoritative access", async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("spawn /Users/editor/.local/bin/open-cut: permission denied");
+        }
+        return jsonResponse({ grants: [], upgrades: [] });
+      }),
+    );
+
+    render(
+      <ContractsProvider>
+        <AgentAccess />
+      </ContractsProvider>,
+    );
+
+    expect(await screen.findByText("Could not update CLI access.")).toBeTruthy();
+    expect(screen.queryByText(/\/Users\/|permission denied|spawn/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+
+    await waitFor(() => expect(screen.queryByText("Could not update CLI access.")).toBeNull());
+    expect(attempts).toBeGreaterThanOrEqual(2);
+  });
+
   it("hides protocol identity and fails closed on permissions this UI cannot explain", async () => {
     vi.stubGlobal(
       "fetch",

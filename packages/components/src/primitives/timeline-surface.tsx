@@ -346,6 +346,16 @@ export function TimelineSurface({
                       const durableLeft = percent(item.startSeconds - startSeconds, safeDuration);
                       const durableWidth = Math.max(0.8, percent(item.durationSeconds, safeDuration));
                       const draggingThis = gesture?.id === item.id && visibleGhost !== undefined;
+                      const actionIdentity = `${item.label} on ${track.label} at ${formatClock(item.startSeconds)}`;
+                      const itemTitle = `${item.label} · ${formatClock(item.startSeconds)} · ${formatClock(
+                        item.durationSeconds,
+                      )}`;
+                      const itemContents = (
+                        <>
+                          <span className={styles.timelineItemLabel}>{item.label}</span>
+                          {item.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
+                        </>
+                      );
                       return (
                         <div
                           className={`${styles.timelineItem} ${toneClass(track.kind)}${selected ? ` ${styles.timelineItemSelected}` : ""}${draggingThis ? ` ${styles.timelineItemDragging}` : ""}${gesturesActive ? ` ${styles.timelineItemInteractive}` : ""}`}
@@ -356,69 +366,77 @@ export function TimelineSurface({
                             width: `${durableWidth}%`,
                           }}
                         >
-                          <button
-                            aria-label={gesturesActive ? `Move ${item.label}` : `Select ${item.label}`}
-                            aria-pressed={selected}
-                            className={styles.timelineItemBody}
-                            title={`${item.label} · ${formatClock(item.startSeconds)} · ${formatClock(item.durationSeconds)}`}
-                            type="button"
-                            onClick={(event) => {
-                              if (consumeSuppressedClick()) {
+                          {item.selectable === false ? (
+                            <span
+                              className={`${styles.timelineItemBody} ${styles.timelineItemBodyStatic}`}
+                              title={itemTitle}
+                            >
+                              {itemContents}
+                            </span>
+                          ) : (
+                            <button
+                              aria-label={gesturesActive ? `Move ${actionIdentity}` : `Select ${actionIdentity}`}
+                              aria-pressed={selected}
+                              className={styles.timelineItemBody}
+                              title={itemTitle}
+                              type="button"
+                              onClick={(event) => {
+                                if (consumeSuppressedClick()) {
+                                  event.preventDefault();
+                                  return;
+                                }
+                                // Move body is not a reselection control while gestures are armed.
+                                if (gesturesActive || gestureRef.current || activatedRef.current) return;
+                                onItemSelect(item.id);
+                              }}
+                              onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  if (gesturesActive) return;
+                                  onItemSelect(item.id);
+                                }
+                              }}
+                              onPointerCancel={onItemPointerCancel}
+                              onPointerDown={(event) => {
+                                if (!gesturesActive || !onItemMove || event.button !== 0) return;
+                                const lane = event.currentTarget.closest("[data-timeline-lane]");
+                                if (!(lane instanceof HTMLElement)) return;
                                 event.preventDefault();
-                                return;
-                              }
-                              // Move body is not a reselection control while gestures are armed.
-                              if (gesturesActive || gestureRef.current || activatedRef.current) return;
-                              if (item.selectable !== false) onItemSelect(item.id);
-                            }}
-                            onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                if (gesturesActive) return;
-                                if (item.selectable !== false) onItemSelect(item.id);
-                              }
-                            }}
-                            onPointerCancel={onItemPointerCancel}
-                            onPointerDown={(event) => {
-                              if (!gesturesActive || !onItemMove || event.button !== 0) return;
-                              const lane = event.currentTarget.closest("[data-timeline-lane]");
-                              if (!(lane instanceof HTMLElement)) return;
-                              event.preventDefault();
-                              capturePointer(event.currentTarget, event.pointerId);
-                              const laneRect = lane.getBoundingClientRect();
-                              const pointerSeconds = secondsFromClientX(
-                                event.clientX,
-                                laneRect,
-                                startSeconds,
-                                safeDuration,
-                              );
-                              beginGesture(
-                                {
-                                  kind: "move",
-                                  id: item.id,
-                                  label: item.label,
-                                  trackId: item.trackId,
-                                  linked: Boolean(item.linked),
-                                  durationSeconds: item.durationSeconds,
-                                  originStart: item.startSeconds,
-                                  grabOffsetSeconds: pointerSeconds - item.startSeconds,
-                                  currentStart: item.startSeconds,
-                                  laneElement: lane,
-                                },
-                                event.clientX,
-                                event.clientY,
-                              );
-                            }}
-                            onPointerMove={onItemPointerMove}
-                            onPointerUp={onItemPointerUp}
-                          >
-                            <span className={styles.timelineItemLabel}>{item.label}</span>
-                            {item.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
-                          </button>
+                                capturePointer(event.currentTarget, event.pointerId);
+                                const laneRect = lane.getBoundingClientRect();
+                                const pointerSeconds = secondsFromClientX(
+                                  event.clientX,
+                                  laneRect,
+                                  startSeconds,
+                                  safeDuration,
+                                );
+                                beginGesture(
+                                  {
+                                    kind: "move",
+                                    id: item.id,
+                                    label: item.label,
+                                    trackId: item.trackId,
+                                    linked: Boolean(item.linked),
+                                    durationSeconds: item.durationSeconds,
+                                    originStart: item.startSeconds,
+                                    grabOffsetSeconds: pointerSeconds - item.startSeconds,
+                                    currentStart: item.startSeconds,
+                                    laneElement: lane,
+                                  },
+                                  event.clientX,
+                                  event.clientY,
+                                );
+                              }}
+                              onPointerMove={onItemPointerMove}
+                              onPointerUp={onItemPointerUp}
+                            >
+                              {itemContents}
+                            </button>
+                          )}
                           {gesturesActive ? (
                             <>
                               <button
-                                aria-label={`Trim in ${item.label}`}
+                                aria-label={`Trim in ${actionIdentity}`}
                                 className={`${styles.timelineItemHandle} ${styles.timelineItemHandleStart}`}
                                 type="button"
                                 onPointerCancel={onItemPointerCancel}
@@ -449,7 +467,7 @@ export function TimelineSurface({
                                 onPointerUp={onItemPointerUp}
                               />
                               <button
-                                aria-label={`Trim out ${item.label}`}
+                                aria-label={`Trim out ${actionIdentity}`}
                                 className={`${styles.timelineItemHandle} ${styles.timelineItemHandleEnd}`}
                                 type="button"
                                 onPointerCancel={onItemPointerCancel}

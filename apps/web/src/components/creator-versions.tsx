@@ -1,4 +1,4 @@
-import { Button, EmptyState, ResourceCard, Stack, Status, Text, TextField } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, ResourceCard, Stack, Status, Text, TextField } from "@open-cut/components";
 import {
   type DurableID,
   type ProjectVersion,
@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type VersionState =
   | Readonly<{ status: "loading" }>
   | Readonly<{ status: "ready"; page: ProjectVersionPage; loadingOlder: boolean }>
-  | Readonly<{ status: "unavailable"; error: Error }>;
+  | Readonly<{ status: "unavailable" }>;
 
 export function CreatorVersions({
   currentRevision,
@@ -32,7 +32,7 @@ export function CreatorVersions({
   const [restoring, setRestoring] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<DurableID>();
   const [notice, setNotice] = useState(undefined as string | undefined);
-  const [actionError, setActionError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
   const loadGeneration = useRef(0);
 
   const load = useCallback(
@@ -43,9 +43,9 @@ export function CreatorVersions({
         if (!signal?.aborted && generation === loadGeneration.current) {
           setState({ status: "ready", page, loadingOlder: false });
         }
-      } catch (value) {
+      } catch {
         if (!signal?.aborted && generation === loadGeneration.current) {
-          setState({ status: "unavailable", error: asError(value) });
+          setState({ status: "unavailable" });
         }
       }
     },
@@ -77,8 +77,8 @@ export function CreatorVersions({
         },
         loadingOlder: false,
       });
-    } catch (value) {
-      setActionError(asError(value));
+    } catch {
+      setActionError("Could not load older project versions. Try again.");
       setState(current);
     }
   }, [contracts.projects.versions, projectId, state]);
@@ -98,8 +98,8 @@ export function CreatorVersions({
       setName("");
       setNotice(`Saved “${result.version.name ?? normalizedName}” at r${result.version.capturedProjectRevision}.`);
       await load();
-    } catch (value) {
-      setActionError(asError(value));
+    } catch {
+      setActionError("Could not save this project version. Try again.");
     } finally {
       setSaving(false);
     }
@@ -127,10 +127,11 @@ export function CreatorVersions({
         );
         await onRestored(result);
         await load();
-      } catch (value) {
-        const error = asError(value);
+      } catch {
         setActionError(
-          committed ? new Error(`Restore committed, but the workspace refresh failed: ${error.message}`) : error,
+          committed
+            ? "The version was restored, but the workspace could not refresh. Choose Sync now to reload it."
+            : "Could not restore this project version. Review it and try again.",
         );
       } finally {
         setRestoring(false);
@@ -158,60 +159,64 @@ export function CreatorVersions({
         {saving ? "Saving version…" : "Save version"}
       </Button>
       {notice ? <Status state="ready">{notice}</Status> : null}
-      {actionError ? <Status state="unavailable">Version action failed · {actionError.message}</Status> : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
       {state.status === "loading" ? <Text>Loading project versions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Versions unavailable · {state.error.message}</Status>
-          <Button onPress={() => void load()}>Retry versions</Button>
+          <Status state="unavailable">Could not load project versions.</Status>
+          <Button onPress={() => void load()}>Try again</Button>
         </Stack>
       ) : null}
       {state.status === "ready" && state.page.versions.length === 0 ? (
         <EmptyState hint="A checkpoint will be created before the next Agent turn." title="No versions yet" />
       ) : null}
-      {state.status === "ready"
-        ? state.page.versions.map((version) => {
+      {state.status === "ready" && state.page.versions.length > 0 ? (
+        <ResourceCard emphasis="quiet" eyebrow={`${state.page.versions.length} LOADED`} title="Recent checkpoints">
+          {state.page.versions.map((version) => {
             const current = version.capturedProjectRevision === currentRevision;
             const confirming = restoreCandidate === version.id;
+            const title = version.name ?? versionSourceLabel(version);
             return (
-              <ResourceCard
-                actions={
-                  confirming ? (
-                    <Stack spacing="compact">
-                      <Status state="pending">
-                        Restore creates a new revision. Your current state is checkpointed automatically first.
-                      </Status>
-                      <Button disabled={restoring} onPress={() => void restore(version)}>
-                        {restoring ? "Restoring version…" : "Restore as new revision"}
-                      </Button>
-                      <Button disabled={restoring} onPress={() => setRestoreCandidate(undefined)}>
-                        Cancel
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Button
-                      disabled={current || restoring || saving}
-                      onPress={() => {
-                        setActionError(undefined);
-                        setNotice(undefined);
-                        setRestoreCandidate(version.id);
-                      }}
-                    >
-                      {current ? "Current version" : "Review restore"}
-                    </Button>
-                  )
-                }
-                details={[
-                  `${versionSourceLabel(version)} · ${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`,
-                ]}
-                eyebrow={`${version.source === "manual" ? "NAMED" : "AUTO"} · r${version.capturedProjectRevision}`}
+              <ControlStrip
+                hint={`${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`}
                 key={version.id}
-                status={current ? <Status state="ready">Current</Status> : undefined}
-                title={version.name ?? versionSourceLabel(version)}
-              />
+                label={`Project version ${title} at revision ${version.capturedProjectRevision}`}
+                summary={`${current ? "CURRENT · " : ""}${
+                  version.source === "manual" ? "NAMED" : "AUTO"
+                } · r${version.capturedProjectRevision} · ${title}`}
+              >
+                {confirming ? (
+                  <>
+                    <Status state="pending">
+                      Restore creates a new revision. Your current state is checkpointed automatically first.
+                    </Status>
+                    <Button disabled={restoring} onPress={() => void restore(version)}>
+                      {restoring ? "Restoring version…" : "Restore as new revision"}
+                    </Button>
+                    <Button disabled={restoring} onPress={() => setRestoreCandidate(undefined)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : current ? (
+                  <Status state="ready">Current</Status>
+                ) : (
+                  <Button
+                    disabled={restoring || saving}
+                    label={`Review restore ${title} at r${version.capturedProjectRevision}`}
+                    onPress={() => {
+                      setActionError(undefined);
+                      setNotice(undefined);
+                      setRestoreCandidate(version.id);
+                    }}
+                  >
+                    Review restore
+                  </Button>
+                )}
+              </ControlStrip>
             );
-          })
-        : null}
+          })}
+        </ResourceCard>
+      ) : null}
       {state.status === "ready" && state.page.nextBefore ? (
         <Button disabled={state.loadingOlder} onPress={() => void loadOlder()}>
           {state.loadingOlder ? "Loading older versions…" : "Load older versions"}
@@ -243,8 +248,4 @@ function formatByteSize(value: string): string {
   if (bytes < 1024n) return `${bytes} B`;
   if (bytes < 1024n * 1024n) return `${Number(bytes / 1024n)} KiB`;
   return `${Number(bytes / (1024n * 1024n))} MiB`;
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
 }
