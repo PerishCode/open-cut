@@ -12,8 +12,8 @@ export type ControlStripProps = Readonly<{
   /** Optional local shortcuts when the strip itself owns keyboard focus. */
   keyboardShortcuts?: string;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
-  /** Horizontal choice and action controls. */
-  children: ReactNode;
+  /** Optional horizontal choice and action controls. */
+  children?: ReactNode;
 }>;
 
 /**
@@ -36,7 +36,7 @@ export function ControlStrip({ label, summary, hint, keyboardShortcuts, onKeyDow
           {hint ? <div className={styles.controlStripHint}>{hint}</div> : null}
         </div>
       ) : null}
-      <div className={styles.controlStripBody}>{children}</div>
+      {children ? <div className={styles.controlStripBody}>{children}</div> : null}
     </section>
   );
 }

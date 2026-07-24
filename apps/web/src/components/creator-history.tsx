@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, ResourceCard, Stack, Status, Text } from "@open-cut/components";
 import { type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -76,21 +76,24 @@ export function CreatorHistory({
           <Button onPress={() => void load()}>Retry history</Button>
         </Stack>
       ) : null}
-      {state.status === "ready"
-        ? state.page.transactions.map((transaction, index) => (
-            <Stack key={transaction.id} spacing="compact">
-              <Text tone="eyebrow">
-                {index === 0 ? "LATEST · " : ""}r{transaction.committedProjectRevision} ·{" "}
-                {transaction.actor.toUpperCase()}
-                {transaction.undoesTransactionId ? " · UNDO/REDO" : ""}
-              </Text>
-              <Text>{transaction.intent}</Text>
-              <Text>
-                {transaction.changes.length} changed entities · {transaction.committedAt}
-              </Text>
-            </Stack>
-          ))
-        : null}
+      {state.status === "ready" && state.page.transactions.length > 0 ? (
+        <ResourceCard
+          emphasis="quiet"
+          eyebrow={`${state.page.transactions.length} LOADED`}
+          title="Recent creative transactions"
+        >
+          {state.page.transactions.map((transaction, index) => (
+            <ControlStrip
+              hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
+              key={transaction.id}
+              label={`Transaction r${transaction.committedProjectRevision}: ${transaction.intent}`}
+              summary={`${index === 0 ? "LATEST · " : ""}r${transaction.committedProjectRevision} · ${transaction.actor.toUpperCase()}${
+                transaction.undoesTransactionId ? " · UNDO/REDO" : ""
+              } · ${transaction.intent}`}
+            />
+          ))}
+        </ResourceCard>
+      ) : null}
       {state.status === "ready" && state.page.transactions.length === 0 ? (
         <Text>No committed creative transactions.</Text>
       ) : null}
@@ -105,4 +108,12 @@ export function CreatorHistory({
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+function formatChangeCount(count: number): string {
+  return `${count} ${count === 1 ? "CHANGE" : "CHANGES"}`;
+}
+
+function formatTimestamp(value: string): string {
+  return `${new Date(value).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }

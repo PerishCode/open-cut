@@ -1,4 +1,4 @@
-import { Button, EmptyState, ResourceCard, Stack, Status, Text, TextField } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, ResourceCard, Stack, Status, Text, TextField } from "@open-cut/components";
 import {
   type DurableID,
   type ProjectVersion,
@@ -169,49 +169,53 @@ export function CreatorVersions({
       {state.status === "ready" && state.page.versions.length === 0 ? (
         <EmptyState hint="A checkpoint will be created before the next Agent turn." title="No versions yet" />
       ) : null}
-      {state.status === "ready"
-        ? state.page.versions.map((version) => {
+      {state.status === "ready" && state.page.versions.length > 0 ? (
+        <ResourceCard emphasis="quiet" eyebrow={`${state.page.versions.length} LOADED`} title="Recent checkpoints">
+          {state.page.versions.map((version) => {
             const current = version.capturedProjectRevision === currentRevision;
             const confirming = restoreCandidate === version.id;
+            const title = version.name ?? versionSourceLabel(version);
             return (
-              <ResourceCard
-                actions={
-                  confirming ? (
-                    <Stack spacing="compact">
-                      <Status state="pending">
-                        Restore creates a new revision. Your current state is checkpointed automatically first.
-                      </Status>
-                      <Button disabled={restoring} onPress={() => void restore(version)}>
-                        {restoring ? "Restoring version…" : "Restore as new revision"}
-                      </Button>
-                      <Button disabled={restoring} onPress={() => setRestoreCandidate(undefined)}>
-                        Cancel
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Button
-                      disabled={current || restoring || saving}
-                      onPress={() => {
-                        setActionError(undefined);
-                        setNotice(undefined);
-                        setRestoreCandidate(version.id);
-                      }}
-                    >
-                      {current ? "Current version" : "Review restore"}
-                    </Button>
-                  )
-                }
-                details={[
-                  `${versionSourceLabel(version)} · ${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`,
-                ]}
-                eyebrow={`${version.source === "manual" ? "NAMED" : "AUTO"} · r${version.capturedProjectRevision}`}
+              <ControlStrip
+                hint={`${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`}
                 key={version.id}
-                status={current ? <Status state="ready">Current</Status> : undefined}
-                title={version.name ?? versionSourceLabel(version)}
-              />
+                label={`Project version ${title} at revision ${version.capturedProjectRevision}`}
+                summary={`${current ? "CURRENT · " : ""}${
+                  version.source === "manual" ? "NAMED" : "AUTO"
+                } · r${version.capturedProjectRevision} · ${title}`}
+              >
+                {confirming ? (
+                  <>
+                    <Status state="pending">
+                      Restore creates a new revision. Your current state is checkpointed automatically first.
+                    </Status>
+                    <Button disabled={restoring} onPress={() => void restore(version)}>
+                      {restoring ? "Restoring version…" : "Restore as new revision"}
+                    </Button>
+                    <Button disabled={restoring} onPress={() => setRestoreCandidate(undefined)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : current ? (
+                  <Status state="ready">Current</Status>
+                ) : (
+                  <Button
+                    disabled={restoring || saving}
+                    label={`Review restore ${title} at r${version.capturedProjectRevision}`}
+                    onPress={() => {
+                      setActionError(undefined);
+                      setNotice(undefined);
+                      setRestoreCandidate(version.id);
+                    }}
+                  >
+                    Review restore
+                  </Button>
+                )}
+              </ControlStrip>
             );
-          })
-        : null}
+          })}
+        </ResourceCard>
+      ) : null}
       {state.status === "ready" && state.page.nextBefore ? (
         <Button disabled={state.loadingOlder} onPress={() => void loadOlder()}>
           {state.loadingOlder ? "Loading older versions…" : "Load older versions"}

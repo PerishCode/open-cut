@@ -39,7 +39,7 @@ describe("Creator Workspace history", () => {
       </ContractsProvider>,
     );
 
-    expect(await screen.findByText("Move selected Timeline Clip")).toBeTruthy();
+    expect(await screen.findByText(/Move selected Timeline Clip/)).toBeTruthy();
     expect(screen.getByText(/LATEST · r8 · AGENT/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
