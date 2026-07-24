@@ -44,8 +44,6 @@ type AgentPaneState = Readonly<{
   error?: Error;
 }>;
 
-type ContextKeys = readonly string[];
-
 const initialState: AgentPaneState = {
   runs: [],
   messages: [],
@@ -73,7 +71,7 @@ export function CreatorAgentPane({
   const contracts = useContracts();
   const [state, setState] = useState<AgentPaneState>(initialState);
   const [message, setMessage] = useState("");
-  const [contextKeys, setContextKeys] = useState<ContextKeys>([]);
+  const [contextKeys, setContextKeys] = useState([] as readonly string[]);
   const [recentRunsExpanded, setRecentRunsExpanded] = useState(false);
   const [receiptsExpanded, setReceiptsExpanded] = useState(false);
   const latestMessageRef = useRef<HTMLElement>(null);
@@ -463,9 +461,11 @@ export function CreatorAgentPane({
       }
       header={
         <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
-          <Button disabled={state.loading || state.submitting} variant="quiet" onPress={() => void load()}>
-            Refresh
-          </Button>
+          {!state.loading && (state.error || state.availability?.state !== "available") ? (
+            <Button disabled={state.submitting} variant="quiet" onPress={() => void load()}>
+              Check again
+            </Button>
+          ) : null}
           <Button
             disabled={state.submitting}
             onPress={() => {

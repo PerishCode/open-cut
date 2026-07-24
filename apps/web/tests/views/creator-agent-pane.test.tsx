@@ -69,6 +69,7 @@ describe("CreatorAgentPane", () => {
     );
     expect(await screen.findByText("Ready for tasks")).toBeTruthy();
     expect(screen.queryByText(/codex-cli 0\.144\.4/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add @ Current asset" }));
     fireEvent.change(screen.getByRole("textbox", { name: "New task · Ctrl/⌘ Enter" }), {
       target: { value: "Draft a sharp opening" },
@@ -101,6 +102,42 @@ describe("CreatorAgentPane", () => {
     });
     expect(await screen.findByText("Make it warmer")).toBeTruthy();
     view.unmount();
+  });
+
+  it("offers availability recovery only when the local Agent needs it", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000411");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000412");
+    let availabilityRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/v1/projects") return jsonResponse({ projects: [], activityCursor: "0" });
+        if (url === "/api/v1/events?after=0") return eventStream(init?.signal);
+        if (url === "/api/v1/agent/availability") {
+          availabilityRequests += 1;
+          return jsonResponse({
+            adapterId: "codex-cli-v1",
+            promptVersion: "open-cut-agent-v2",
+            state: "missing",
+          });
+        }
+        if (url === `/api/v1/projects/${projectId}/agent/runs?limit=10`) {
+          return jsonResponse({ projectId, runs: [] });
+        }
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    render(
+      <ContractsProvider>
+        <CreatorAgentPane contextCandidates={[]} projectId={projectId} sequenceId={sequenceId} />
+      </ContractsProvider>,
+    );
+
+    expect(await screen.findByText("Codex is not available on this device.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(availabilityRequests).toBe(2));
   });
 
   it("loads authoritative historical Turns and focuses receipt refs without merging ledgers", async () => {
