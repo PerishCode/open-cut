@@ -62,7 +62,8 @@ describe("CreatorVersions", () => {
     );
 
     renderVersions();
-    expect(screen.getByText("Lightweight before Agent turns · named versions never copy Source media.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Save named project version" })).toBeTruthy();
+    expect(screen.getByText("AUTO BEFORE AGENT TURNS · SOURCE MEDIA STAYS SHARED")).toBeTruthy();
     expect(await screen.findByText(/CURRENT · AUTO · r8 · Project created/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Version name"), { target: { value: " Approved assembly " } });
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));

@@ -63,7 +63,7 @@ describe("atomic components", () => {
       <Surface label="Workspace">
         <Heading>Open Cut</Heading>
         <Status state="ready">Ready</Status>
-        <TextField label="Project name" value="Story" onChange={() => undefined} />
+        <TextField density="compact" label="Project name" value="Story" onChange={() => undefined} />
       </Surface>,
     );
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();

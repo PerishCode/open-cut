@@ -142,22 +142,27 @@ export function CreatorVersions({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">PROJECT VERSIONS · RECOVERY CHECKPOINTS</Text>
-      <Text>Lightweight before Agent turns · named versions never copy Source media.</Text>
-      <TextField
-        disabled={saving || restoring}
-        label="Version name"
-        maxLength={200}
-        onChange={setName}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") void save();
-        }}
-        placeholder="e.g. Approved assembly"
-        value={name}
-      />
-      <Button disabled={!name.trim() || saving || restoring} variant="primary" onPress={() => void save()}>
-        {saving ? "Saving version…" : "Save version"}
-      </Button>
+      <ControlStrip
+        hint="AUTO BEFORE AGENT TURNS · SOURCE MEDIA STAYS SHARED"
+        label="Save named project version"
+        summary="MANUAL CHECKPOINT"
+      >
+        <TextField
+          density="compact"
+          disabled={saving || restoring}
+          label="Version name"
+          maxLength={200}
+          onChange={setName}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void save();
+          }}
+          placeholder="Name this version · e.g. Approved assembly"
+          value={name}
+        />
+        <Button disabled={!name.trim() || saving || restoring} variant="primary" onPress={() => void save()}>
+          {saving ? "Saving version…" : "Save version"}
+        </Button>
+      </ControlStrip>
       {notice ? <Status state="ready">{notice}</Status> : null}
       {actionError ? <Status state="unavailable">{actionError}</Status> : null}
       {state.status === "loading" ? <Text>Loading project versions…</Text> : null}

@@ -609,6 +609,30 @@
   opacity: 0.5;
 }
 
+.fieldCompact {
+  min-width: 180px;
+  flex: 1 1 240px;
+  gap: 0;
+}
+
+.fieldCompact .fieldLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.fieldCompact .fieldInput {
+  min-height: 22px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
 .fileField {
   position: relative;
   display: grid;
