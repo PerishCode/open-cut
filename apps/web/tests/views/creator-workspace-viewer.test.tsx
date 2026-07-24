@@ -36,6 +36,7 @@ describe("SequencePreviewSurface", () => {
     expect(player.nextElementSibling?.contains(transport)).toBe(true);
     expect(within(transport).getByText("SEQUENCE r14 · 00:08.00 / 00:09.00")).toBeTruthy();
     expect(within(transport).getByText(/1920 × 1080 · 30 FPS/)).toBeTruthy();
+    expect(within(transport).queryByText(/PLAN/)).toBeNull();
     expect(player.getAttribute("controls")).toBeNull();
     expect(transport.getAttribute("aria-keyshortcuts")).toBe("Home ArrowLeft Space ArrowRight");
     expect(transport.tabIndex).toBe(0);

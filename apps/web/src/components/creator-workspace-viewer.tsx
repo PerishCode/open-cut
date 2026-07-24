@@ -150,7 +150,7 @@ function SequencePreparationSurface({
   const facts = preparation.lease.facts;
   const transport = (
     <ControlStrip
-      hint={`${canvasLabel ? `${canvasLabel} · ` : ""}${formatFrameRate(facts.frameRate)} FPS · PLAN ${preparation.lease.renderPlanDigest.slice(7, 15)}…`}
+      hint={`${canvasLabel ? `${canvasLabel} · ` : ""}${formatFrameRate(facts.frameRate)} FPS`}
       keyboardShortcuts="Home ArrowLeft Space ArrowRight"
       label="Sequence transport"
       summary={`SEQUENCE r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
