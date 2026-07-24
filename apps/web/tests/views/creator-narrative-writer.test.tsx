@@ -338,6 +338,32 @@ describe("CreatorNarrativeWriter", () => {
     expect((screen.getByRole("button", { name: "Remove empty Section" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("keeps Section storage failures private and retries the child branch", async () => {
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("sqlite read failed at /Users/editor/Library/Application Support/Open Cut/project.db");
+        }
+        return jsonResponse(emptySectionSubtree());
+      }),
+    );
+    renderWriter(
+      vi.fn(async () => undefined),
+      narrativeWithSection(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Section" }));
+    expect(await screen.findByText("Could not load this Section.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry Section read" }));
+
+    await waitFor(() => expect(screen.queryByText("Could not load this Section.")).toBeNull());
+    expect(attempts).toBe(2);
+  });
+
   it("reopens the exact selected Section path after the Story surface remounts", async () => {
     const reads: string[] = [];
     vi.stubGlobal(

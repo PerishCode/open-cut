@@ -25,7 +25,7 @@ type SectionAttempt = Readonly<{
 type ChildState =
   | Readonly<{ status: "idle" | "loading" }>
   | Readonly<{ status: "ready"; value: NarrativeSubtree }>
-  | Readonly<{ status: "error"; error: Error }>;
+  | Readonly<{ status: "error" }>;
 
 export function CreatorNarrativeSection({
   autoExpand = false,
@@ -101,8 +101,8 @@ export function CreatorNarrativeSection({
     try {
       const value = await read.narrativeSubtree({ projectId, documentId, parentId: section.id, limit: 200 });
       setChildren({ status: "ready", value });
-    } catch (value) {
-      setChildren({ status: "error", error: asError(value) });
+    } catch {
+      setChildren({ status: "error" });
     }
   }, [documentId, projectId, read, section.id]);
 
@@ -383,7 +383,7 @@ export function CreatorNarrativeSection({
       {expanded && children.status === "loading" ? <Status state="pending">Loading Section…</Status> : null}
       {expanded && children.status === "error" ? (
         <>
-          <Status state="unavailable">Section unavailable · {children.error.message}</Status>
+          <Status state="unavailable">Could not load this Section.</Status>
           <Button onPress={() => void loadChildren()}>Retry Section read</Button>
         </>
       ) : null}

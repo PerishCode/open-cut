@@ -50,7 +50,7 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
         >
           {write.pending ? "Creating…" : "Create and open"}
         </Button>
-        {write.error ? <Text>Could not create project: {write.error.message}</Text> : null}
+        {write.error ? <Text>Project could not be created. Review the name and try again.</Text> : null}
       </Stack>
     </Stack>
   );
