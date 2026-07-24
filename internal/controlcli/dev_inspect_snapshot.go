@@ -97,9 +97,9 @@ type devSnapshotLayoutNode struct {
 }
 
 type devSnapshotScroll struct {
-	Client [2]int `json:"client"`
-	Size   [2]int `json:"size"`
-	Offset [2]int `json:"offset"`
+	Client [2]int     `json:"client"`
+	Size   [2]int     `json:"size"`
+	Offset [2]float64 `json:"offset"`
 }
 
 type devSnapshotAXValue struct {

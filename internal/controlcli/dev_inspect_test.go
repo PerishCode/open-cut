@@ -78,6 +78,9 @@ func TestCaptureDevRendererSnapshotCombinesBrowserSemanticsAndLayout(t *testing.
 					"nodes": []any{map[string]any{
 						"tag": "section", "role": "region", "name": "Viewer", "visible": true, "clipped": false,
 						"bounds": []any{300, 54, 640, 714},
+						"scroll": map[string]any{
+							"client": []any{640, 320}, "size": []any{640, 479}, "offset": []any{0, 158.5},
+						},
 					}},
 				},
 			}},
@@ -118,6 +121,9 @@ func TestCaptureDevRendererSnapshotCombinesBrowserSemanticsAndLayout(t *testing.
 	}
 	if len(snapshot.Layout.Nodes) != 1 || snapshot.Layout.Nodes[0].Name != "Viewer" {
 		t.Fatalf("layout=%+v", snapshot.Layout)
+	}
+	if snapshot.Layout.Nodes[0].Scroll == nil || snapshot.Layout.Nodes[0].Scroll.Offset != [2]float64{0, 158.5} {
+		t.Fatalf("fractional scroll offset=%+v", snapshot.Layout.Nodes[0].Scroll)
 	}
 	if snapshot.Summary.AccessibilityNodes != 2 || snapshot.Summary.LayoutNodes != 1 ||
 		snapshot.Summary.VisibleLayoutNodes != 1 || snapshot.Summary.PageOverflow {
