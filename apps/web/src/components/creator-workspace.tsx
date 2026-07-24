@@ -49,6 +49,7 @@ import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-na
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
 import { type CreatorRoughCutOccurrence, createCreatorRoughCutOccurrence } from "./creator-rough-cut-queue.js";
+import { createSourcePanelNavigation } from "./creator-source-panel-navigation.js";
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
@@ -69,8 +70,7 @@ import { ProductResources } from "./product-resources.js";
 import { SourceImportSurface } from "./source-import-surface.js";
 
 type WorkspaceState =
-  | Readonly<{ status: "loading" }>
-  | Readonly<{ status: "unavailable"; error: Error }>
+  | Readonly<{ status: "loading" | "unavailable" }>
   | Readonly<{
       status: "ready";
       overview: ProjectOverview;
@@ -159,7 +159,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       } catch (value) {
         if (!signal?.aborted) {
           if (preserveReady) throw value;
-          setState({ status: "unavailable", error: value instanceof Error ? value : new Error(String(value)) });
+          setState({ status: "unavailable" });
         }
       }
       return undefined;
@@ -430,6 +430,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, importing, load, project.id, state],
   );
+  const selectSourcePanel = createSourcePanelNavigation(setSourcePanel, readTranscript, selectedAsset, transcript);
   const syncStatus = workspaceSyncStatus(state.status, sync);
   return (
     <EditorShell
@@ -461,7 +462,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         <Tabs
           activeTabId={sourcePanel}
           label="Creative sources"
-          onTabChange={setSourcePanel}
+          onTabChange={selectSourcePanel}
           tabs={[
             {
               id: "source-media",
