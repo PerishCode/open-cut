@@ -2,6 +2,8 @@ import type { Caption } from "@open-cut/contracts";
 import { describe, expect, it } from "vitest";
 import {
   captionProvenanceLabel,
+  formatClock,
+  formatClockEnd,
   formatTime,
   formatTimeEnd,
 } from "../../src/components/creator-workspace-presentation.js";
@@ -21,6 +23,8 @@ describe("caption presentation", () => {
   it("formats exact rational ranges for Creator reads", () => {
     expect(formatTime({ value: "3", scale: 2 })).toBe("1.50");
     expect(formatTimeEnd({ start: { value: "3", scale: 2 }, duration: { value: "1", scale: 4 } })).toBe("1.75");
+    expect(formatClock({ value: "3", scale: 2 })).toBe("00:01.50");
+    expect(formatClockEnd({ start: { value: "3", scale: 2 }, duration: { value: "1", scale: 4 } })).toBe("00:01.75");
   });
 
   it("keeps manual and derived evidence state creator-visible", () => {

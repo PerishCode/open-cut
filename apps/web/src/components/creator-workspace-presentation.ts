@@ -119,6 +119,22 @@ export function formatTimeEnd(range: {
 export function formatClock(value: { value: string; scale: number }): string {
   const scale = BigInt(value.scale);
   const numerator = BigInt(value.value);
+  return formatClockParts(numerator, scale);
+}
+
+export function formatClockEnd(range: {
+  start: { value: string; scale: number };
+  duration: { value: string; scale: number };
+}): string {
+  const startScale = BigInt(range.start.scale);
+  const durationScale = BigInt(range.duration.scale);
+  return formatClockParts(
+    BigInt(range.start.value) * durationScale + BigInt(range.duration.value) * startScale,
+    startScale * durationScale,
+  );
+}
+
+function formatClockParts(numerator: bigint, scale: bigint): string {
   const negative = numerator < 0n;
   const absolute = negative ? -numerator : numerator;
   const hundredths = (absolute * 100n + scale / 2n) / scale;

@@ -7,7 +7,7 @@ import type {
   TranscriptSegment,
 } from "@open-cut/contracts";
 import { type CreatorExcerptTarget, CreatorTranscriptExcerpt } from "./creator-transcript-excerpt.js";
-import { formatMediaFacts, formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
+import { formatClock, formatClockEnd, formatMediaFacts } from "./creator-workspace-presentation.js";
 
 export type TranscriptState =
   | Readonly<{ status: "idle" }>
@@ -139,8 +139,8 @@ export function TranscriptSurface({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">
-        {asset.displayName} · {state.page.artifact.detectedLanguage} · {state.page.artifact.modelVersion}
-        {state.page.artifact.isDefault ? " · DEFAULT" : ""}
+        {asset.displayName} · {state.page.artifact.detectedLanguage.toUpperCase()} ·{" "}
+        {state.page.artifact.isDefault ? "CREATOR DEFAULT" : "ALTERNATE TRANSCRIPT"}
       </Text>
       {asset.artifacts
         .filter(
@@ -162,7 +162,7 @@ export function TranscriptSurface({
       {state.corrections.map((correction) => (
         <Stack key={correction.id} spacing="compact">
           <Text tone="eyebrow">
-            {formatTime(correction.sourceRange.start)} → {formatTimeEnd(correction.sourceRange)} · r
+            {formatClock(correction.sourceRange.start)} → {formatClockEnd(correction.sourceRange)} · r
             {correction.revision}
           </Text>
           <Text>

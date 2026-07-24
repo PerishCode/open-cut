@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
-import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
+import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 type InsertPhase = "idle" | "saving" | "error" | "conflict";
@@ -197,7 +197,7 @@ export function CreatorTranscriptExcerpt({
       {segments.map((segment, segmentIndex) => (
         <Stack key={segment.id} spacing="compact">
           <Text tone="eyebrow">
-            {formatTime(segment.sourceRange.start)} → {formatTimeEnd(segment.sourceRange)}
+            {formatClock(segment.sourceRange.start)} → {formatClockEnd(segment.sourceRange)}
           </Text>
           <TokenSelection
             disabled={phase === "saving" || phase === "conflict"}
@@ -243,6 +243,7 @@ export function CreatorTranscriptExcerpt({
         disabled={
           phase === "saving" || !evidenceResult.evidence || !usableTarget || asset.acceptedFingerprint === undefined
         }
+        variant="primary"
         onPress={() => void commit()}
       >
         {phase === "saving" ? "Inserting excerpt…" : "Insert excerpt"}
@@ -271,7 +272,7 @@ function EvidenceSummary({
 }: Readonly<{ evidence: CreatorSourceExcerptEvidence; target?: CreatorExcerptTarget }>) {
   return (
     <Status state={target ? "ready" : "pending"}>
-      {formatTime(evidence.sourceRange.start)} → {formatTimeEnd(evidence.sourceRange)} · {evidence.segmentIds.length}
+      {formatClock(evidence.sourceRange.start)} → {formatClockEnd(evidence.sourceRange)} · {evidence.segmentIds.length}
       {" segments · "}
       {evidence.correctionRevisions.length} corrections · {target?.anchor.label ?? "Story insertion point not set"}
     </Status>
