@@ -40,6 +40,7 @@ describe("CreatorVersions", () => {
     );
 
     renderVersions();
+    expect(screen.getByText("Lightweight before Agent turns · named versions never copy Source media.")).toBeTruthy();
     expect(await screen.findByText("Project created")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Version name"), { target: { value: " Approved assembly " } });
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));

@@ -123,10 +123,35 @@ its transient CDP port by hand:
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --screenshot .tmp/ui-audit.png
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --snapshot --match Viewer
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --action click --role tab --name Streams --watch-errors 250ms \
+  --snapshot --match Source
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --eval 'document.body?.innerText'
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --set-file .tmp/fixture.webm
 ```
+
+`--snapshot` reads the browser accessibility tree plus generic renderer
+geometry, focus, overflow, scroll, clipping, and disabled-control state without
+starting a second browser. Its node sets are bounded; `--match` applies a
+case-insensitive role/name filter while retaining the full-page summary. Combine
+snapshot, eval, and screenshot flags when one settled renderer state should
+produce all three forms of evidence.
+
+`--action click` resolves one exact accessible role/name pair, rejects missing,
+ambiguous, ignored, disabled, or layout-less targets, dispatches viewport CDP
+mouse input, and waits for two animation frames before later snapshot or
+screenshot flags run. The receipt records the resolved target bounds and click
+point without exposing a reusable stale node reference.
+
+`--watch-errors` opens a bounded 50 ms–30 s observation window around the other
+inspect operations and reports renderer exceptions, console errors/assertions,
+and Chromium log errors. Enabling the CDP domains may replay retained console
+entries, so inspect drains that startup history before opening the window.
+Collection stays on the existing inspect connection, retains at most 512 raw
+events and 100 normalized errors, and installs no persistent page observer.
 
 `--set-file` accepts only a non-empty regular file, reports the exact attached
 byte size, and targets the first enabled file input. It is a generic renderer

@@ -19,11 +19,20 @@ import (
 // Screenshot payloads arrive base64-encoded inside one JSON message, so the
 // bound must hold a full-window retina capture, not just DOM projections.
 const maximumCDPResponseBytes = 16 << 20
+const maximumPendingCDPEvents = 512
 
 type CDPClient struct {
 	connection *websocket.Conn
 	writes     sync.Mutex
 	identifier atomic.Int64
+	events     sync.Mutex
+	pending    []CDPEvent
+	dropped    int
+}
+
+type CDPEvent struct {
+	Method string
+	Params json.RawMessage
 }
 
 func (client *CDPClient) writeJSON(value any) error {
@@ -40,10 +49,39 @@ type cdpTarget struct {
 type cdpResponse struct {
 	ID     int64           `json:"id"`
 	Result json.RawMessage `json:"result"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
 	Error  *struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+}
+
+func (client *CDPClient) queueEvent(event CDPEvent) {
+	if event.Method == "" {
+		return
+	}
+	client.events.Lock()
+	defer client.events.Unlock()
+	if len(client.pending) == maximumPendingCDPEvents {
+		client.pending = client.pending[1:]
+		client.dropped++
+	}
+	event.Params = append(json.RawMessage(nil), event.Params...)
+	client.pending = append(client.pending, event)
+}
+
+func (client *CDPClient) DrainEvents() ([]CDPEvent, int) {
+	if client == nil {
+		return nil, 0
+	}
+	client.events.Lock()
+	defer client.events.Unlock()
+	events := append([]CDPEvent(nil), client.pending...)
+	dropped := client.dropped
+	client.pending = nil
+	client.dropped = 0
+	return events, dropped
 }
 
 func ConnectCreatorCDP(ctx context.Context, endpoint string) (*CDPClient, error) {
@@ -217,7 +255,14 @@ func (client *CDPClient) Call(ctx context.Context, method string, parameters any
 			return fmt.Errorf("Creator CDP response exceeded its limit")
 		}
 		var response cdpResponse
-		if json.Unmarshal(body, &response) != nil || response.ID != id {
+		if json.Unmarshal(body, &response) != nil {
+			continue
+		}
+		if response.Method != "" {
+			client.queueEvent(CDPEvent{Method: response.Method, Params: response.Params})
+			continue
+		}
+		if response.ID != id {
 			continue
 		}
 		if response.Error != nil {

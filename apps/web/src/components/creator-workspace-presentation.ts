@@ -87,20 +87,29 @@ export function narrativeNodeText(node: NarrativeNode): string {
 export function narrativeNodeLabel(node: NarrativeNode): string {
   switch (node.kind) {
     case "section":
-      return `SECTION · ${node.section.language} · r${node.section.revision}`;
+      return `SECTION · ${formatLanguageLabel(node.section.language)} · r${node.section.revision}`;
     case "authored-text":
-      return `${node.authoredText.purpose.toUpperCase()} · ${node.authoredText.language} · r${node.authoredText.revision}`;
+      return `${node.authoredText.purpose.toUpperCase()} · ${formatLanguageLabel(node.authoredText.language)} · r${
+        node.authoredText.revision
+      }`;
     case "source-excerpt": {
       const range = node.sourceExcerpt.sourceRange;
-      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatTime(range.start)} → ${(
-        Number(range.start.value) / range.start.scale + Number(range.duration.value) / range.duration.scale
-      ).toFixed(2)} · r${node.sourceExcerpt.revision}`;
+      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatClock(range.start)} → ${formatClockEnd(
+        range,
+      )} · r${node.sourceExcerpt.revision}`;
     }
     case "visual-intent":
-      return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${node.visualIntent.language} · r${node.visualIntent.revision}`;
+      return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${formatLanguageLabel(
+        node.visualIntent.language,
+      )} · r${node.visualIntent.revision}`;
     case "note":
-      return `NOTE · ${node.note.language} · r${node.note.revision}`;
+      return `NOTE · ${formatLanguageLabel(node.note.language)} · r${node.note.revision}`;
   }
+}
+
+export function formatLanguageLabel(language: string): string {
+  const normalized = language.trim();
+  return normalized === "" || normalized.toLowerCase() === "und" ? "AUTO" : normalized.toUpperCase();
 }
 
 export function formatTime(value: { value: string; scale: number }): string {
@@ -119,6 +128,22 @@ export function formatTimeEnd(range: {
 export function formatClock(value: { value: string; scale: number }): string {
   const scale = BigInt(value.scale);
   const numerator = BigInt(value.value);
+  return formatClockParts(numerator, scale);
+}
+
+export function formatClockEnd(range: {
+  start: { value: string; scale: number };
+  duration: { value: string; scale: number };
+}): string {
+  const startScale = BigInt(range.start.scale);
+  const durationScale = BigInt(range.duration.scale);
+  return formatClockParts(
+    BigInt(range.start.value) * durationScale + BigInt(range.duration.value) * startScale,
+    startScale * durationScale,
+  );
+}
+
+function formatClockParts(numerator: bigint, scale: bigint): string {
   const negative = numerator < 0n;
   const absolute = negative ? -numerator : numerator;
   const hundredths = (absolute * 100n + scale / 2n) / scale;

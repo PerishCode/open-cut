@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@open-cut/components";
+import { Button, Stack, Status, Text } from "@open-cut/components";
 import type { ProductResource, ProductResourceSnapshot } from "@open-cut/contracts";
 import { useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useState } from "react";
@@ -79,15 +79,15 @@ export function ProductResources() {
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">OFFLINE RESOURCES</Text>
-      {state.status === "loading" ? <Text>Checking local model resources…</Text> : null}
+      {state.status === "loading" ? <Status state="pending">Checking offline resources</Status> : null}
       {state.status === "unavailable" ? (
-        <Stack spacing="compact">
-          <Text>Local resource state is unavailable.</Text>
-          <Button onPress={() => void load()}>Retry resource check</Button>
-        </Stack>
+        <>
+          <Status state="unavailable">Could not check offline resources</Status>
+          <Button onPress={() => void load()}>Check again</Button>
+        </>
       ) : null}
       {state.status === "ready" && state.snapshot.resources.length === 0 ? (
-        <Text>No optional local resources are declared by this build.</Text>
+        <Text>No optional offline resources for this build.</Text>
       ) : null}
       {state.status === "ready"
         ? state.snapshot.resources.map((resource) => (
@@ -115,15 +115,13 @@ function ProductResourceRow({
   const canAcquire = resource.state === "not-acquired" || resource.state === "failed" || resource.state === "cancelled";
   return (
     <Stack spacing="compact">
-      <Text>Multilingual local transcription</Text>
-      <Text tone="eyebrow">
-        {resource.version} · {formatBytes(resource.byteSize)} · {resourceStatus(resource)}
-      </Text>
-      {resource.failureCode ? <Text>Acquisition failed · {resource.failureCode}</Text> : null}
+      <Text>Multilingual transcription</Text>
+      <Status state={resourceStatusState(resource)}>{resourceStatus(resource)}</Status>
+      <Text tone="eyebrow">{formatBytes(resource.byteSize)}</Text>
       {canAcquire ? (
         <Button disabled={acquiring} onPress={onAcquire}>
           {acquiring
-            ? "Authorizing…"
+            ? "Starting download…"
             : resource.state === "not-acquired"
               ? "Download for offline use"
               : "Retry download"}
@@ -136,18 +134,24 @@ function ProductResourceRow({
 function resourceStatus(resource: ProductResource): string {
   switch (resource.state) {
     case "not-acquired":
-      return "not downloaded";
+      return "Not downloaded";
     case "queued":
-      return "download queued";
+      return "Waiting to download";
     case "acquiring":
-      return `downloading ${Math.floor(resource.progressBasisPoints / 100)}%`;
+      return `Downloading · ${Math.floor(resource.progressBasisPoints / 100)}%`;
     case "ready":
-      return "ready offline";
+      return "Ready offline";
     case "failed":
-      return "download failed";
+      return "Download failed";
     case "cancelled":
-      return "download cancelled";
+      return "Download stopped";
   }
+}
+
+function resourceStatusState(resource: ProductResource): "ready" | "pending" | "unavailable" {
+  if (resource.state === "ready") return "ready";
+  if (resource.state === "queued" || resource.state === "acquiring") return "pending";
+  return "unavailable";
 }
 
 function formatBytes(value: string): string {

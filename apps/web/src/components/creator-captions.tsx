@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { CreatorCaptionController, type CreatorCaptionSource } from "../lib/creator-caption-controller.js";
-import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
+import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 
@@ -74,38 +74,39 @@ export function CreatorCaptions({
     snapshot.selectedTrack !== undefined &&
     !busy;
 
+  if (!snapshot.source) {
+    return <Text tone="eyebrow">STORY CAPTION DRAFT · CHOOSE CAPTIONS IN STORY</Text>;
+  }
+
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">CAPTION DRAFT · STORY EXCERPT</Text>
       <Text>Choose one exact Story excerpt, one committed Clip instance, and one Caption Track.</Text>
-      {!snapshot.source ? <Text>Select “Create captions” on an excerpt in Story to begin.</Text> : null}
-      {snapshot.source ? (
-        <Stack spacing="compact">
-          <Text tone="eyebrow">
-            SOURCE · {snapshot.source.evidenceStatus.toUpperCase()} · r{snapshot.source.sourceExcerpt.revision}
-          </Text>
-          <Text>{snapshot.source.sourceExcerpt.effectiveText}</Text>
-          {snapshot.source.evidenceStatus === "stale" ? (
-            <Status state="unavailable">Excerpt evidence is stale · repair it before creating captions</Status>
-          ) : null}
-        </Stack>
-      ) : null}
+      <Stack spacing="compact">
+        <Text tone="eyebrow">
+          SOURCE · {snapshot.source.evidenceStatus.toUpperCase()} · r{snapshot.source.sourceExcerpt.revision}
+        </Text>
+        <Text>{snapshot.source.sourceExcerpt.effectiveText}</Text>
+        {snapshot.source.evidenceStatus === "stale" ? (
+          <Status state="unavailable">Excerpt evidence is stale · repair it before creating captions</Status>
+        ) : null}
+      </Stack>
 
-      {snapshot.source && snapshot.clipCandidates.length > 1 ? (
+      {snapshot.clipCandidates.length > 1 ? (
         <Text>Multiple compatible Clips · recommendation is informational; choose one explicitly.</Text>
       ) : null}
       {snapshot.clipCandidates.map((candidate) => (
         <Button disabled={busy} key={candidate.clip.id} onPress={() => controller.selectClip(candidate.clip.id)}>
           {candidate.clip.id === snapshot.selectedClip?.id ? "✓ " : ""}Choose Clip {candidate.clip.id} ·{" "}
-          {candidateLabel(candidate.recommendation)} · {formatTime(candidate.clip.timelineRange.start)} →{" "}
-          {formatTimeEnd(candidate.clip.timelineRange)}
+          {candidateLabel(candidate.recommendation)} · {formatClock(candidate.clip.timelineRange.start)} →{" "}
+          {formatClockEnd(candidate.clip.timelineRange)}
         </Button>
       ))}
-      {snapshot.source && snapshot.clipCandidates.length === 0 ? (
+      {snapshot.clipCandidates.length === 0 ? (
         <Text>No enabled committed Clip contains this excerpt range.</Text>
       ) : null}
 
-      {snapshot.source && snapshot.trackCandidates.length > 1 ? (
+      {snapshot.trackCandidates.length > 1 ? (
         <Text>Multiple Caption Tracks · choose the destination explicitly.</Text>
       ) : null}
       {snapshot.trackCandidates.map((track) => (
@@ -113,7 +114,7 @@ export function CreatorCaptions({
           {track.id === snapshot.selectedTrack?.id ? "✓ " : ""}Choose Caption Track · {track.label} · r{track.revision}
         </Button>
       ))}
-      {snapshot.source && snapshot.trackCandidates.length === 0 ? <Text>No Caption Track is available.</Text> : null}
+      {snapshot.trackCandidates.length === 0 ? <Text>No Caption Track is available.</Text> : null}
 
       <Button disabled={!canPreview} onPress={() => void preview()}>
         Preview readable captions
@@ -131,8 +132,8 @@ export function CreatorCaptions({
           {snapshot.review.cues.map((cue) => (
             <Stack key={cue.ordinal} spacing="compact">
               <Text tone="eyebrow">
-                CUE {String(cue.ordinal).padStart(2, "0")} · {formatTime(cue.timelineRange.start)} →{" "}
-                {formatTimeEnd(cue.timelineRange)}
+                CUE {String(cue.ordinal).padStart(2, "0")} · {formatClock(cue.timelineRange.start)} →{" "}
+                {formatClockEnd(cue.timelineRange)}
               </Text>
               <Text>{cue.text}</Text>
             </Stack>

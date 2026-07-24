@@ -1,6 +1,6 @@
-import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Tabs, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
-import { type KeyboardEvent, type ReactNode, useCallback, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
@@ -21,12 +21,15 @@ export function SourceViewerLayout({
 }) {
   const video = asset?.facts?.streams.find((stream) => stream.id === videoStreamId)?.descriptor.video;
   const dimensions = video ? `${video.width} × ${video.height}` : asset?.facts ? "Audio source" : "Preparing source";
+  const sourceHint = asset ? `${asset.displayName} · ${dimensions}` : dimensions;
   return (
     <EditorSplit
       primary={
         <Stack spacing="compact">
-          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={dimensions}>
-            <Button onPress={onBack}>Back to Sequence</Button>
+          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={sourceHint}>
+            <Button variant="quiet" onPress={onBack}>
+              Back to Sequence
+            </Button>
           </ControlStrip>
           {preview}
         </Stack>
@@ -199,10 +202,16 @@ export function SourcePreviewSurface({
   videoStreamId: DurableID | undefined;
 }) {
   const [actionError, setActionError] = useState<Error>();
+  const [sourcePanel, setSourcePanel] = useState<"range" | "streams">(() =>
+    videoStreamId || audioStreamId ? "range" : "streams",
+  );
   const attachActuator = useCallback(
     (actuator: Parameters<SourceViewerController["attachActuator"]>[0]) => controller.attachActuator(actuator),
     [controller],
   );
+  useEffect(() => {
+    if (!videoStreamId && !audioStreamId) setSourcePanel("streams");
+  }, [asset?.id, audioStreamId, videoStreamId]);
   if (!asset) return <Text>Open an Asset explicitly to start a Source Viewer session.</Text>;
   const streams = asset.facts?.streams ?? [];
   const videoStreams = streams.filter((stream) => stream.descriptor.mediaType === "video");
@@ -213,13 +222,38 @@ export function SourcePreviewSurface({
       .then(action)
       .catch((value) => setActionError(value instanceof Error ? value : new Error(String(value))));
   };
+  const onSourceRangeKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    const action =
+      event.key === "ArrowLeft" && !event.shiftKey
+        ? () => controller.step("previous")
+        : event.key === "ArrowRight" && !event.shiftKey
+          ? () => controller.step("next")
+          : key === "i"
+            ? () => controller.captureIn()
+            : key === "o"
+              ? () => controller.captureOut()
+              : undefined;
+    if (!action) return;
+    event.preventDefault();
+    run(action);
+  };
   const preparation = snapshot.preparation;
   const lease = preparation?.lease;
   const range = controller.selectedRange();
   const canUseFullSource = controller.hasFiniteSelectedCoverage();
-  return (
+  const rangePanel = (
     <Stack spacing="compact">
-      <Text>{asset.displayName}</Text>
       {!videoStreamId && !audioStreamId ? <Text>Select at least one explicit SourceStream.</Text> : null}
       {snapshot.status === "preparing" ? (
         <Text>
@@ -249,11 +283,13 @@ export function SourcePreviewSurface({
             source={lease.sameOriginUrl}
           />
           <ControlStrip
-            hint={`IN ${formatExact(snapshot.marks.in)} · OUT ${formatExact(snapshot.marks.out)}${
-              range ? ` · ${formatExact(range.duration)}` : ""
+            hint={`IN ${formatSourceClock(snapshot.marks.in)} · OUT ${formatSourceClock(snapshot.marks.out)}${
+              range ? ` · DUR ${formatSourceClock(range.duration)}` : ""
             }`}
+            keyboardShortcuts="ArrowLeft ArrowRight I O"
             label="Source range controls"
-            summary={`SOURCE ${formatExact(snapshot.playhead)} · PROXY ${formatExact(snapshot.proxyPlayhead)}`}
+            summary={`SOURCE ${formatSourceClock(snapshot.playhead)} · PROXY ${formatSourceClock(snapshot.proxyPlayhead)}`}
+            onKeyDown={onSourceRangeKeyDown}
           >
             <Button onPress={() => run(() => controller.step("previous"))}>Previous boundary</Button>
             <Button onPress={() => run(() => controller.step("next"))}>Next boundary</Button>
@@ -270,14 +306,41 @@ export function SourcePreviewSurface({
             </Button>
           </ControlStrip>
           {!canUseFullSource ? <Text>Full range unavailable; mark In and Out explicitly.</Text> : null}
-          <Text tone="eyebrow">NORMALIZED SOURCE PROXY · {lease.byteLength} BYTES</Text>
         </>
       ) : null}
-      <Text tone="eyebrow">SOURCE TRACKS</Text>
-      <StreamSelection label="VIDEO" onChange={onVideoStreamChange} selected={videoStreamId} streams={videoStreams} />
-      <StreamSelection label="AUDIO" onChange={onAudioStreamChange} selected={audioStreamId} streams={audioStreams} />
       {actionError ? <Text>{actionError.message}</Text> : null}
     </Stack>
+  );
+  return (
+    <Tabs
+      activeTabId={sourcePanel}
+      density="compact"
+      label="Source viewer panels"
+      tabs={[
+        { id: "range", label: "Range", content: rangePanel },
+        {
+          id: "streams",
+          label: "Streams",
+          content: (
+            <Stack spacing="compact">
+              <StreamSelection
+                label="VIDEO"
+                onChange={onVideoStreamChange}
+                selected={videoStreamId}
+                streams={videoStreams}
+              />
+              <StreamSelection
+                label="AUDIO"
+                onChange={onAudioStreamChange}
+                selected={audioStreamId}
+                streams={audioStreams}
+              />
+            </Stack>
+          ),
+        },
+      ]}
+      onTabChange={(tabId) => setSourcePanel(tabId === "streams" ? "streams" : "range")}
+    />
   );
 }
 
@@ -305,7 +368,7 @@ function StreamSelection({
         Clear
       </Button>
       {streams.map((stream) => (
-        <Button key={stream.id} onPress={() => onChange(stream.id)}>
+        <Button key={stream.id} pressed={selected === stream.id} onPress={() => onChange(stream.id)}>
           {selected === stream.id ? "Selected · " : ""}#{stream.descriptor.index} {stream.descriptor.codec}
           {stream.descriptor.language ? ` · ${stream.descriptor.language}` : ""}
           {stream.descriptor.dispositions.includes("default") ? " · default disposition" : ""}
@@ -316,8 +379,8 @@ function StreamSelection({
   );
 }
 
-function formatExact(value: { value: string; scale: number } | undefined): string {
-  return value ? `${value.value}/${value.scale}s` : "—";
+function formatSourceClock(value: { value: string; scale: number } | undefined): string {
+  return value ? formatClock(value) : "—";
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {

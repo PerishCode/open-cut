@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@open-cut/components";
+import { Button, Stack, Status, Text } from "@open-cut/components";
 import type {
   ProductFeatureAvailability,
   ProductFeatureUnavailableReason,
@@ -11,27 +11,29 @@ export type ProductAvailabilityState =
   | Readonly<{ status: "ready"; snapshot: ProductStatusSnapshot }>;
 
 export function ProductAvailability({ state, onRetry }: { state: ProductAvailabilityState; onRetry: () => void }) {
-  if (state.status === "loading") return <Text>Checking local creation features…</Text>;
-  if (state.status === "unavailable") {
-    return (
-      <Stack spacing="compact">
-        <Text>Local creation feature status is unavailable.</Text>
-        <Button onPress={onRetry}>Retry feature check</Button>
-      </Stack>
-    );
-  }
-  const unavailable = state.snapshot.features.filter((feature) => feature.state === "unavailable");
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">LOCAL CREATION FEATURES</Text>
-      {unavailable.length === 0 ? <Text>Local creation features are ready.</Text> : null}
-      {unavailable.map((feature) => (
-        <Text key={feature.feature}>
-          {featureLabel(feature)} · {reasonLabel(feature)}
-        </Text>
-      ))}
+      {state.status === "loading" ? <Status state="pending">Checking local features</Status> : null}
+      {state.status === "unavailable" ? (
+        <>
+          <Status state="unavailable">Could not check local features</Status>
+          <Button onPress={onRetry}>Check again</Button>
+        </>
+      ) : null}
+      {state.status === "ready" ? <FeatureStatuses snapshot={state.snapshot} /> : null}
     </Stack>
   );
+}
+
+function FeatureStatuses({ snapshot }: { snapshot: ProductStatusSnapshot }) {
+  const unavailable = snapshot.features.filter((feature) => feature.state === "unavailable");
+  if (unavailable.length === 0) return <Status state="ready">Local preview, export, and transcription ready</Status>;
+  return unavailable.map((feature) => (
+    <Status key={feature.feature} state="unavailable">
+      {featureLabel(feature)} · {reasonLabel(feature)}
+    </Status>
+  ));
 }
 
 function featureLabel(feature: ProductFeatureAvailability): string {
@@ -53,23 +55,23 @@ function reasonLabel(feature: ProductFeatureAvailability): string {
   if (feature.feature === "local-transcription") {
     switch (feature.reason) {
       case "not-installed":
-        return "engine or model catalog is not installed";
+        return "Engine and language model not installed";
       case "not-qualified":
-        return "not qualified for this build";
+        return "Not included in this build";
       case "invalid-closure":
-        return "installed transcription closure is invalid";
+        return "Local transcription files need repair";
       default:
-        return "unavailable";
+        return "Unavailable";
     }
   }
   switch (feature.reason as ProductFeatureUnavailableReason | undefined) {
     case "not-installed":
-      return "media tools are not installed";
+      return "Local media tools not installed";
     case "not-qualified":
-      return "not qualified for this build";
+      return "Not included in this build";
     case "invalid-closure":
-      return "installed media closure is invalid";
+      return "Local media tools need repair";
     default:
-      return "unavailable";
+      return "Unavailable";
   }
 }

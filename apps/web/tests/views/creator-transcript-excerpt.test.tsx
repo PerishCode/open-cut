@@ -64,7 +64,7 @@ describe("CreatorTranscriptExcerpt", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Select token 1 · Hello" }));
     fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
-    expect(screen.getByText(/0\.00 → 2\.00 · 1 segments · 1 corrections · after opening/)).toBeTruthy();
+    expect(screen.getByText(/00:00\.00 → 00:02\.00 · 1 segments · 1 corrections · after opening/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
     fireEvent.click(await screen.findByRole("button", { name: "Retry identical excerpt insertion" }));
 

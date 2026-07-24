@@ -1,5 +1,7 @@
 .tabs {
   display: grid;
+  overflow: hidden;
+  height: 100%;
   min-height: 0;
   grid-template-rows: auto 1fr;
   gap: 12px;
@@ -43,4 +45,14 @@
 .tabPanel {
   min-height: 0;
   overflow: auto;
+}
+
+.tabsCompact {
+  gap: 4px;
+}
+
+.tabsCompact .tab {
+  min-height: 25px;
+  padding: 5px 8px 6px;
+  font-size: 10px;
 }

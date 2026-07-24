@@ -523,8 +523,8 @@ describe("HomeView", () => {
     expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
     expect(await screen.findByText("The pinned Sequence is empty.")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "System" }));
-    expect(await screen.findByText("Local transcription · not qualified for this build")).toBeTruthy();
-    expect(await screen.findByText("No optional local resources are declared by this build.")).toBeTruthy();
+    expect(await screen.findByText("Local transcription · Not included in this build")).toBeTruthy();
+    expect(await screen.findByText("No optional offline resources for this build.")).toBeTruthy();
     expect(screen.getByText("Main Sequence · pinned r2")).toBeTruthy();
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
@@ -540,11 +540,11 @@ describe("HomeView", () => {
     expect(screen.getByRole("tab", { name: "Transcript" }).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("A precise opening line.")).toBeTruthy();
     expect(screen.getByText("A precise opening line. → A specific opening line.")).toBeTruthy();
-    expect(screen.getByText("opening.mov · en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
+    expect(screen.getByText("opening.mov · EN · CREATOR DEFAULT")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Inspect transcript 1" }));
     expect(await screen.findByText("An alternate recognition.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make this the Creator default" }));
-    expect(await screen.findByText("opening.mov · en · whisper-small@c521a4b · DEFAULT")).toBeTruthy();
+    expect(await screen.findByText("opening.mov · EN · CREATOR DEFAULT")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select token 1 · An alternate recognition." }));
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
     expect((await screen.findByRole("tab", { name: "Story" })).getAttribute("aria-selected")).toBe("true");
@@ -572,7 +572,10 @@ describe("HomeView", () => {
     expect(sequenceRequests).toBe(2);
     fireEvent.click(screen.getByRole("tab", { name: "System" }));
     expect(await screen.findByRole("button", { name: "Approve scope upgrade" })).toBeTruthy();
-    expect(screen.getByText("Requested scopes: activity:read, project:read, run:write")).toBeTruthy();
+    expect(screen.getByText("CLI access active")).toBeTruthy();
+    expect(screen.getByText("Can view activity and projects")).toBeTruthy();
+    expect(screen.getByText("Requested access · Can change Agent runs · Can view activity and projects")).toBeTruthy();
+    expect(screen.queryByText(/sha256:/)).toBeNull();
     expect(screen.getByRole("main", { name: "Creator workspace" })).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/projects",

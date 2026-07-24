@@ -191,7 +191,7 @@ export function CreatorExport({
       <ControlStrip
         hint={
           hasContent
-            ? "WEBM · VP9 / OPUS · CHOOSE DESTINATION AFTER RENDER"
+            ? "DESTINATION AFTER RENDER · WEBM · VP9 / OPUS"
             : "Add a clip or caption to the Sequence before exporting."
         }
         label="Next export"

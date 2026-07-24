@@ -7,7 +7,10 @@ export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
 export type ButtonProps = {
   children: ReactNode;
   disabled?: boolean;
+  /** Optional accessible name when compact visible copy needs more context. */
+  label?: string;
   onPress(): void;
+  pressed?: boolean;
   variant?: ButtonVariant;
 };
 
@@ -18,9 +21,16 @@ const variantClass: Record<ButtonVariant, string> = {
   secondary: styles.buttonSecondary ?? "",
 };
 
-export function Button({ children, disabled = false, onPress, variant = "secondary" }: ButtonProps) {
+export function Button({ children, disabled = false, label, onPress, pressed, variant = "secondary" }: ButtonProps) {
   return (
-    <button className={`${styles.button} ${variantClass[variant]}`} disabled={disabled} type="button" onClick={onPress}>
+    <button
+      aria-label={label}
+      aria-pressed={pressed}
+      className={`${styles.button} ${variantClass[variant]}`}
+      disabled={disabled}
+      type="button"
+      onClick={onPress}
+    >
       {children}
     </button>
   );

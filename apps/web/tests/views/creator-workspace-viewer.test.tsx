@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  type Asset,
   digestString,
   durableID,
   int64String,
@@ -11,8 +12,9 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SequencePreviewSurface } from "../../src/components/creator-workspace-viewer.js";
+import { SequencePreviewSurface, SourcePreviewSurface } from "../../src/components/creator-workspace-viewer.js";
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../../src/lib/sequence-viewer-controller.js";
+import type { SourceViewerController, SourceViewerSnapshot } from "../../src/lib/source-viewer-controller.js";
 
 const projectId = durableID("018f0a60-7b80-7a01-8000-000000000001");
 const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000002");
@@ -77,6 +79,72 @@ describe("SequencePreviewSurface", () => {
   });
 });
 
+describe("SourcePreviewSurface", () => {
+  afterEach(() => cleanup());
+
+  it("keeps native scrubbing while adding focus-owned boundary and mark keys", async () => {
+    const controller = sourceController();
+    render(
+      <SourcePreviewSurface
+        asset={sourceAsset()}
+        audioStreamId={undefined}
+        controller={controller}
+        onAudioStreamChange={() => undefined}
+        onVideoStreamChange={() => undefined}
+        snapshot={sourceReadySnapshot()}
+        videoStreamId={resourceId}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Range" }).getAttribute("aria-selected")).toBe("true");
+    const player = screen.getByLabelText("interview.webm source preview");
+    const controls = screen.getByRole("region", { name: "Source range controls" });
+    expect(player.hasAttribute("controls")).toBe(true);
+    expect(controls.getAttribute("aria-keyshortcuts")).toBe("ArrowLeft ArrowRight I O");
+    expect(controls.tabIndex).toBe(0);
+    expect(within(controls).getByText("SOURCE 00:00.00 · PROXY 00:00.00")).toBeTruthy();
+    expect(within(controls).getByText("IN — · OUT —")).toBeTruthy();
+
+    fireEvent.keyDown(controls, { key: "ArrowLeft" });
+    fireEvent.keyDown(controls, { key: "ArrowRight" });
+    fireEvent.keyDown(controls, { key: "i" });
+    fireEvent.keyDown(controls, { key: "O", shiftKey: true });
+    await waitFor(() => expect(controller.step).toHaveBeenCalledTimes(2));
+    expect(controller.step).toHaveBeenNthCalledWith(1, "previous");
+    expect(controller.step).toHaveBeenNthCalledWith(2, "next");
+    expect(controller.captureIn).toHaveBeenCalledTimes(1);
+    expect(controller.captureOut).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(within(controls).getByRole("button", { name: "Mark In" }), { key: "i" });
+    expect(controller.captureIn).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Streams" }));
+    expect(screen.getByRole("tab", { name: "Streams" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("region", { name: "VIDEO source stream" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "AUDIO source stream" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Source range controls" })).toBeNull();
+  });
+
+  it("opens stream selection when the source has no explicit streams selected", () => {
+    render(
+      <SourcePreviewSurface
+        asset={sourceAsset()}
+        audioStreamId={undefined}
+        controller={sourceController()}
+        onAudioStreamChange={() => undefined}
+        onVideoStreamChange={() => undefined}
+        snapshot={sourceReadySnapshot()}
+        videoStreamId={undefined}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Streams" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("region", { name: "VIDEO source stream" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "AUDIO source stream" })).toBeTruthy();
+    expect(screen.queryByLabelText("interview.webm source preview")).toBeNull();
+  });
+});
+
 function sequenceController() {
   return {
     attachActuator: vi.fn(),
@@ -92,6 +160,60 @@ function sequenceController() {
     stepFrame: ReturnType<typeof vi.fn>;
     togglePlayback: ReturnType<typeof vi.fn>;
   };
+}
+
+function sourceController() {
+  return {
+    attachActuator: vi.fn(),
+    captureIn: vi.fn(async () => undefined),
+    captureOut: vi.fn(async () => undefined),
+    clearMarks: vi.fn(),
+    hasFiniteSelectedCoverage: vi.fn(() => true),
+    selectedRange: vi.fn(() => undefined),
+    setPlaying: vi.fn(),
+    settleActuator: vi.fn(async () => undefined),
+    step: vi.fn(async () => undefined),
+    useFullSelectedSource: vi.fn(),
+    wake: vi.fn(),
+  } as unknown as SourceViewerController & {
+    captureIn: ReturnType<typeof vi.fn>;
+    captureOut: ReturnType<typeof vi.fn>;
+    step: ReturnType<typeof vi.fn>;
+  };
+}
+
+function sourceAsset(): Asset {
+  return {
+    id: resourceId,
+    revision: revisionString("1"),
+    projectId,
+    displayName: "interview.webm",
+    importMode: "referenced",
+    acceptedFingerprint: digestString(`sha256:${"d".repeat(64)}`),
+    tombstoned: false,
+    availability: "online",
+    artifacts: [],
+    jobs: [],
+    facts: { container: "matroska", containerAliases: ["webm"], streams: [] },
+  };
+}
+
+function sourceReadySnapshot(): SourceViewerSnapshot {
+  return {
+    status: "ready",
+    marks: {},
+    playback: "paused",
+    playhead: { value: int64String("0"), scale: 1 },
+    proxyPlayhead: { value: int64String("0"), scale: 1 },
+    preparation: {
+      status: "ready",
+      lease: {
+        mimeType: "video/webm",
+        byteLength: uint64String("4096"),
+        sameOriginUrl: `/api/v1/media/content/oc_source_${"A".repeat(43)}`,
+      },
+    },
+  } as SourceViewerSnapshot;
 }
 
 function readySnapshot(playhead = "8", duration = "9"): SequenceViewerSnapshot {

@@ -11,6 +11,7 @@ import {
 } from "@open-cut/contracts";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatLanguageLabel } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 type SectionPhase = "clean" | "dirty" | "saving" | "saving-dirty" | "conflict" | "error";
@@ -319,7 +320,7 @@ export function CreatorNarrativeSection({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">
-        SECTION · {section.language} · r{section.revision}
+        SECTION · {formatLanguageLabel(section.language)} · r{section.revision}
       </Text>
       <TextField
         disabled={inFlightRef.current && attemptRef.current?.kind !== "title"}
@@ -488,7 +489,7 @@ export function NewNarrativeSection({
   if (!creating) return <Button onPress={() => setCreating(true)}>Add Section</Button>;
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">NEW SECTION · {language}</Text>
+      <Text tone="eyebrow">NEW SECTION · {formatLanguageLabel(language)}</Text>
       <TextField
         disabled={inFlightRef.current}
         focusRequest="new-section"

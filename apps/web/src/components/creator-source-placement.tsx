@@ -235,7 +235,7 @@ export function CreatorSourcePlacement({
       {coverageConflict ? (
         <Text>Marked range falls outside selected A/V coverage. Adjust In/Out or clear the incompatible lane.</Text>
       ) : null}
-      <Button disabled={busy || !canPlace} onPress={() => void place()}>
+      <Button disabled={busy || !canPlace} variant="primary" onPress={() => void place()}>
         {busy ? "Placing…" : destination ? `Place at ${formatClock(destination.playhead)}` : "Place source"}
       </Button>
       {pendingApply ? (
@@ -276,7 +276,7 @@ function TrackSelection({
         Clear
       </Button>
       {tracks.map((track) => (
-        <Button key={track.id} onPress={() => onChange(track.id)}>
+        <Button key={track.id} pressed={selected === track.id} onPress={() => onChange(track.id)}>
           {selected === track.id ? "Selected · " : ""}
           {track.label} · r{track.revision}
         </Button>

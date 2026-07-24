@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import styles from "./tabs.module.css";
 
@@ -11,18 +11,23 @@ export type TabDefinition = {
 export type TabsProps = {
   label: string;
   tabs: TabDefinition[];
+  density?: "default" | "compact";
   initialTabId?: string;
   activeTabId?: string;
   onTabChange?(tabId: string): void;
 };
 
-export function Tabs({ activeTabId, label, onTabChange, tabs, initialTabId }: TabsProps) {
+export function Tabs({ activeTabId, density = "default", label, onTabChange, tabs, initialTabId }: TabsProps) {
   const [internalActiveId, setInternalActiveId] = useState(initialTabId ?? tabs[0]?.id);
   const activeId = activeTabId ?? internalActiveId;
   const active = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
+  const activePanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activePanelRef.current) activePanelRef.current.scrollTop = 0;
+  }, [active?.id]);
   if (!active) return null;
   return (
-    <div className={styles.tabs}>
+    <div className={density === "compact" ? `${styles.tabs} ${styles.tabsCompact}` : styles.tabs}>
       <div aria-label={label} className={styles.tabList} role="tablist">
         {tabs.map((tab) => (
           <button
@@ -46,6 +51,7 @@ export function Tabs({ activeTabId, label, onTabChange, tabs, initialTabId }: Ta
         aria-labelledby={`tab-${active.id}`}
         className={styles.tabPanel}
         id={`tab-panel-${active.id}`}
+        ref={activePanelRef}
         role="tabpanel"
       >
         {active.content}

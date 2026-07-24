@@ -14,6 +14,7 @@ import {
   ResourceCard,
   Status,
   Surface,
+  Tabs,
   TextAreaField,
   TextField,
   TimelineSurface,
@@ -29,10 +30,12 @@ describe("atomic components", () => {
     const onPress = vi.fn();
     render(
       <>
-        <Button variant="primary" onPress={onPress}>
+        <Button label="Commit edit" variant="primary" onPress={onPress}>
           Commit
         </Button>
-        <Button onPress={onPress}>Review</Button>
+        <Button pressed onPress={onPress}>
+          Review
+        </Button>
         <Button variant="quiet" onPress={onPress}>
           Refresh
         </Button>
@@ -44,11 +47,14 @@ describe("atomic components", () => {
 
     const buttons = screen.getAllByRole("button");
     expect(new Set(buttons.map((button) => button.className)).size).toBe(4);
-    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    const commit = screen.getByRole("button", { name: "Commit edit" });
+    expect(commit.textContent).toBe("Commit");
+    fireEvent.click(commit);
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onPress).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("button", { name: "Review" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("provides semantic structure without consumer styling props", () => {
@@ -234,6 +240,30 @@ describe("atomic components", () => {
 
     expect(screen.getByRole("region", { name: "Source preview" }).textContent).toBe("Preview and range");
     expect(screen.getByRole("complementary", { name: "Source placement" }).textContent).toBe("Placement settings");
+  });
+
+  it("offers compact semantic tabs for nested editor modes", () => {
+    render(
+      <Tabs
+        density="compact"
+        initialTabId="range"
+        label="Source viewer panels"
+        tabs={[
+          { id: "range", label: "Range", content: "Source range" },
+          { id: "streams", label: "Streams", content: "Source streams" },
+        ]}
+      />,
+    );
+
+    const range = screen.getByRole("tab", { name: "Range" });
+    const streams = screen.getByRole("tab", { name: "Streams" });
+    expect(range.getAttribute("aria-selected")).toBe("true");
+    const panel = screen.getByRole("tabpanel");
+    panel.scrollTop = 120;
+    fireEvent.click(streams);
+    expect(streams.getAttribute("aria-selected")).toBe("true");
+    expect(panel.textContent).toBe("Source streams");
+    expect(panel.scrollTop).toBe(0);
   });
 
   it("normalizes file selection and drop behind one semantic atom", () => {

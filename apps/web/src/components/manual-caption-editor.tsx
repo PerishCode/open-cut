@@ -1,10 +1,15 @@
-import { Button, Stack, Status, Text, TextAreaField, TextField } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text, TextAreaField, TextField } from "@open-cut/components";
 import { type Caption, type CreatorEditCommit, type DurableID, type Track, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { ManualCaptionController } from "../lib/manual-caption-controller.js";
 import type { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
-import { captionProvenanceLabel, formatTime, formatTimeEnd, scheduleTimer } from "./creator-workspace-presentation.js";
+import {
+  captionProvenanceLabel,
+  formatClock,
+  formatClockEnd,
+  scheduleTimer,
+} from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 
@@ -89,22 +94,34 @@ export function ManualCaptionEditor({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">CAPTIONS · COMMITTED CUES</Text>
-      <Text>Selecting a Caption opens its local editor. Agent @ context remains a separate action.</Text>
-      <Button disabled={busy} onPress={() => controller.beginCreate()}>
-        New manual Caption
-      </Button>
+      <ControlStrip
+        hint={`${snapshot.captions.length} in first 60 seconds`}
+        label="Caption editor actions"
+        summary="COMMITTED CUES"
+      >
+        <Button disabled={busy} label="New manual Caption" onPress={() => controller.beginCreate()}>
+          New caption
+        </Button>
+      </ControlStrip>
       {snapshot.captions.map((caption) => (
         <Stack key={caption.id} spacing="compact">
           <Text tone="eyebrow">
-            {formatTime(caption.range.start)} → {formatTimeEnd(caption.range)} · r{caption.revision} ·{" "}
+            {formatClock(caption.range.start)} → {formatClockEnd(caption.range)} · r{caption.revision} ·{" "}
             {captionProvenanceLabel(caption)}
           </Text>
           <Text>{caption.text}</Text>
-          <Button disabled={busy} onPress={() => controller.selectCaption(caption.id)}>
-            Edit Caption {caption.id}
-          </Button>
-          <Button onPress={() => onContextCaption(caption)}>Use this Caption as @ context</Button>
+          <ControlStrip label={`Caption ${caption.id} actions`}>
+            <Button
+              disabled={busy}
+              label={`Edit Caption ${caption.id}`}
+              onPress={() => controller.selectCaption(caption.id)}
+            >
+              Edit
+            </Button>
+            <Button label="Use this Caption as @ context" onPress={() => onContextCaption(caption)}>
+              @ Agent
+            </Button>
+          </ControlStrip>
         </Stack>
       ))}
       {snapshot.captions.length === 0 ? <Text>No Caption cues in the first 60 seconds.</Text> : null}
@@ -129,8 +146,8 @@ export function ManualCaptionEditor({
           )}
 
           <Text>
-            Viewer playhead · {formatTime(viewer.getSnapshot().playhead)} · capture both boundaries explicitly for a new
-            cue
+            Viewer playhead · {formatClock(viewer.getSnapshot().playhead)} · capture both boundaries explicitly for a
+            new cue
           </Text>
           <Button disabled={busy} onPress={() => controller.captureIn()}>
             Capture In at Viewer playhead
@@ -139,11 +156,11 @@ export function ManualCaptionEditor({
             Capture Out at Viewer playhead
           </Button>
           <Text>
-            In · {draft.inPoint ? formatTime(draft.inPoint) : "not captured"}
+            In · {draft.inPoint ? formatClock(draft.inPoint) : "not captured"}
             {draft.inCaptured ? " · CAPTURED" : " · committed"}
           </Text>
           <Text>
-            Out · {draft.outPoint ? formatTime(draft.outPoint) : "not captured"}
+            Out · {draft.outPoint ? formatClock(draft.outPoint) : "not captured"}
             {draft.outCaptured ? " · CAPTURED" : " · committed"}
           </Text>
           <TextField
