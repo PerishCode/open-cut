@@ -249,7 +249,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const focusReceiptRef = useCallback(
     (ref: CommandReceiptRef): string => {
       const intent = workspaceFocusIntent(ref);
-      if (!intent) return `Receipt reference ${ref.kind} ${ref.id} has no workspace focus adapter.`;
+      if (!intent) return "This receipt cannot be focused in the current workspace.";
       const result = resolveWorkspaceFocus(intent, selectionProjection);
       if (result.assetId) {
         setSelectedAssetId(result.assetId);

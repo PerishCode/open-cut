@@ -258,7 +258,9 @@ export function CreatorTranscriptExcerpt({
           {phase === "saving" ? "Inserting excerpt…" : "Insert excerpt"}
         </Button>
       </ControlStrip>
-      {!asset.acceptedFingerprint ? <Status state="unavailable">Asset fingerprint is not accepted.</Status> : null}
+      {!asset.acceptedFingerprint ? (
+        <Status state="unavailable">Source verification is not ready. Relink or reimport this footage.</Status>
+      ) : null}
       {phase === "error" ? (
         <>
           <Status state="unavailable">Could not confirm the Story insertion.</Status>

@@ -89,6 +89,7 @@ func TestAgentBridgeRuntimePersistsOnlySafeConversationAndPausesAfterCompletion(
 	) error {
 		if !strings.Contains(turn.Prompt, "stable recursive CLI") || !strings.Contains(turn.Prompt, "narrowest operation") ||
 			!strings.Contains(turn.Prompt, "last-resort safety net") || !strings.Contains(turn.Prompt, "sequence-range") ||
+			!strings.Contains(turn.Prompt, "do not include durable IDs") ||
 			!strings.Contains(turn.RecoveryPrompt, "Write a concise opening") || turn.NativeSessionID != "" {
 			t.Fatalf("turn=%+v", turn)
 		}

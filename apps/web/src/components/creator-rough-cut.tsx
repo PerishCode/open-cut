@@ -330,7 +330,7 @@ function RoughCutReview({
             {item.video && item.audio ? "+" : ""}
             {item.audio ? "A" : ""}
           </Text>
-          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `Excerpt ${item.sourceExcerptId}`}</Text>
+          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `Excerpt ${index + 1}`}</Text>
         </Stack>
       ))}
       <Text>Nothing changes until you add this rough cut to the Timeline.</Text>

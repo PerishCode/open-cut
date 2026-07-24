@@ -22,13 +22,20 @@ export function AgentConversationEntry({
       summary={`${messageRole(message)} · MESSAGE #${message.ordinal}`}
     >
       {message.role === "agent" ? (
-        <MessageContent text={message.text} />
+        <MessageContent text={presentAgentMessage(message.text)} />
       ) : (
         <Text>
           {message.role === "notice" ? "Agent context was safely rebuilt from this conversation." : message.text}
         </Text>
       )}
     </FeedEntry>
+  );
+}
+
+function presentAgentMessage(value: string): string {
+  return value.replaceAll(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+    "[internal reference]",
   );
 }
 
