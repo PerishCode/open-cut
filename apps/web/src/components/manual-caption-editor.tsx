@@ -104,25 +104,23 @@ export function ManualCaptionEditor({
         </Button>
       </ControlStrip>
       {snapshot.captions.map((caption) => (
-        <Stack key={caption.id} spacing="compact">
-          <Text tone="eyebrow">
-            {formatClock(caption.range.start)} → {formatClockEnd(caption.range)} · r{caption.revision} ·{" "}
-            {captionProvenanceLabel(caption)}
-          </Text>
-          <Text>{caption.text}</Text>
-          <ControlStrip label={`Caption ${caption.id} actions`}>
-            <Button
-              disabled={busy}
-              label={`Edit Caption ${caption.id}`}
-              onPress={() => controller.selectCaption(caption.id)}
-            >
-              Edit
-            </Button>
-            <Button label="Use this Caption as @ context" onPress={() => onContextCaption(caption)}>
-              @ Agent
-            </Button>
-          </ControlStrip>
-        </Stack>
+        <ControlStrip
+          hint={caption.text}
+          key={caption.id}
+          label={`Caption ${caption.id} actions`}
+          summary={`${formatClock(caption.range.start)} → ${formatClockEnd(caption.range)} · r${caption.revision} · ${captionProvenanceLabel(caption)}`}
+        >
+          <Button
+            disabled={busy}
+            label={`Edit Caption ${caption.id}`}
+            onPress={() => controller.selectCaption(caption.id)}
+          >
+            Edit
+          </Button>
+          <Button label="Use this Caption as @ context" onPress={() => onContextCaption(caption)}>
+            @ Agent
+          </Button>
+        </ControlStrip>
       ))}
       {snapshot.captions.length === 0 ? <Text>No Caption cues in the first 60 seconds.</Text> : null}
 

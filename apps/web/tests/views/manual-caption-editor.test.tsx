@@ -10,7 +10,7 @@ import {
   revisionString,
   type Track,
 } from "@open-cut/contracts";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ManualCaptionEditor } from "../../src/components/manual-caption-editor.js";
@@ -97,6 +97,9 @@ describe("Manual Caption editor", () => {
     const viewer = new SequenceViewerController(base.media.viewer);
     renderEditor(base, viewer, [caption()], onCommitted);
 
+    const cue = screen.getByRole("region", { name: `Caption ${ids.caption} actions` });
+    expect(within(cue).getByText("Original wording")).toBeTruthy();
+    expect(within(cue).getByText(/00:02.00 → 00:05.00 · r3 · MANUAL/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: `Edit Caption ${ids.caption}` }));
     fireEvent.change(screen.getByLabelText("Caption text"), { target: { value: "Creator-polished wording" } });
     expect(screen.getByText("Choose stale or unbind before checkpointing changed content")).toBeTruthy();
