@@ -58,6 +58,8 @@ describe("Creator Workspace history", () => {
 
     expect(await screen.findByText(/Move selected Timeline Clip/)).toBeTruthy();
     expect(screen.getByText(/LATEST · r8 · AGENT/)).toBeTruthy();
+    expect(screen.queryByText(ids.clip)).toBeNull();
+    expect(screen.queryByRole("region", { name: new RegExp(ids.clip) })).toBeNull();
     expect(screen.queryByRole("button", { name: /Undo|Redo/ })).toBeNull();
   });
 
@@ -87,7 +89,7 @@ function history(undone = false) {
     transactions: [
       {
         id: undone ? ids.undo : ids.transaction,
-        intent: undone ? "Undo latest creative change" : "Move selected Timeline Clip",
+        intent: undone ? "Undo latest creative change" : `Move selected Timeline Clip ${ids.clip}`,
         actor: undone ? "creator" : "agent",
         committedProjectRevision: undone ? "9" : "8",
         changes: [{ kind: "clip", id: ids.clip, before: undone ? "4" : "3", after: undone ? "5" : "4" }],

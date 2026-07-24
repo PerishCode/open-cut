@@ -87,16 +87,19 @@ export function CreatorHistory({
           eyebrow={`${state.page.transactions.length} LOADED`}
           title="Recent creative transactions"
         >
-          {state.page.transactions.map((transaction, index) => (
-            <ControlStrip
-              hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
-              key={transaction.id}
-              label={`Transaction r${transaction.committedProjectRevision}: ${transaction.intent}`}
-              summary={`${index === 0 ? "LATEST · " : ""}r${transaction.committedProjectRevision} · ${transaction.actor.toUpperCase()}${
-                transaction.undoesTransactionId ? " · UNDO/REDO" : ""
-              } · ${transaction.intent}`}
-            />
-          ))}
+          {state.page.transactions.map((transaction, index) => {
+            const intent = presentTransactionIntent(transaction.intent);
+            return (
+              <ControlStrip
+                hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
+                key={transaction.id}
+                label={`Transaction r${transaction.committedProjectRevision}: ${intent}`}
+                summary={`${index === 0 ? "LATEST · " : ""}r${transaction.committedProjectRevision} · ${transaction.actor.toUpperCase()}${
+                  transaction.undoesTransactionId ? " · UNDO/REDO" : ""
+                } · ${intent}`}
+              />
+            );
+          })}
         </ResourceCard>
       ) : null}
       {state.status === "ready" && state.page.transactions.length === 0 ? (
@@ -113,6 +116,13 @@ export function CreatorHistory({
 
 function formatChangeCount(count: number): string {
   return `${count} ${count === 1 ? "CHANGE" : "CHANGES"}`;
+}
+
+function presentTransactionIntent(value: string): string {
+  return value
+    .replaceAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "")
+    .replaceAll(/\s+/g, " ")
+    .trim();
 }
 
 function formatTimestamp(value: string): string {
