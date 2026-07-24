@@ -610,11 +610,13 @@
 }
 
 .fieldCompact {
-  min-width: 180px;
-  flex: 1 1 240px;
+  position: relative;
   gap: 0;
 }
-
+.controlStripBody > .fieldCompact {
+  min-width: 180px;
+  flex: 1 1 240px;
+}
 .fieldCompact .fieldLabel {
   position: absolute;
   width: 1px;
@@ -626,11 +628,16 @@
   overflow: hidden;
   white-space: nowrap;
 }
-
 .fieldCompact .fieldInput {
   min-height: 22px;
   padding: 3px 6px;
   font-size: 10px;
+}
+.fieldCompact .fieldTextArea {
+  min-height: 54px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .fileField {

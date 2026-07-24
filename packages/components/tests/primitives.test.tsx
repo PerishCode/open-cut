@@ -110,6 +110,7 @@ describe("atomic components", () => {
     const onChange = vi.fn();
     render(
       <TextAreaField
+        density="compact"
         keyboardShortcuts="Control+Enter Meta+Enter"
         label="Agent task"
         maxLength={8000}

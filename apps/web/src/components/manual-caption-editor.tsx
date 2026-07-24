@@ -133,55 +133,72 @@ export function ManualCaptionEditor({
 
       {draft ? (
         <Stack spacing="compact">
-          <Text tone="eyebrow">
-            {draft.kind === "create" ? "NEW MANUAL CAPTION" : `CAPTION INSPECTOR · ${draft.captionId}`}
-          </Text>
-          {draft.kind === "create" ? (
-            <Stack spacing="compact">
-              {snapshot.tracks.length > 1 ? <Text>Choose one Caption Track explicitly.</Text> : null}
-              {snapshot.tracks.map((track) => (
-                <Button disabled={busy} key={track.id} onPress={() => controller.selectTrack(track.id)}>
-                  {draft.trackId === track.id ? "✓ " : ""}Caption Track · {track.label} · r{track.revision}
-                </Button>
-              ))}
-              {snapshot.tracks.length === 0 ? <Text>No Caption Track is available.</Text> : null}
-            </Stack>
-          ) : (
-            <Text>Track · {trackLabel(draft.trackId, snapshot.tracks)}</Text>
-          )}
-
-          <Text>
-            Viewer playhead · {formatClock(viewer.getSnapshot().playhead)} · capture both boundaries explicitly for a
-            new cue
-          </Text>
-          <Button disabled={busy} onPress={() => controller.captureIn()}>
-            Capture In at Viewer playhead
-          </Button>
-          <Button disabled={busy} onPress={() => controller.captureOut()}>
-            Capture Out at Viewer playhead
-          </Button>
-          <Text>
-            In · {draft.inPoint ? formatClock(draft.inPoint) : "not captured"}
-            {draft.inCaptured ? " · CAPTURED" : " · committed"}
-          </Text>
-          <Text>
-            Out · {draft.outPoint ? formatClock(draft.outPoint) : "not captured"}
-            {draft.outCaptured ? " · CAPTURED" : " · committed"}
-          </Text>
+          <ControlStrip
+            hint={`PLAYHEAD ${formatClock(viewer.getSnapshot().playhead)}`}
+            label={draft.kind === "create" ? "New manual Caption controls" : "Caption inspector controls"}
+            summary={`${draft.kind === "create" ? "NEW CAPTION" : "CAPTION"} · ${
+              draft.inPoint ? formatClock(draft.inPoint) : "IN —"
+            } → ${draft.outPoint ? formatClock(draft.outPoint) : "OUT —"}`}
+          >
+            {draft.kind === "create"
+              ? snapshot.tracks.map((track) => (
+                  <Button
+                    disabled={busy}
+                    key={track.id}
+                    label={`Use Caption Track ${track.label} at r${track.revision}`}
+                    pressed={draft.trackId === track.id}
+                    onPress={() => controller.selectTrack(track.id)}
+                  >
+                    {track.label} · r{track.revision}
+                  </Button>
+                ))
+              : null}
+            {draft.kind === "update" ? (
+              <Status state="ready">{trackLabel(draft.trackId, snapshot.tracks)}</Status>
+            ) : null}
+            <Button
+              disabled={busy}
+              label="Capture In at Viewer playhead"
+              pressed={draft.inCaptured}
+              onPress={() => controller.captureIn()}
+            >
+              Set In
+            </Button>
+            <Button
+              disabled={busy}
+              label="Capture Out at Viewer playhead"
+              pressed={draft.outCaptured}
+              onPress={() => controller.captureOut()}
+            >
+              Set Out
+            </Button>
+            {draft.kind === "create" ? (
+              <Button label="Cancel manual Caption draft" onPress={() => controller.clear()}>
+                Cancel
+              </Button>
+            ) : null}
+          </ControlStrip>
+          {draft.kind === "create" && snapshot.tracks.length === 0 ? (
+            <Status state="unavailable">No Caption Track is available.</Status>
+          ) : null}
           <TextField
+            density="compact"
             disabled={draft.kind === "create" && busy}
             label="Caption language"
             maxLength={64}
             onBlur={() => draft.kind === "update" && void checkpoint()}
-            onChange={(value) => controller.setLanguage(value)}
-            value={draft.language}
+            onChange={(value) => controller.setLanguage(value.trim() ? value : "und")}
+            placeholder="Language · AUTO"
+            value={draft.language === "und" ? "" : draft.language}
           />
           <TextAreaField
+            density="compact"
             disabled={draft.kind === "create" && busy}
             label="Caption text"
             maxLength={262_144}
             onBlur={() => draft.kind === "update" && void checkpoint()}
             onChange={(value) => controller.setText(value)}
+            placeholder="Caption text"
             rows={3}
             value={draft.text}
           />
@@ -208,7 +225,7 @@ export function ManualCaptionEditor({
             </Stack>
           ) : null}
 
-          <Button disabled={!canCheckpoint} onPress={() => void checkpoint()}>
+          <Button disabled={!canCheckpoint} variant="primary" onPress={() => void checkpoint()}>
             {draft.kind === "create" ? "Create manual Caption" : "Save Caption checkpoint"}
           </Button>
           {draft.kind === "update" ? (

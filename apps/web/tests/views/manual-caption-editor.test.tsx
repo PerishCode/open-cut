@@ -67,6 +67,12 @@ describe("Manual Caption editor", () => {
     renderEditor(base, viewer, [], onCommitted);
 
     fireEvent.click(screen.getByRole("button", { name: "New manual Caption" }));
+    expect(screen.getByLabelText("Caption language").getAttribute("placeholder")).toBe("Language · AUTO");
+    expect((screen.getByLabelText("Caption language") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByDisplayValue("und")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel manual Caption draft" }));
+    expect(screen.queryByLabelText("Caption text")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New manual Caption" }));
     fireEvent.change(screen.getByLabelText("Caption text"), { target: { value: "Manual title" } });
     fireEvent.click(screen.getByRole("button", { name: "Capture In at Viewer playhead" }));
     viewer.setPlayhead(time(5));
