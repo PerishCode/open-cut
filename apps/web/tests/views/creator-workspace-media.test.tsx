@@ -56,8 +56,8 @@ describe("AssetSummary", () => {
 
     const action = screen.getByRole("button", { name: "In Viewer" });
     expect(action.getAttribute("aria-pressed")).toBe("true");
-    expect(action.closest("article")?.getAttribute("aria-current")).toBe("true");
-    expect(screen.getByRole("region", { name: "story.webm actions" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "story.webm actions" }).contains(action)).toBe(true);
+    expect(screen.getByText("story.webm")).toBeTruthy();
   });
 });
 

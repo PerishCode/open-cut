@@ -1,4 +1,4 @@
-import { Button, ControlStrip, EmptyState, FeedEntry, ResourceCard, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, FeedEntry, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -66,30 +66,26 @@ export function AssetSummary({
     (artifact) => artifact.kind === "transcript" && artifact.state === "ready",
   );
   return (
-    <ResourceCard
-      eyebrow={asset.facts?.container ?? "Media"}
-      selected={selected}
-      title={asset.displayName}
-      details={!transcriptReady ? [transcriptJobStatus(asset)] : []}
+    <ControlStrip
+      hint={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
+      label={`${asset.displayName} actions`}
+      summary={asset.displayName}
     >
-      <ControlStrip
-        label={`${asset.displayName} actions`}
-        summary={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
-      >
-        <Status state={readinessState}>{readiness}</Status>
-        <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
-          {selected ? "In Viewer" : "Open source"}
+      <Status state={readinessState}>{readiness}</Status>
+      <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
+        {selected ? "In Viewer" : "Open source"}
+      </Button>
+      <Button variant="quiet" onPress={onContext}>
+        @ Agent
+      </Button>
+      {transcriptReady ? (
+        <Button variant="quiet" onPress={onTranscript}>
+          Transcript
         </Button>
-        <Button variant="quiet" onPress={onContext}>
-          Add @ context
-        </Button>
-        {transcriptReady ? (
-          <Button variant="quiet" onPress={onTranscript}>
-            Open transcript
-          </Button>
-        ) : null}
-      </ControlStrip>
-    </ResourceCard>
+      ) : (
+        <Text>{transcriptJobStatus(asset)}</Text>
+      )}
+    </ControlStrip>
   );
 }
 
