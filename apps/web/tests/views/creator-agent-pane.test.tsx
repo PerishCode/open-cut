@@ -67,7 +67,8 @@ describe("CreatorAgentPane", () => {
         />
       </ContractsProvider>,
     );
-    expect(await screen.findByText("Ready · codex-cli 0.144.4")).toBeTruthy();
+    expect(await screen.findByText("Ready for tasks")).toBeTruthy();
+    expect(screen.queryByText(/codex-cli 0\.144\.4/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add @ Current asset" }));
     fireEvent.change(screen.getByRole("textbox", { name: "New task · Ctrl/⌘ Enter" }), {
       target: { value: "Draft a sharp opening" },

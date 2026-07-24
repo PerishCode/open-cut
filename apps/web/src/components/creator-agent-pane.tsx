@@ -779,10 +779,10 @@ function asError(value: unknown): Error {
 
 function availabilityText(value: AgentAvailability | undefined): string {
   if (!value) return "Checking local Agent availability…";
-  if (value.state === "available") return `Ready · ${value.version}`;
-  if (value.state === "missing") return "A qualified Codex CLI was not found.";
-  if (value.state === "unauthenticated") return "Codex needs an OS keyring-backed sign-in.";
-  return "The local Agent or stable Open Cut CLI is incompatible.";
+  if (value.state === "available") return "Ready for tasks";
+  if (value.state === "missing") return "Codex is not available on this device.";
+  if (value.state === "unauthenticated") return "Sign in to Codex on this device.";
+  return "Update Codex or Open Cut to continue.";
 }
 
 function runLabel(run: AgentRun): string {
