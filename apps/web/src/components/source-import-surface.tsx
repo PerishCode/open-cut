@@ -15,7 +15,7 @@ export function SourceImportSurface({ disabled, error, onSelect }: SourceImportS
         label="Drop footage here or choose a local file"
         onSelect={onSelect}
       />
-      {error ? <Text>{error.message}</Text> : null}
+      {error ? <Text>Footage could not be added. Choose the file again.</Text> : null}
     </Stack>
   );
 }

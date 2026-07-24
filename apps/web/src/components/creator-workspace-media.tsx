@@ -20,10 +20,11 @@ export type TranscriptState =
       corrections: readonly TranscriptCorrection[];
       defaultArtifactId: DurableID;
       loadingMore: boolean;
+      loadingMoreError?: boolean;
       selectingDefault: boolean;
-      selectionError?: Error;
+      selectionError?: boolean;
     }>
-  | Readonly<{ status: "unavailable"; assetId: DurableID; error: Error }>;
+  | Readonly<{ status: "unavailable"; assetId: DurableID }>;
 
 export function AssetSummary({
   asset,
@@ -131,7 +132,7 @@ export function TranscriptSurface({
     return (
       <EmptyState
         action={<Button onPress={() => onLoad?.()}>Retry transcript read</Button>}
-        hint={state.error.message}
+        hint="Transcript data could not be loaded."
         title="Transcript unavailable"
       />
     );
@@ -157,7 +158,9 @@ export function TranscriptSurface({
           {state.selectingDefault ? "Selecting…" : "Make this the Creator default"}
         </Button>
       ) : null}
-      {state.selectionError ? <Text>{state.selectionError.message}</Text> : null}
+      {state.selectionError ? (
+        <Status state="unavailable">Could not change the default transcript. Try again.</Status>
+      ) : null}
       {state.corrections.length > 0 ? <Text tone="eyebrow">CREATOR CORRECTIONS</Text> : null}
       {state.corrections.map((correction) => (
         <Stack key={correction.id} spacing="compact">
@@ -178,6 +181,7 @@ export function TranscriptSurface({
         segments={state.segments}
         target={excerptTarget}
       />
+      {state.loadingMoreError ? <Status state="unavailable">Could not load more transcript. Try again.</Status> : null}
       {state.page.nextAfter ? (
         <Button disabled={state.loadingMore} onPress={onLoadMore}>
           {state.loadingMore ? "Loading…" : "Load more transcript"}
@@ -195,5 +199,5 @@ function transcriptJobStatus(asset: Asset): string {
     return `Preparing transcript · ${job.progressBasisPoints / 100}%`;
   }
   if (job.state === "succeeded") return "No transcript artifact was produced for this source.";
-  return `Transcript ${job.state}${job.terminalErrorCode ? ` · ${job.terminalErrorCode}` : ""}.`;
+  return job.state === "failed" ? "Transcript could not be prepared. Check System." : `Transcript ${job.state}.`;
 }

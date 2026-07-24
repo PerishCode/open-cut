@@ -18,4 +18,17 @@ describe("SourceImportSurface", () => {
     expect(onSelect).toHaveBeenCalledWith(file);
     expect(screen.queryByText(/\/private\/|[A-Z]:\\/)).toBeNull();
   });
+
+  it("keeps local import paths out of the failure state", () => {
+    render(
+      <SourceImportSurface
+        disabled={false}
+        error={new Error("stat /private/var/folders/editor/interview.mov: permission denied")}
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Footage could not be added. Choose the file again.")).toBeTruthy();
+    expect(screen.queryByText(/\/private\/|permission denied/)).toBeNull();
+  });
 });

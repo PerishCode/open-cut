@@ -1,4 +1,4 @@
-import { Button, ControlStrip, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text } from "@open-cut/components";
 import {
   type ApplyCreatorClipPlacementInput,
   type CreatorClipPlacementReview,
@@ -53,7 +53,7 @@ export function CreatorSourcePlacement({
   const [review, setReview] = useState<CreatorClipPlacementReview>();
   const [pendingApply, setPendingApply] = useState<PendingApply>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<Error>();
+  const [error, setError] = useState(undefined as string | undefined);
   const selection = sourceSnapshot.selection;
   const sourceRange = sourceViewer.selectedRange();
   const videoTracks = useMemo(() => tracks.filter((track) => track.type === "video"), [tracks]);
@@ -69,7 +69,7 @@ export function CreatorSourcePlacement({
   const captureDestination = () => {
     const snapshot = sequenceViewer.getSnapshot();
     if (!snapshot.pinnedRevision) {
-      setError(new Error("Sequence Viewer has no pinned revision to capture"));
+      setError("Sequence preview is not ready. Try Capture playhead again.");
       return;
     }
     sourceViewer.pause();
@@ -82,17 +82,17 @@ export function CreatorSourcePlacement({
 
   const place = async () => {
     if (!selection || !sourceRange || !destination) {
-      setError(new Error("Source marks and an explicit Sequence destination are required"));
+      setError("Set Source In/Out and capture a Sequence playhead before placing.");
       return;
     }
     if (destination.sequenceRevision !== sequenceSnapshot.pinnedRevision) {
-      setError(new Error("Captured Sequence destination is stale; capture the playhead again"));
+      setError("The Sequence changed. Capture the playhead again.");
       return;
     }
     const videoTrack = videoTrackId ? videoTracks.find((track) => track.id === videoTrackId) : undefined;
     const audioTrack = audioTrackId ? audioTracks.find((track) => track.id === audioTrackId) : undefined;
     if ((!videoTrack || !selection.videoStreamId) && (!audioTrack || !selection.audioStreamId)) {
-      setError(new Error("Select at least one explicit compatible Track/SourceStream lane"));
+      setError("Select at least one compatible Video or Audio lane.");
       return;
     }
     sourceViewer.pause();
@@ -132,7 +132,7 @@ export function CreatorSourcePlacement({
       });
     } catch (value) {
       setBusy(false);
-      setError(asError(value));
+      setError(placementFailureMessage(value, false));
       return;
     }
     setReview(nextReview);
@@ -147,7 +147,7 @@ export function CreatorSourcePlacement({
       if (value instanceof CreatorEditError && value.code === "failed") {
         setPendingApply({ review: nextReview, input });
       }
-      setError(asError(value));
+      setError(placementFailureMessage(value, true));
       setBusy(false);
       return;
     }
@@ -163,7 +163,7 @@ export function CreatorSourcePlacement({
       receipt = await contracts.editing.clipPlacement.apply(pendingApply.review, pendingApply.input);
     } catch (value) {
       if (value instanceof CreatorEditError && value.code !== "failed") setPendingApply(undefined);
-      setError(asError(value));
+      setError(placementFailureMessage(value, true));
       setBusy(false);
       return;
     }
@@ -174,8 +174,8 @@ export function CreatorSourcePlacement({
     acceptCommit(receipt, committedReview);
     try {
       await onCommitted(receipt);
-    } catch (value) {
-      setError(new Error(`Placement committed, but workspace refresh failed: ${asError(value).message}`));
+    } catch {
+      setError("Source was placed, but the workspace could not refresh. Choose Sync now to reload it.");
     } finally {
       setBusy(false);
     }
@@ -249,7 +249,7 @@ export function CreatorSourcePlacement({
           {review.lanes.length === 1 ? "" : "s"} · {review.preconditionCount} exact preconditions
         </Text>
       ) : null}
-      {error ? <Text>{error.message}</Text> : null}
+      {error ? <Status state="unavailable">{error}</Status> : null}
     </Stack>
   );
 }
@@ -288,4 +288,14 @@ function TrackSelection({
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+function placementFailureMessage(value: unknown, applying: boolean): string {
+  const error = asError(value);
+  if (error instanceof CreatorEditError && error.code === "conflict") {
+    return "The Source or Sequence changed. Choose Sync now, then capture the playhead again.";
+  }
+  return applying
+    ? "Could not confirm the source placement."
+    : "Could not prepare this source placement. Review the marked range and lanes, then try again.";
 }

@@ -341,12 +341,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
             selectingDefault: false,
           });
         }
-      } catch (value) {
+      } catch {
         if (!signal?.aborted) {
           setTranscript({
             status: "unavailable",
             assetId,
-            error: value instanceof Error ? value : new Error(String(value)),
           });
         }
       }
@@ -374,11 +373,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         loadingMore: false,
         selectingDefault: current.selectingDefault,
       });
-    } catch (value) {
+    } catch {
       setTranscript({
-        status: "unavailable",
-        assetId: current.assetId,
-        error: value instanceof Error ? value : new Error(String(value)),
+        ...current,
+        loadingMore: false,
+        loadingMoreError: true,
       });
     }
   }, [contracts, project.id, transcript]);
@@ -403,11 +402,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         defaultArtifactId: current.page.artifact.id,
         selectingDefault: false,
       });
-    } catch (value) {
+    } catch {
       setTranscript({
         ...current,
         selectingDefault: false,
-        selectionError: value instanceof Error ? value : new Error(String(value)),
+        selectionError: true,
       });
     }
   }, [contracts, project.id, transcript]);
@@ -476,7 +475,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       onSelect={(file) => void importFootage(file)}
                     />
                   ) : importError ? (
-                    <Status state="unavailable">Could not add footage · {importError.message}</Status>
+                    <Status state="unavailable">Footage could not be added. Choose the file again.</Status>
                   ) : null}
                   {ready?.assets.assets.map((asset) => (
                     <AssetSummary

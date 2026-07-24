@@ -76,6 +76,8 @@ describe("Creator source placement", () => {
     fireEvent.click(screen.getByRole("button", { name: "Place at 00:04.00" }));
 
     const retry = await screen.findByRole("button", { name: "Retry identical apply" });
+    expect(screen.getByText("Could not confirm the source placement.")).toBeTruthy();
+    expect(screen.queryByText(/Creator edit failed|503/)).toBeNull();
     expect(preview).toHaveBeenCalledWith({
       projectId: ids.project,
       sequenceId: ids.sequence,
@@ -119,8 +121,9 @@ describe("Creator source placement", () => {
     fireEvent.click(screen.getByRole("button", { name: "Place at 00:04.00" }));
 
     expect(
-      await screen.findByText("Placement committed, but workspace refresh failed: projection offline"),
+      await screen.findByText("Source was placed, but the workspace could not refresh. Choose Sync now to reload it."),
     ).toBeTruthy();
+    expect(screen.queryByText("projection offline")).toBeNull();
     expect(apply).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "Retry identical apply" })).toBeNull();
   });
