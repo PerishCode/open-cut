@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type HistoryState =
   | Readonly<{ status: "loading" }>
   | Readonly<{ status: "ready"; page: CreatorHistoryPage; loadingOlder: boolean }>
-  | Readonly<{ status: "unavailable"; error: Error }>;
+  | Readonly<{ status: "unavailable" }>;
 
 export function CreatorHistory({
   projectId,
@@ -16,20 +16,22 @@ export function CreatorHistory({
 }>) {
   const contracts = useContracts();
   const [state, setState] = useState<HistoryState>({ status: "loading" });
+  const [loadOlderError, setLoadOlderError] = useState(false);
   const loadGeneration = useRef(0);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       const generation = ++loadGeneration.current;
       setState({ status: "loading" });
+      setLoadOlderError(false);
       try {
         const page = await contracts.editing.history.list({ projectId, limit: 20 }, signal);
         if (!signal?.aborted && generation === loadGeneration.current) {
           setState({ status: "ready", page, loadingOlder: false });
         }
-      } catch (value) {
+      } catch {
         if (!signal?.aborted && generation === loadGeneration.current) {
-          setState({ status: "unavailable", error: asError(value) });
+          setState({ status: "unavailable" });
         }
       }
     },
@@ -45,6 +47,7 @@ export function CreatorHistory({
   const loadOlder = useCallback(async () => {
     if (state.status !== "ready" || !state.page.nextBefore || state.loadingOlder) return;
     const current = state;
+    setLoadOlderError(false);
     setState({ ...current, loadingOlder: true });
     try {
       const older = await contracts.editing.history.list({
@@ -61,8 +64,9 @@ export function CreatorHistory({
         },
         loadingOlder: false,
       });
-    } catch (value) {
-      setState({ status: "unavailable", error: asError(value) });
+    } catch {
+      setState(current);
+      setLoadOlderError(true);
     }
   }, [contracts.editing.history, projectId, state]);
 
@@ -72,10 +76,11 @@ export function CreatorHistory({
       {state.status === "loading" ? <Text>Loading recent creative transactions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">
-          <Status state="unavailable">History unavailable · {state.error.message}</Status>
-          <Button onPress={() => void load()}>Retry history</Button>
+          <Status state="unavailable">Could not load project history.</Status>
+          <Button onPress={() => void load()}>Try again</Button>
         </Stack>
       ) : null}
+      {loadOlderError ? <Status state="unavailable">Could not load older history. Try again.</Status> : null}
       {state.status === "ready" && state.page.transactions.length > 0 ? (
         <ResourceCard
           emphasis="quiet"
@@ -104,10 +109,6 @@ export function CreatorHistory({
       ) : null}
     </Stack>
   );
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
 }
 
 function formatChangeCount(count: number): string {

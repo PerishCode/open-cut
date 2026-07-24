@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type VersionState =
   | Readonly<{ status: "loading" }>
   | Readonly<{ status: "ready"; page: ProjectVersionPage; loadingOlder: boolean }>
-  | Readonly<{ status: "unavailable"; error: Error }>;
+  | Readonly<{ status: "unavailable" }>;
 
 export function CreatorVersions({
   currentRevision,
@@ -32,7 +32,7 @@ export function CreatorVersions({
   const [restoring, setRestoring] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<DurableID>();
   const [notice, setNotice] = useState(undefined as string | undefined);
-  const [actionError, setActionError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
   const loadGeneration = useRef(0);
 
   const load = useCallback(
@@ -43,9 +43,9 @@ export function CreatorVersions({
         if (!signal?.aborted && generation === loadGeneration.current) {
           setState({ status: "ready", page, loadingOlder: false });
         }
-      } catch (value) {
+      } catch {
         if (!signal?.aborted && generation === loadGeneration.current) {
-          setState({ status: "unavailable", error: asError(value) });
+          setState({ status: "unavailable" });
         }
       }
     },
@@ -77,8 +77,8 @@ export function CreatorVersions({
         },
         loadingOlder: false,
       });
-    } catch (value) {
-      setActionError(asError(value));
+    } catch {
+      setActionError("Could not load older project versions. Try again.");
       setState(current);
     }
   }, [contracts.projects.versions, projectId, state]);
@@ -98,8 +98,8 @@ export function CreatorVersions({
       setName("");
       setNotice(`Saved “${result.version.name ?? normalizedName}” at r${result.version.capturedProjectRevision}.`);
       await load();
-    } catch (value) {
-      setActionError(asError(value));
+    } catch {
+      setActionError("Could not save this project version. Try again.");
     } finally {
       setSaving(false);
     }
@@ -127,10 +127,11 @@ export function CreatorVersions({
         );
         await onRestored(result);
         await load();
-      } catch (value) {
-        const error = asError(value);
+      } catch {
         setActionError(
-          committed ? new Error(`Restore committed, but the workspace refresh failed: ${error.message}`) : error,
+          committed
+            ? "The version was restored, but the workspace could not refresh. Choose Sync now to reload it."
+            : "Could not restore this project version. Review it and try again.",
         );
       } finally {
         setRestoring(false);
@@ -158,12 +159,12 @@ export function CreatorVersions({
         {saving ? "Saving version…" : "Save version"}
       </Button>
       {notice ? <Status state="ready">{notice}</Status> : null}
-      {actionError ? <Status state="unavailable">Version action failed · {actionError.message}</Status> : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
       {state.status === "loading" ? <Text>Loading project versions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Versions unavailable · {state.error.message}</Status>
-          <Button onPress={() => void load()}>Retry versions</Button>
+          <Status state="unavailable">Could not load project versions.</Status>
+          <Button onPress={() => void load()}>Try again</Button>
         </Stack>
       ) : null}
       {state.status === "ready" && state.page.versions.length === 0 ? (
@@ -247,8 +248,4 @@ function formatByteSize(value: string): string {
   if (bytes < 1024n) return `${bytes} B`;
   if (bytes < 1024n * 1024n) return `${Number(bytes / 1024n)} KiB`;
   return `${Number(bytes / (1024n * 1024n))} MiB`;
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
 }
