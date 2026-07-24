@@ -1,4 +1,4 @@
-import { Button, EmptyState, ResourceCard, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, FeedEntry, ResourceCard, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -67,24 +67,29 @@ export function AssetSummary({
   );
   return (
     <ResourceCard
-      actions={
-        <>
-          <Button onPress={onContext}>Add @ context</Button>
-          <Button disabled={!previewable} onPress={onPreview}>
-            {selected ? "In Viewer" : "Open source"}
-          </Button>
-          {transcriptReady ? <Button onPress={onTranscript}>Open transcript</Button> : null}
-        </>
-      }
       eyebrow={asset.facts?.container ?? "Media"}
       selected={selected}
-      status={<Status state={readinessState}>{readiness}</Status>}
       title={asset.displayName}
-      details={[
-        asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts.",
-        ...(!transcriptReady ? [transcriptJobStatus(asset)] : []),
-      ]}
-    />
+      details={!transcriptReady ? [transcriptJobStatus(asset)] : []}
+    >
+      <ControlStrip
+        label={`${asset.displayName} actions`}
+        summary={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
+      >
+        <Status state={readinessState}>{readiness}</Status>
+        <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
+          {selected ? "In Viewer" : "Open source"}
+        </Button>
+        <Button variant="quiet" onPress={onContext}>
+          Add @ context
+        </Button>
+        {transcriptReady ? (
+          <Button variant="quiet" onPress={onTranscript}>
+            Open transcript
+          </Button>
+        ) : null}
+      </ControlStrip>
+    </ResourceCard>
   );
 }
 
@@ -163,15 +168,19 @@ export function TranscriptSurface({
       ) : null}
       {state.corrections.length > 0 ? <Text tone="eyebrow">CREATOR CORRECTIONS</Text> : null}
       {state.corrections.map((correction) => (
-        <Stack key={correction.id} spacing="compact">
-          <Text tone="eyebrow">
-            {formatClock(correction.sourceRange.start)} → {formatClockEnd(correction.sourceRange)} · r
-            {correction.revision}
-          </Text>
+        <FeedEntry
+          emphasis="quiet"
+          hint="Transcript correction"
+          key={correction.id}
+          label={`Transcript correction r${correction.revision}`}
+          summary={`${formatClock(correction.sourceRange.start)} → ${formatClockEnd(correction.sourceRange)} · r${
+            correction.revision
+          }`}
+        >
           <Text>
             {correction.originalText} → {correction.effectiveText}
           </Text>
-        </Stack>
+        </FeedEntry>
       ))}
       <CreatorTranscriptExcerpt
         asset={asset}
