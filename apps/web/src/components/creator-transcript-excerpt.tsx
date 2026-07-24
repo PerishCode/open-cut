@@ -179,15 +179,12 @@ export function CreatorTranscriptExcerpt({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">TRANSCRIPT · EXACT TOKEN SELECTION</Text>
       {!usableTarget && phase !== "conflict" ? (
         <Status state="pending">
           {evidenceResult.evidence
             ? "Story insertion point required · choose one in Story, then reselect this range"
             : "Story insertion point required · choose one in Story before selecting words"}
         </Status>
-      ) : usableTarget && !selection ? (
-        <Text>Select words below to prepare an exact Story excerpt.</Text>
       ) : null}
       {segments.map((segment, segmentIndex) => (
         <Stack key={segment.id} spacing="compact">
