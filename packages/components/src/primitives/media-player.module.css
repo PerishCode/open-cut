@@ -15,6 +15,12 @@
   max-height: min(36vh, 720px);
 }
 
+@media (max-height: 820px) {
+  .mediaPlayer {
+    max-height: min(23vh, 480px);
+  }
+}
+
 .audioPlayer {
   width: min(100%, 960px);
   min-width: min(100%, 420px);

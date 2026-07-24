@@ -92,10 +92,11 @@ describe("SourcePreviewSurface", () => {
         onAudioStreamChange={() => undefined}
         onVideoStreamChange={() => undefined}
         snapshot={sourceReadySnapshot()}
-        videoStreamId={undefined}
+        videoStreamId={resourceId}
       />,
     );
 
+    expect(screen.getByRole("tab", { name: "Range" }).getAttribute("aria-selected")).toBe("true");
     const player = screen.getByLabelText("interview.webm source preview");
     const controls = screen.getByRole("region", { name: "Source range controls" });
     expect(player.hasAttribute("controls")).toBe(true);
@@ -114,6 +115,31 @@ describe("SourcePreviewSurface", () => {
 
     fireEvent.keyDown(within(controls).getByRole("button", { name: "Mark In" }), { key: "i" });
     expect(controller.captureIn).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Streams" }));
+    expect(screen.getByRole("tab", { name: "Streams" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("region", { name: "VIDEO source stream" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "AUDIO source stream" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Source range controls" })).toBeNull();
+  });
+
+  it("opens stream selection when the source has no explicit streams selected", () => {
+    render(
+      <SourcePreviewSurface
+        asset={sourceAsset()}
+        audioStreamId={undefined}
+        controller={sourceController()}
+        onAudioStreamChange={() => undefined}
+        onVideoStreamChange={() => undefined}
+        snapshot={sourceReadySnapshot()}
+        videoStreamId={undefined}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Streams" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("region", { name: "VIDEO source stream" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "AUDIO source stream" })).toBeTruthy();
+    expect(screen.queryByLabelText("interview.webm source preview")).toBeNull();
   });
 });
 

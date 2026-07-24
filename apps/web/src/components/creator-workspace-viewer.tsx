@@ -1,6 +1,6 @@
-import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Text } from "@open-cut/components";
+import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Tabs, Text } from "@open-cut/components";
 import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
-import { type KeyboardEvent, type ReactNode, useCallback, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
 import type { SourceViewerController, SourceViewerSnapshot } from "../lib/source-viewer-controller.js";
@@ -21,11 +21,12 @@ export function SourceViewerLayout({
 }) {
   const video = asset?.facts?.streams.find((stream) => stream.id === videoStreamId)?.descriptor.video;
   const dimensions = video ? `${video.width} × ${video.height}` : asset?.facts ? "Audio source" : "Preparing source";
+  const sourceHint = asset ? `${asset.displayName} · ${dimensions}` : dimensions;
   return (
     <EditorSplit
       primary={
         <Stack spacing="compact">
-          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={dimensions}>
+          <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={sourceHint}>
             <Button onPress={onBack}>Back to Sequence</Button>
           </ControlStrip>
           {preview}
@@ -199,10 +200,16 @@ export function SourcePreviewSurface({
   videoStreamId: DurableID | undefined;
 }) {
   const [actionError, setActionError] = useState<Error>();
+  const [sourcePanel, setSourcePanel] = useState<"range" | "streams">(() =>
+    videoStreamId || audioStreamId ? "range" : "streams",
+  );
   const attachActuator = useCallback(
     (actuator: Parameters<SourceViewerController["attachActuator"]>[0]) => controller.attachActuator(actuator),
     [controller],
   );
+  useEffect(() => {
+    if (!videoStreamId && !audioStreamId) setSourcePanel("streams");
+  }, [asset?.id, audioStreamId, videoStreamId]);
   if (!asset) return <Text>Open an Asset explicitly to start a Source Viewer session.</Text>;
   const streams = asset.facts?.streams ?? [];
   const videoStreams = streams.filter((stream) => stream.descriptor.mediaType === "video");
@@ -243,9 +250,8 @@ export function SourcePreviewSurface({
   const lease = preparation?.lease;
   const range = controller.selectedRange();
   const canUseFullSource = controller.hasFiniteSelectedCoverage();
-  return (
+  const rangePanel = (
     <Stack spacing="compact">
-      <Text>{asset.displayName}</Text>
       {!videoStreamId && !audioStreamId ? <Text>Select at least one explicit SourceStream.</Text> : null}
       {snapshot.status === "preparing" ? (
         <Text>
@@ -298,14 +304,41 @@ export function SourcePreviewSurface({
             </Button>
           </ControlStrip>
           {!canUseFullSource ? <Text>Full range unavailable; mark In and Out explicitly.</Text> : null}
-          <Text tone="eyebrow">NORMALIZED SOURCE PROXY · {lease.byteLength} BYTES</Text>
         </>
       ) : null}
-      <Text tone="eyebrow">SOURCE TRACKS</Text>
-      <StreamSelection label="VIDEO" onChange={onVideoStreamChange} selected={videoStreamId} streams={videoStreams} />
-      <StreamSelection label="AUDIO" onChange={onAudioStreamChange} selected={audioStreamId} streams={audioStreams} />
       {actionError ? <Text>{actionError.message}</Text> : null}
     </Stack>
+  );
+  return (
+    <Tabs
+      activeTabId={sourcePanel}
+      density="compact"
+      label="Source viewer panels"
+      tabs={[
+        { id: "range", label: "Range", content: rangePanel },
+        {
+          id: "streams",
+          label: "Streams",
+          content: (
+            <Stack spacing="compact">
+              <StreamSelection
+                label="VIDEO"
+                onChange={onVideoStreamChange}
+                selected={videoStreamId}
+                streams={videoStreams}
+              />
+              <StreamSelection
+                label="AUDIO"
+                onChange={onAudioStreamChange}
+                selected={audioStreamId}
+                streams={audioStreams}
+              />
+            </Stack>
+          ),
+        },
+      ]}
+      onTabChange={(tabId) => setSourcePanel(tabId === "streams" ? "streams" : "range")}
+    />
   );
 }
 

@@ -14,6 +14,7 @@ import {
   ResourceCard,
   Status,
   Surface,
+  Tabs,
   TextAreaField,
   TextField,
   TimelineSurface,
@@ -234,6 +235,27 @@ describe("atomic components", () => {
 
     expect(screen.getByRole("region", { name: "Source preview" }).textContent).toBe("Preview and range");
     expect(screen.getByRole("complementary", { name: "Source placement" }).textContent).toBe("Placement settings");
+  });
+
+  it("offers compact semantic tabs for nested editor modes", () => {
+    render(
+      <Tabs
+        density="compact"
+        initialTabId="range"
+        label="Source viewer panels"
+        tabs={[
+          { id: "range", label: "Range", content: "Source range" },
+          { id: "streams", label: "Streams", content: "Source streams" },
+        ]}
+      />,
+    );
+
+    const range = screen.getByRole("tab", { name: "Range" });
+    const streams = screen.getByRole("tab", { name: "Streams" });
+    expect(range.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(streams);
+    expect(streams.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel").textContent).toBe("Source streams");
   });
 
   it("normalizes file selection and drop behind one semantic atom", () => {
