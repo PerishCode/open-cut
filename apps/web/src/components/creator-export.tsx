@@ -34,35 +34,39 @@ export function CreatorExport({
   const contracts = useContracts();
   const [history, setHistory] = useState<SequenceExportHistoryPage>();
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
   const [save, setSave] = useState<SavedLineage>();
   const [revealedName, setRevealedName] = useState(undefined as string | undefined);
   const [deleteConfirmation, setDeleteConfirmation] = useState<DurableID>();
   const suggestedName = useMemo(() => exportFilename(projectName, sequenceRevision), [projectName, sequenceRevision]);
 
-  const run = useCallback(async <Result,>(operation: () => Promise<Result>): Promise<Result> => {
-    setPending(true);
-    setError(undefined);
-    try {
-      return await operation();
-    } catch (value) {
-      const next = value instanceof Error ? value : new Error(String(value));
-      setError(next);
-      throw next;
-    } finally {
-      setPending(false);
-    }
-  }, []);
+  const run = useCallback(
+    async <Result,>(failureMessage: string, operation: () => Promise<Result>): Promise<Result | undefined> => {
+      setPending(true);
+      setActionError(undefined);
+      try {
+        return await operation();
+      } catch {
+        setActionError(failureMessage);
+        return undefined;
+      } finally {
+        setPending(false);
+      }
+    },
+    [],
+  );
 
   const loadHistory = useCallback(
     async (signal?: AbortSignal) => {
       setLoadingHistory(true);
+      setHistoryError(false);
       try {
         const page = await contracts.exports.list(projectId, { limit: 20 }, signal);
         setHistory(page);
-      } catch (value) {
-        if (!signal?.aborted) setError(value instanceof Error ? value : new Error(String(value)));
+      } catch {
+        if (!signal?.aborted) setHistoryError(true);
       } finally {
         if (!signal?.aborted) setLoadingHistory(false);
       }
@@ -83,7 +87,7 @@ export function CreatorExport({
 
   const start = useCallback(
     () =>
-      run(async () => {
+      run("Could not start this export. Try again.", async () => {
         setSave(undefined);
         setRevealedName(undefined);
         setDeleteConfirmation(undefined);
@@ -99,7 +103,7 @@ export function CreatorExport({
 
   const cancel = useCallback(
     (lineage: SequenceExportLineage) =>
-      run(async () => {
+      run("Could not cancel this export. Check its latest status and try again.", async () => {
         await contracts.exports.cancel(projectId, lineage.export.job.id, requestIdentity("export-cancel"));
         await loadHistory();
       }),
@@ -108,7 +112,7 @@ export function CreatorExport({
 
   const retry = useCallback(
     (lineage: SequenceExportLineage) =>
-      run(async () => {
+      run("Could not retry this export. Try again.", async () => {
         setSave(undefined);
         setDeleteConfirmation(undefined);
         await contracts.exports.retry(projectId, lineage.export.job.id);
@@ -121,7 +125,7 @@ export function CreatorExport({
     (lineage: SequenceExportLineage, overwrite?: Extract<ExportSaveResult, { status: "overwrite-required" }>) => {
       const artifact = lineage.export.artifact;
       if (!artifact) return undefined;
-      return run(async () => {
+      return run("Could not save this export. Choose a destination again.", async () => {
         const result = await contracts.exports.saveAs({
           projectId,
           artifactId: artifact.id,
@@ -137,7 +141,7 @@ export function CreatorExport({
 
   const reveal = useCallback(
     (result: Extract<ExportSaveResult, { status: "saved" }>) =>
-      run(async () => {
+      run("Could not reveal the saved export. Open it from its destination instead.", async () => {
         const revealed = await contracts.exports.reveal(result.deliveryReceipt);
         setRevealedName(revealed.displayName);
       }),
@@ -148,7 +152,7 @@ export function CreatorExport({
     (lineage: SequenceExportLineage) => {
       const artifact = lineage.export.artifact;
       if (!artifact) return undefined;
-      return run(async () => {
+      return run("Could not delete this exported media. Try again.", async () => {
         await contracts.exports.deleteArtifact(
           projectId,
           lineage.export.job.id,
@@ -167,7 +171,7 @@ export function CreatorExport({
   const loadMore = useCallback(
     () =>
       history?.nextAfter &&
-      run(async () => {
+      run("Could not load older exports. Try again.", async () => {
         const page = await contracts.exports.list(projectId, { after: history.nextAfter, limit: 20 });
         setHistory({
           lineages: [...history.lineages, ...page.lineages],
@@ -207,6 +211,14 @@ export function CreatorExport({
         </Button>
       </ControlStrip>
       {loadingHistory && !history ? <Text>Loading exports…</Text> : null}
+      {historyError ? (
+        <Stack spacing="compact">
+          <Status state="unavailable">Could not load export history.</Status>
+          <Button disabled={loadingHistory} onPress={() => void loadHistory()}>
+            Try again
+          </Button>
+        </Stack>
+      ) : null}
       {history?.lineages.length === 0 ? (
         <EmptyState hint="Completed exports and retained job history will appear here." title="No exports yet" />
       ) : null}
@@ -331,7 +343,7 @@ export function CreatorExport({
           Load older exports
         </Button>
       ) : null}
-      {error ? <Status state="unavailable">Export action failed · {error.message}</Status> : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
     </Stack>
   );
 }

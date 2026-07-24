@@ -139,7 +139,10 @@ describe("Creator rough cut", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Add rough cut to Timeline" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry same rough cut" }));
+    const retry = await screen.findByRole("button", { name: "Retry same rough cut" });
+    expect(screen.getByText("Could not confirm the Rough cut update.")).toBeTruthy();
+    expect(screen.queryByText(/Creator edit failed|503|Unavailable/)).toBeNull();
+    fireEvent.click(retry);
 
     await waitFor(() => expect(applyBodies).toHaveLength(2));
     await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());

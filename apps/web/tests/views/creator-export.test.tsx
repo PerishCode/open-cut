@@ -13,6 +13,69 @@ afterEach(() => {
 });
 
 describe("CreatorExport", () => {
+  it("keeps export history failures private and retries the list", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000241");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000242");
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error("sqlite read failed at /Users/editor/Library/Application Support/Open Cut/project.db");
+          }
+          return jsonResponse({ lineages: [], activityCursor: "1" });
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=1`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    renderExport(projectId, sequenceId, "Recovery story", "1");
+    expect(await screen.findByText("Could not load export history.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("No exports yet")).toBeTruthy();
+    expect(attempts).toBe(2);
+  });
+
+  it("contains export action failures without an unhandled adapter error", async () => {
+    const projectId = durableID("018f0a60-7b80-7a01-8000-000000000251");
+    const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000252");
+    vi.stubGlobal("crypto", { randomUUID: () => "018f0a60-7b80-7a01-8000-000000000253" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `/api/v1/projects/${projectId}/exports?limit=20`) {
+          return jsonResponse({ lineages: [], activityCursor: "1" });
+        }
+        if (url === `/api/v1/projects/${projectId}/exports`) {
+          return new Response(
+            JSON.stringify({
+              title: "Internal Server Error",
+              status: 500,
+              detail: "renderer failed at /Users/editor/.open-cut/export.webm",
+            }),
+            { status: 500, headers: { "content-type": "application/problem+json" } },
+          );
+        }
+        if (url === `/api/v1/projects/${projectId}/events?after=1`) return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    renderExport(projectId, sequenceId, "Failed story", "2");
+    await screen.findByText("No exports yet");
+    fireEvent.click(screen.getByRole("button", { name: "Export current revision" }));
+
+    expect(await screen.findByText("Could not start this export. Try again.")).toBeTruthy();
+    expect(screen.queryByText(/Internal Server Error|renderer failed|\/Users\//i)).toBeNull();
+  });
+
   it("rediscovers ready history and requires a second gesture before durable deletion", async () => {
     const projectId = durableID("018f0a60-7b80-7a01-8000-000000000201");
     const sequenceId = durableID("018f0a60-7b80-7a01-8000-000000000202");
@@ -188,6 +251,21 @@ describe("CreatorExport", () => {
     expect(screen.getByText("Add a clip or caption to the Sequence before exporting.")).toBeTruthy();
   });
 });
+
+function renderExport(projectId: string, sequenceId: string, projectName: string, revision: string) {
+  return render(
+    <ContractsProvider>
+      <CreatorExport
+        available
+        hasContent
+        projectId={durableID(projectId)}
+        projectName={projectName}
+        sequenceId={durableID(sequenceId)}
+        sequenceRevision={revisionString(revision)}
+      />
+    </ContractsProvider>,
+  );
+}
 
 function historyLineage(projectId: string, sequenceId: string, jobId: string, artifactId: string, deleted: boolean) {
   return {
