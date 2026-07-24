@@ -123,10 +123,19 @@ its transient CDP port by hand:
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --screenshot .tmp/ui-audit.png
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --snapshot --match Viewer
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --eval 'document.body?.innerText'
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --set-file .tmp/fixture.webm
 ```
+
+`--snapshot` reads the browser accessibility tree plus generic renderer
+geometry, focus, overflow, scroll, clipping, and disabled-control state without
+starting a second browser. Its node sets are bounded; `--match` applies a
+case-insensitive role/name filter while retaining the full-page summary. Combine
+snapshot, eval, and screenshot flags when one settled renderer state should
+produce all three forms of evidence.
 
 `--set-file` accepts only a non-empty regular file, reports the exact attached
 byte size, and targets the first enabled file input. It is a generic renderer

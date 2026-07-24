@@ -65,12 +65,19 @@ New recurring visual behavior becomes a shared closed variant only after at
 least two real consumers need it.
 
 Visual changes are accepted in the real Electron renderer. Normal phase work
-uses `oc-control dev inspect` for screenshots and geometry, with Playwright for
-semantic and interaction checks. Every tenth phase replays:
+uses `oc-control dev inspect --snapshot` for screenshots, browser-native
+semantics, focus, geometry, overflow, and clipping. Playwright is reserved for
+isolated or high-concurrency interaction suites. Any exploratory Playwright CLI
+session must have an explicit task-recorded name, use `detach` for an attached
+Electron target or `close` for a spawned browser, and be reconciled through
+`playwright-cli list --json` before the phase ends.
+
+Every tenth phase replays:
 
 - product minimum native outer 1280×800;
 - default native outer 1440×900;
-- native fullscreen.
+- native fullscreen when the work or release gate needs native window evidence
+  and the desktop session is unlocked.
 
 At each size the document body must not become a scroll owner, persistent panes
 must retain their own bounded overflow, focusable controls must have accessible
