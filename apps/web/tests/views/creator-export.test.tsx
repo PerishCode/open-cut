@@ -79,6 +79,7 @@ describe("CreatorExport", () => {
       </ContractsProvider>,
     );
     const saveAsButton = await screen.findByRole("button", { name: "Save As…" });
+    expect(screen.getByText("DESTINATION AFTER RENDER · WEBM · VP9 / OPUS")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     fireEvent.click(saveAsButton);
     expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
