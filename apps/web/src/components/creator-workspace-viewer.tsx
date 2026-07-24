@@ -283,12 +283,12 @@ export function SourcePreviewSurface({
             source={lease.sameOriginUrl}
           />
           <ControlStrip
-            hint={`IN ${formatExact(snapshot.marks.in)} · OUT ${formatExact(snapshot.marks.out)}${
-              range ? ` · ${formatExact(range.duration)}` : ""
+            hint={`IN ${formatSourceClock(snapshot.marks.in)} · OUT ${formatSourceClock(snapshot.marks.out)}${
+              range ? ` · DUR ${formatSourceClock(range.duration)}` : ""
             }`}
             keyboardShortcuts="ArrowLeft ArrowRight I O"
             label="Source range controls"
-            summary={`SOURCE ${formatExact(snapshot.playhead)} · PROXY ${formatExact(snapshot.proxyPlayhead)}`}
+            summary={`SOURCE ${formatSourceClock(snapshot.playhead)} · PROXY ${formatSourceClock(snapshot.proxyPlayhead)}`}
             onKeyDown={onSourceRangeKeyDown}
           >
             <Button onPress={() => run(() => controller.step("previous"))}>Previous boundary</Button>
@@ -379,8 +379,8 @@ function StreamSelection({
   );
 }
 
-function formatExact(value: { value: string; scale: number } | undefined): string {
-  return value ? `${value.value}/${value.scale}s` : "—";
+function formatSourceClock(value: { value: string; scale: number } | undefined): string {
+  return value ? formatClock(value) : "—";
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {

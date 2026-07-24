@@ -102,6 +102,8 @@ describe("SourcePreviewSurface", () => {
     expect(player.hasAttribute("controls")).toBe(true);
     expect(controls.getAttribute("aria-keyshortcuts")).toBe("ArrowLeft ArrowRight I O");
     expect(controls.tabIndex).toBe(0);
+    expect(within(controls).getByText("SOURCE 00:00.00 · PROXY 00:00.00")).toBeTruthy();
+    expect(within(controls).getByText("IN — · OUT —")).toBeTruthy();
 
     fireEvent.keyDown(controls, { key: "ArrowLeft" });
     fireEvent.keyDown(controls, { key: "ArrowRight" });
