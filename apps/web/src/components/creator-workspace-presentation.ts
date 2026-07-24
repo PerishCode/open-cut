@@ -92,9 +92,9 @@ export function narrativeNodeLabel(node: NarrativeNode): string {
       return `${node.authoredText.purpose.toUpperCase()} · ${node.authoredText.language} · r${node.authoredText.revision}`;
     case "source-excerpt": {
       const range = node.sourceExcerpt.sourceRange;
-      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatTime(range.start)} → ${(
-        Number(range.start.value) / range.start.scale + Number(range.duration.value) / range.duration.scale
-      ).toFixed(2)} · r${node.sourceExcerpt.revision}`;
+      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatClock(range.start)} → ${formatClockEnd(
+        range,
+      )} · r${node.sourceExcerpt.revision}`;
     }
     case "visual-intent":
       return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${node.visualIntent.language} · r${node.visualIntent.revision}`;

@@ -30,7 +30,7 @@ describe("atomic components", () => {
     const onPress = vi.fn();
     render(
       <>
-        <Button variant="primary" onPress={onPress}>
+        <Button label="Commit edit" variant="primary" onPress={onPress}>
           Commit
         </Button>
         <Button pressed onPress={onPress}>
@@ -47,7 +47,9 @@ describe("atomic components", () => {
 
     const buttons = screen.getAllByRole("button");
     expect(new Set(buttons.map((button) => button.className)).size).toBe(4);
-    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    const commit = screen.getByRole("button", { name: "Commit edit" });
+    expect(commit.textContent).toBe("Commit");
+    fireEvent.click(commit);
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));

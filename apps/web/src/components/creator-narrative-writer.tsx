@@ -233,26 +233,28 @@ export function CreatorNarrativeWriter({
                   {String(index + 1).padStart(2, "0")} · {narrativeNodeLabel(node)}
                 </Text>
                 <Text>{narrativeNodeText(node)}</Text>
-                <ControlStrip
-                  label={`Story node ${index + 1} actions`}
-                  summary={node.kind === "source-excerpt" ? "EXCERPT ACTIONS" : "NODE ACTIONS"}
-                >
-                  <Button onPress={() => selectNode(node)}>
-                    {node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
+                <ControlStrip label={`Story node ${index + 1} actions`}>
+                  <Button
+                    label={node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
+                    onPress={() => selectNode(node)}
+                  >
+                    Select
                   </Button>
                   {node.kind === "source-excerpt" ? (
                     <>
                       <Button
                         disabled={node.evidenceStatus !== "exact" || !onAddToRoughCut}
+                        label="Add excerpt to rough cut"
                         onPress={() => onAddToRoughCut?.(node.sourceExcerpt, node.evidenceStatus)}
                       >
-                        Add excerpt to rough cut
+                        Rough cut
                       </Button>
                       <Button
                         disabled={node.evidenceStatus !== "exact" || !onCreateCaptions}
+                        label="Create captions from excerpt"
                         onPress={() => onCreateCaptions?.(node.sourceExcerpt, node.evidenceStatus)}
                       >
-                        Create captions from excerpt
+                        Captions
                       </Button>
                     </>
                   ) : null}
@@ -703,18 +705,23 @@ function NarrativeParagraphEditor({
         value={draft.value}
       />
       <Status state={draftStatusState(draft.phase)}>{draftStatusText(draft.phase)}</Status>
-      <ControlStrip label={`Narrative paragraph ${ordinal} structure actions`} summary="PARAGRAPH STRUCTURE">
-        <Button disabled={!canMoveUp || draft.phase !== "clean"} onPress={() => void moveParagraph(moveUpAfterNodeId)}>
-          Move paragraph up
+      <ControlStrip label={`Narrative paragraph ${ordinal} structure actions`}>
+        <Button
+          disabled={!canMoveUp || draft.phase !== "clean"}
+          label="Move paragraph up"
+          onPress={() => void moveParagraph(moveUpAfterNodeId)}
+        >
+          Up
         </Button>
         <Button
           disabled={!canMoveDown || draft.phase !== "clean"}
+          label="Move paragraph down"
           onPress={() => void moveParagraph(moveDownAfterNodeId)}
         >
-          Move paragraph down
+          Down
         </Button>
-        <Button disabled={draft.phase !== "clean"} onPress={() => void removeParagraph()}>
-          Remove paragraph
+        <Button disabled={draft.phase !== "clean"} label="Remove paragraph" onPress={() => void removeParagraph()}>
+          Remove
         </Button>
       </ControlStrip>
       {draft.phase === "error" ? (
