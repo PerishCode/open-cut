@@ -87,6 +87,17 @@ export function creatorAgentContextCandidates(
   }));
 }
 
+export function sequenceQuickContextCandidates(
+  sequence: SequenceWindow,
+  playhead: RationalTime,
+  projection: WorkspaceSelectionProjection,
+): readonly CreatorAgentContextCandidate[] {
+  return creatorAgentContextCandidates(
+    { items: [sequenceRangeContext(sequence), sequencePointContext(sequence, playhead)] },
+    projection,
+  );
+}
+
 export function assetContext(asset: Asset): AgentContextAttachment {
   return { kind: "asset", entity: { id: asset.id, revision: asset.revision } };
 }

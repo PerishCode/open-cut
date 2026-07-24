@@ -56,17 +56,15 @@ const initialState: AgentPaneState = {
 
 export function CreatorAgentPane({
   contextCandidates,
-  onAddPlayheadContext,
-  onAddTimelineContext,
   onFocusReceiptRef,
   projectId,
+  quickContextCandidates = [],
   sequenceId,
 }: {
   contextCandidates: readonly CreatorAgentContextCandidate[];
-  onAddPlayheadContext?: () => void;
-  onAddTimelineContext?: () => void;
   onFocusReceiptRef?: (ref: CommandReceiptRef) => string;
   projectId: DurableID;
+  quickContextCandidates?: readonly CreatorAgentContextCandidate[];
   sequenceId: DurableID;
 }) {
   const contracts = useContracts();
@@ -210,7 +208,7 @@ export function CreatorAgentPane({
     if (!text || state.submitting || state.availability?.state !== "available") return;
     setState((current) => ({ ...current, submitting: true, error: undefined }));
     try {
-      const attachments = selectedAttachments(contextCandidates, contextKeys);
+      const attachments = selectedAttachments([...quickContextCandidates, ...contextCandidates], contextKeys);
       const submission = state.selected
         ? await contracts.agent.continue(projectId, state.selected.id, {
             requestId: requestID("continue"),
@@ -254,6 +252,7 @@ export function CreatorAgentPane({
     contracts,
     message,
     projectId,
+    quickContextCandidates,
     sequenceId,
     state.availability,
     state.selected,
@@ -389,23 +388,31 @@ export function CreatorAgentPane({
     <PanelDock
       footer={
         <Stack spacing="compact">
-          {onAddTimelineContext || onAddPlayheadContext ? (
-            <ControlStrip label="Quick Agent context" summary="QUICK CONTEXT">
-              {onAddTimelineContext ? (
-                <Button disabled={!canSubmit} onPress={onAddTimelineContext}>
-                  Add visible timeline
-                </Button>
-              ) : null}
-              {onAddPlayheadContext ? (
-                <Button disabled={!canSubmit} onPress={onAddPlayheadContext}>
-                  Add playhead
-                </Button>
-              ) : null}
+          {quickContextCandidates.length > 0 ? (
+            <ControlStrip
+              hint={contextSelectionHint(quickContextCandidates, contextKeys, "Attach to next message")}
+              label="Quick Agent context"
+              summary="QUICK CONTEXT"
+            >
+              {quickContextCandidates.map((candidate) => {
+                const selected = contextKeys.includes(candidate.key);
+                return (
+                  <Button
+                    disabled={!canSubmit}
+                    key={candidate.key}
+                    label={`${selected ? "Remove" : "Attach"} quick context ${candidate.label}`}
+                    pressed={selected}
+                    onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
+                  >
+                    {candidate.attachment.kind === "sequence-range" ? "Visible timeline" : "Playhead"}
+                  </Button>
+                );
+              })}
             </ControlStrip>
           ) : null}
           {contextCandidates.length > 0 ? (
             <ControlStrip
-              hint={contextKeys.length > 0 ? `${contextKeys.length} attached` : "Optional"}
+              hint={contextSelectionHint(contextCandidates, contextKeys, "Optional")}
               label="Agent context attachments"
               summary="@ CONTEXT"
             >
@@ -415,13 +422,11 @@ export function CreatorAgentPane({
                   <Button
                     disabled={!canSubmit}
                     key={candidate.key}
-                    onPress={() =>
-                      setContextKeys((current) =>
-                        selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
-                      )
-                    }
+                    label={`${selected ? "Remove" : "Attach"} Agent context ${candidate.label}`}
+                    pressed={selected}
+                    onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
                   >
-                    {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
+                    @ {candidate.label}
                   </Button>
                 );
               })}
@@ -663,7 +668,24 @@ function selectedAttachments(
   keys: readonly string[],
 ): readonly AgentContextAttachment[] {
   const selected = new Set(keys);
-  return candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => candidate.attachment);
+  return [
+    ...new Map(
+      candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => [candidate.key, candidate]),
+    ).values(),
+  ].map((candidate) => candidate.attachment);
+}
+
+function toggleContextKey(keys: readonly string[], key: string): readonly string[] {
+  return keys.includes(key) ? keys.filter((candidate) => candidate !== key) : [...keys, key];
+}
+
+function contextSelectionHint(
+  candidates: readonly CreatorAgentContextCandidate[],
+  keys: readonly string[],
+  empty: string,
+): string {
+  const count = candidates.filter((candidate) => keys.includes(candidate.key)).length;
+  return count > 0 ? `${count} attached` : empty;
 }
 
 function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {

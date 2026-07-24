@@ -35,8 +35,7 @@ import {
   includeWorkspaceSelection,
   narrativeContext,
   resolveWorkspaceFocus,
-  sequencePointContext,
-  sequenceRangeContext,
+  sequenceQuickContextCandidates,
   transcriptSegmentContext,
   type WorkspaceSelection,
   workspaceFocusIntent,
@@ -447,12 +446,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       inspector={
         <CreatorAgentPane
           contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
-          onAddPlayheadContext={
-            ready ? () => selectContext(sequencePointContext(ready.sequence, sequencePreview.playhead)) : undefined
-          }
-          onAddTimelineContext={ready ? () => selectContext(sequenceRangeContext(ready.sequence)) : undefined}
           onFocusReceiptRef={focusReceiptRef}
           projectId={project.id}
+          quickContextCandidates={
+            ready ? sequenceQuickContextCandidates(ready.sequence, sequencePreview.playhead, selectionProjection) : []
+          }
           sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
         />
       }
