@@ -256,9 +256,12 @@ describe("atomic components", () => {
     const range = screen.getByRole("tab", { name: "Range" });
     const streams = screen.getByRole("tab", { name: "Streams" });
     expect(range.getAttribute("aria-selected")).toBe("true");
+    const panel = screen.getByRole("tabpanel");
+    panel.scrollTop = 120;
     fireEvent.click(streams);
     expect(streams.getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tabpanel").textContent).toBe("Source streams");
+    expect(panel.textContent).toBe("Source streams");
+    expect(panel.scrollTop).toBe(0);
   });
 
   it("normalizes file selection and drop behind one semantic atom", () => {
