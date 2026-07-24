@@ -43,7 +43,7 @@ describe("Creator Timeline handoff", () => {
     );
 
     expect(await screen.findByText("Rough cut added · 1 clip highlighted")).toBeTruthy();
-    const clipButton = screen.getByRole("button", { name: "Select interview.mov" });
+    const clipButton = screen.getByRole("button", { name: "Select interview.mov on V1 at 00:00.00" });
     expect(clipButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(clipButton);
     expect(screen.queryByText("Rough cut added · 1 clip highlighted")).toBeNull();

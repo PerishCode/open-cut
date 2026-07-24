@@ -327,6 +327,14 @@ describe("atomic components", () => {
             durationSeconds: 8,
             selected: true,
           },
+          {
+            id: "guide-1",
+            trackId: "audio-1",
+            label: "Guide reference",
+            startSeconds: 0,
+            durationSeconds: 4,
+            selectable: false,
+          },
         ]}
         onItemSelect={onItemSelect}
         onSeek={onSeek}
@@ -344,8 +352,10 @@ describe("atomic components", () => {
     expect(toolbar.tabIndex).toBe(0);
     expect(toolbar.getAttribute("aria-keyshortcuts")).toBe("Home 0 - =");
     expect(screen.getByRole("group", { name: "Timeline zoom" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Select Opening shot" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select Opening shot on V1 at 00:05.00" }));
     expect(onItemSelect).toHaveBeenCalledWith("clip-1");
+    expect(screen.getByText("Guide reference")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Guide reference/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Seek A1" }));
     expect(onSeek).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole("button", { name: "Zoom timeline in" }));
@@ -385,8 +395,8 @@ describe("atomic components", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Trim in Opening shot" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Select Opening shot" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Trim in Opening shot on V1 at 00:05.00" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Select Opening shot on V1 at 00:05.00" })).toBeTruthy();
 
     view.rerender(
       <TimelineSurface
@@ -412,9 +422,9 @@ describe("atomic components", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Move Opening shot" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Trim in Opening shot" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Trim out Opening shot" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move Opening shot on V1 at 00:05.00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trim in Opening shot on V1 at 00:05.00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trim out Opening shot on V1 at 00:05.00" })).toBeTruthy();
   });
 
   it("reports move and trim targets in presentation seconds and cancels on Escape", () => {
@@ -461,7 +471,7 @@ describe("atomic components", () => {
       toJSON: () => ({}),
     });
 
-    const body = screen.getByRole("button", { name: "Move Opening shot" });
+    const body = screen.getByRole("button", { name: "Move Opening shot on V1 at 00:10.00" });
     fireEvent.pointerDown(body, { pointerId: 1, button: 0, clientX: 100, clientY: 10 });
     fireEvent.pointerMove(body, { pointerId: 1, clientX: 250, clientY: 10 });
     fireEvent.pointerUp(body, { pointerId: 1, clientX: 250, clientY: 10 });
@@ -471,13 +481,13 @@ describe("atomic components", () => {
     expect(onItemMove).toHaveBeenCalledWith("clip-1", 25);
     expect(onItemSelect).not.toHaveBeenCalled();
 
-    const trimIn = screen.getByRole("button", { name: "Trim in Opening shot" });
+    const trimIn = screen.getByRole("button", { name: "Trim in Opening shot on V1 at 00:10.00" });
     fireEvent.pointerDown(trimIn, { pointerId: 2, button: 0, clientX: 100, clientY: 10 });
     fireEvent.pointerMove(trimIn, { pointerId: 2, clientX: 150, clientY: 10 });
     fireEvent.pointerUp(trimIn, { pointerId: 2, clientX: 150, clientY: 10 });
     expect(onItemTrimStart).toHaveBeenCalledWith("clip-1", 15);
 
-    const trimOut = screen.getByRole("button", { name: "Trim out Opening shot" });
+    const trimOut = screen.getByRole("button", { name: "Trim out Opening shot on V1 at 00:10.00" });
     fireEvent.pointerDown(trimOut, { pointerId: 3, button: 0, clientX: 300, clientY: 10 });
     fireEvent.pointerMove(trimOut, { pointerId: 3, clientX: 250, clientY: 10 });
     fireEvent.pointerUp(trimOut, { pointerId: 3, clientX: 250, clientY: 10 });
