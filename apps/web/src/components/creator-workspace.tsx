@@ -35,8 +35,7 @@ import {
   includeWorkspaceSelection,
   narrativeContext,
   resolveWorkspaceFocus,
-  sequencePointContext,
-  sequenceRangeContext,
+  sequenceQuickContextCandidates,
   transcriptSegmentContext,
   type WorkspaceSelection,
   workspaceFocusIntent,
@@ -49,6 +48,7 @@ import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-na
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
 import { type CreatorRoughCutOccurrence, createCreatorRoughCutOccurrence } from "./creator-rough-cut-queue.js";
+import { createSourcePanelNavigation } from "./creator-source-panel-navigation.js";
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
@@ -69,8 +69,7 @@ import { ProductResources } from "./product-resources.js";
 import { SourceImportSurface } from "./source-import-surface.js";
 
 type WorkspaceState =
-  | Readonly<{ status: "loading" }>
-  | Readonly<{ status: "unavailable"; error: Error }>
+  | Readonly<{ status: "loading" | "unavailable" }>
   | Readonly<{
       status: "ready";
       overview: ProjectOverview;
@@ -78,7 +77,6 @@ type WorkspaceState =
       sequence: SequenceWindow;
       assets: AssetPage;
     }>;
-type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
 export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
   const sequenceViewer = useMemo(() => new SequenceViewerController(contracts.media.viewer), [contracts]);
@@ -102,7 +100,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [viewerMode, setViewerMode] = useState<"sequence" | "source">("sequence");
   const [workspaceSelection, setWorkspaceSelection] = useState<WorkspaceSelection>(emptyWorkspaceSelection);
   const narrativeHandoff = useNarrativeHandoff();
-  const [roughCutOccurrences, setRoughCutOccurrences] = useState<RoughCutQueue>([]);
+  const [roughCutOccurrences, setRoughCutOccurrences] = useState([] as readonly CreatorRoughCutOccurrence[]);
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
@@ -159,7 +157,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       } catch (value) {
         if (!signal?.aborted) {
           if (preserveReady) throw value;
-          setState({ status: "unavailable", error: value instanceof Error ? value : new Error(String(value)) });
+          setState({ status: "unavailable" });
         }
       }
       return undefined;
@@ -251,7 +249,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const focusReceiptRef = useCallback(
     (ref: CommandReceiptRef): string => {
       const intent = workspaceFocusIntent(ref);
-      if (!intent) return `Receipt reference ${ref.kind} ${ref.id} has no workspace focus adapter.`;
+      if (!intent) return "This receipt cannot be focused in the current workspace.";
       const result = resolveWorkspaceFocus(intent, selectionProjection);
       if (result.assetId) {
         setSelectedAssetId(result.assetId);
@@ -430,6 +428,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, importing, load, project.id, state],
   );
+  const selectSourcePanel = createSourcePanelNavigation(setSourcePanel, readTranscript, selectedAsset, transcript);
   const syncStatus = workspaceSyncStatus(state.status, sync);
   return (
     <EditorShell
@@ -447,12 +446,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
       inspector={
         <CreatorAgentPane
           contextCandidates={creatorAgentContextCandidates(workspaceSelection, selectionProjection)}
-          onAddPlayheadContext={
-            ready ? () => selectContext(sequencePointContext(ready.sequence, sequencePreview.playhead)) : undefined
-          }
-          onAddTimelineContext={ready ? () => selectContext(sequenceRangeContext(ready.sequence)) : undefined}
           onFocusReceiptRef={focusReceiptRef}
           projectId={project.id}
+          quickContextCandidates={
+            ready ? sequenceQuickContextCandidates(ready.sequence, sequencePreview.playhead, selectionProjection) : []
+          }
           sequenceId={ready?.overview.project.mainSequenceId ?? project.mainSequenceId}
         />
       }
@@ -461,7 +459,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         <Tabs
           activeTabId={sourcePanel}
           label="Creative sources"
-          onTabChange={setSourcePanel}
+          onTabChange={selectSourcePanel}
           tabs={[
             {
               id: "source-media",
@@ -534,6 +532,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       projectId={project.id}
                       projectRevision={ready.overview.project.revision}
                       recentlyAddedNodeId={narrativeHandoff.recentlyAddedNodeId}
+                      selectedNodeId={activeNarrativeAnchor?.afterNodeId}
                       sequenceId={ready.overview.project.mainSequenceId}
                     />
                   ) : null}

@@ -52,6 +52,7 @@ export function NewNarrativeParagraph({
   sequenceId: DurableID;
   write: EditingPorts["write"];
 }>) {
+  const [editing, setEditing] = useState(autoFocus);
   const [draft, setDraft] = useState<DraftState>({ value: "", phase: "clean" });
   const draftRef = useRef("");
   const inFlightRef = useRef(false);
@@ -60,6 +61,9 @@ export function NewNarrativeParagraph({
   onPhaseChangeRef.current = onPhaseChange;
 
   useEffect(() => onPhaseChangeRef.current(draft.phase), [draft.phase]);
+  useEffect(() => {
+    if (autoFocus) setEditing(true);
+  }, [autoFocus]);
 
   const checkpoint = useCallback(async () => {
     const value = draftRef.current;
@@ -139,11 +143,12 @@ export function NewNarrativeParagraph({
     setDraft((current) => ({ ...current, phase: "dirty", error: undefined }));
   }, [onReload]);
 
+  if (!editing) return <Button onPress={() => setEditing(true)}>Add paragraph</Button>;
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">NEW · SPOKEN · {formatLanguageLabel(language)}</Text>
       <TextAreaField
-        focusRequest={autoFocus ? "new-paragraph" : undefined}
+        focusRequest="new-paragraph"
         label="New Narrative paragraph"
         maxLength={262_144}
         onBlur={() => void checkpoint()}
@@ -161,10 +166,15 @@ export function NewNarrativeParagraph({
           void checkpoint();
         }}
         placeholder="Write the next passage…"
-        rows={5}
+        rows={3}
         value={draft.value}
       />
       <Status state={draftStatusState(draft.phase)}>{draftStatusText(draft.phase)}</Status>
+      {draft.phase === "clean" ? (
+        <Button variant="quiet" onPress={() => setEditing(false)}>
+          Cancel
+        </Button>
+      ) : null}
       {draft.phase === "error" ? (
         <>
           {attemptRef.current?.value === draft.value ? (

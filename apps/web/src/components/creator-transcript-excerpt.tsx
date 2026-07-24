@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text, TokenSelection } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text, TokenSelection } from "@open-cut/components";
 import {
   type Asset,
   type CommitCreatorEditInput,
@@ -179,21 +179,24 @@ export function CreatorTranscriptExcerpt({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">TRANSCRIPT · EXACT TOKEN SELECTION</Text>
       {!usableTarget && phase !== "conflict" ? (
         <Status state="pending">
           {evidenceResult.evidence
             ? "Story insertion point required · choose one in Story, then reselect this range"
             : "Story insertion point required · choose one in Story before selecting words"}
         </Status>
-      ) : usableTarget && !selection ? (
-        <Text>Select words below to prepare an exact Story excerpt.</Text>
       ) : null}
       {segments.map((segment, segmentIndex) => (
         <Stack key={segment.id} spacing="compact">
-          <Text tone="eyebrow">
-            {formatClock(segment.sourceRange.start)} → {formatClockEnd(segment.sourceRange)}
-          </Text>
+          <ControlStrip
+            hint={`${segment.tokens.length} ${segment.tokens.length === 1 ? "TOKEN" : "TOKENS"}`}
+            label={`Transcript segment ${segmentIndex + 1} actions`}
+            summary={`${formatClock(segment.sourceRange.start)} → ${formatClockEnd(segment.sourceRange)}`}
+          >
+            <Button variant="quiet" onPress={() => onContext(page, segment)}>
+              Use this segment as @ context
+            </Button>
+          </ControlStrip>
           <TokenSelection
             disabled={phase === "saving" || phase === "conflict"}
             items={segment.tokens.map((token) => ({
@@ -214,7 +217,6 @@ export function CreatorTranscriptExcerpt({
               setNotice(undefined);
             }}
           />
-          <Button onPress={() => onContext(page, segment)}>Use this segment as @ context</Button>
         </Stack>
       ))}
       {segments.length === 0 ? <Text>No speech was recognized in this audio stream.</Text> : null}
@@ -222,28 +224,43 @@ export function CreatorTranscriptExcerpt({
       {evidenceResult.error ? (
         <Status state="unavailable">{evidenceFailureMessage(evidenceResult.error)}</Status>
       ) : null}
-      {selection ? (
-        <Button
-          disabled={phase === "saving" || phase === "conflict"}
-          onPress={() => {
-            setSelection(undefined);
-            attemptRef.current = undefined;
-            setPhase("idle");
-          }}
-        >
-          Clear excerpt selection
-        </Button>
-      ) : null}
-      <Button
-        disabled={
-          phase === "saving" || !evidenceResult.evidence || !usableTarget || asset.acceptedFingerprint === undefined
+      <ControlStrip
+        hint={evidenceResult.evidence ? (usableTarget ? "READY" : "CHOOSE STORY INSERTION POINT") : "SELECT WORDS"}
+        label="Transcript excerpt actions"
+        summary={
+          evidenceResult.evidence
+            ? `${formatClock(evidenceResult.evidence.sourceRange.start)} → ${formatClockEnd(
+                evidenceResult.evidence.sourceRange,
+              )}`
+            : "EXACT STORY EXCERPT"
         }
-        variant="primary"
-        onPress={() => void commit()}
       >
-        {phase === "saving" ? "Inserting excerpt…" : "Insert excerpt"}
-      </Button>
-      {!asset.acceptedFingerprint ? <Status state="unavailable">Asset fingerprint is not accepted.</Status> : null}
+        {selection ? (
+          <Button
+            disabled={phase === "saving" || phase === "conflict"}
+            variant="quiet"
+            onPress={() => {
+              setSelection(undefined);
+              attemptRef.current = undefined;
+              setPhase("idle");
+            }}
+          >
+            Clear excerpt selection
+          </Button>
+        ) : null}
+        <Button
+          disabled={
+            phase === "saving" || !evidenceResult.evidence || !usableTarget || asset.acceptedFingerprint === undefined
+          }
+          variant="primary"
+          onPress={() => void commit()}
+        >
+          {phase === "saving" ? "Inserting excerpt…" : "Insert excerpt"}
+        </Button>
+      </ControlStrip>
+      {!asset.acceptedFingerprint ? (
+        <Status state="unavailable">Source verification is not ready. Relink or reimport this footage.</Status>
+      ) : null}
       {phase === "error" ? (
         <>
           <Status state="unavailable">Could not confirm the Story insertion.</Status>

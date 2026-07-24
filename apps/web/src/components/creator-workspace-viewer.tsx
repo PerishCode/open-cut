@@ -161,7 +161,7 @@ function SequencePreparationSurface({
       hint={`${canvasLabel ? `${canvasLabel} · ` : ""}${formatFrameRate(facts.frameRate)} FPS`}
       keyboardShortcuts="Home ArrowLeft Space ArrowRight"
       label="Sequence transport"
-      summary={`SEQUENCE r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
+      summary={`SEQ r${preparation.sequenceRevision} · ${formatClock(snapshot.playhead)} / ${formatClock(facts.semanticDuration)}`}
       onKeyDown={onTransportKeyDown}
     >
       <Button onPress={() => runTransport(() => controller.seekToStart())}>Start</Button>

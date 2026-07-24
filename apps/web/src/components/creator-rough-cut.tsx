@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text } from "@open-cut/components";
 import {
   type Asset,
   type CreatorEditCommit,
@@ -167,57 +167,77 @@ export function CreatorRoughCutPanel({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">ROUGH CUT · EXCERPT QUEUE</Text>
-      <Text>
-        Starts at {formatClock(timelineStart)} · {occurrences.length}{" "}
-        {occurrences.length === 1 ? "excerpt" : "excerpts"}
-      </Text>
-      <Button
-        disabled={phase === "applying" || phase === "previewing"}
-        onPress={() => onTimelineStartChange(currentPlayhead)}
+      <ControlStrip
+        hint={`START ${formatClock(timelineStart)} · ${occurrences.length} ${
+          occurrences.length === 1 ? "EXCERPT" : "EXCERPTS"
+        }`}
+        label="Rough cut queue start"
+        summary="ROUGH CUT · EXCERPT QUEUE"
       >
-        Start at current playhead · {formatClock(currentPlayhead)}
-      </Button>
+        <Button
+          disabled={phase === "applying" || phase === "previewing"}
+          onPress={() => onTimelineStartChange(currentPlayhead)}
+        >
+          Start at current playhead · {formatClock(currentPlayhead)}
+        </Button>
+      </ControlStrip>
       {occurrences.map((occurrence, index) => (
         <Stack key={occurrence.key} spacing="compact">
-          <Text tone="eyebrow">
-            {String(index + 1).padStart(2, "0")} · {occurrence.assetLabel}
-          </Text>
-          <Text>{occurrence.sourceExcerpt.effectiveText}</Text>
+          <ControlStrip
+            hint={occurrence.sourceExcerpt.effectiveText}
+            label={`Rough cut excerpt ${index + 1}`}
+            summary={`${String(index + 1).padStart(2, "0")} · ${occurrence.assetLabel}`}
+          >
+            <Button
+              disabled={index === 0}
+              label={`Move rough cut excerpt ${index + 1} up`}
+              onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}
+            >
+              Up
+            </Button>
+            <Button
+              disabled={index === occurrences.length - 1}
+              label={`Move rough cut excerpt ${index + 1} down`}
+              onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
+            >
+              Down
+            </Button>
+            <Button
+              label={`Remove rough cut excerpt ${index + 1}`}
+              onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}
+            >
+              Remove
+            </Button>
+          </ControlStrip>
           <LaneChoices
             candidates={currentLaneCandidates("video", occurrence, assets, tracks)}
             kind="video"
             onChange={(selection) => updateOccurrence(occurrence.key, (value) => ({ ...value, video: selection }))}
+            ordinal={index + 1}
             selection={occurrence.video}
           />
           <LaneChoices
             candidates={currentLaneCandidates("audio", occurrence, assets, tracks)}
             kind="audio"
             onChange={(selection) => updateOccurrence(occurrence.key, (value) => ({ ...value, audio: selection }))}
+            ordinal={index + 1}
             selection={occurrence.audio}
           />
-          <Button disabled={index === 0} onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}>
-            Move excerpt up
-          </Button>
-          <Button
-            disabled={index === occurrences.length - 1}
-            onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
-          >
-            Move excerpt down
-          </Button>
-          <Button onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}>
-            Remove excerpt
-          </Button>
         </Stack>
       ))}
-      {occurrences.length === 0 ? <Text>Add an excerpt from Story to begin.</Text> : null}
       {blocker ? <Status state="unavailable">{blocker}</Status> : null}
-      <Button
-        disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
-        onPress={() => void previewDraft()}
+      <ControlStrip
+        hint={occurrences.length === 0 ? "ADD EXCERPTS FROM STORY TO BEGIN" : "CHECK LANES BEFORE TIMELINE"}
+        label="Rough cut review"
+        summary={occurrences.length === 0 ? "REVIEW · QUEUE EMPTY" : `REVIEW · ${occurrences.length} READY`}
       >
-        {phase === "previewing" ? "Preparing review…" : "Review rough cut"}
-      </Button>
+        <Button
+          disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
+          onPress={() => void previewDraft()}
+        >
+          {phase === "previewing" ? "Preparing review…" : "Review rough cut"}
+        </Button>
+      </ControlStrip>
       {review ? <RoughCutReview occurrences={occurrences} review={review} /> : null}
       {review ? (
         <Button disabled={phase === "applying"} onPress={() => void applyReview()}>
@@ -257,25 +277,39 @@ function LaneChoices({
   candidates,
   kind,
   onChange,
+  ordinal,
   selection,
 }: Readonly<{
   candidates: readonly CreatorRoughCutLaneCandidate[];
   kind: "video" | "audio";
   onChange(value: CreatorRoughCutLaneSelection): void;
+  ordinal: number;
   selection: CreatorRoughCutLaneSelection;
 }>) {
   return (
-    <Stack spacing="compact">
-      <Text tone="eyebrow">
-        {kind.toUpperCase()} · {laneSelectionLabel(selection)}
-      </Text>
+    <ControlStrip
+      hint={`${candidates.length} ${candidates.length === 1 ? "ROUTE" : "ROUTES"}`}
+      label={`Rough cut excerpt ${ordinal} ${kind} lane`}
+      summary={`${kind.toUpperCase()} · ${laneSelectionLabel(selection)}`}
+    >
       {candidates.map((candidate) => (
-        <Button key={candidate.id} onPress={() => onChange({ state: "selected", candidate })}>
+        <Button
+          key={candidate.id}
+          label={`Use ${candidate.trackLabel} · ${candidate.streamLabel} for rough cut excerpt ${ordinal}`}
+          pressed={selection.state === "selected" && selection.candidate.id === candidate.id}
+          onPress={() => onChange({ state: "selected", candidate })}
+        >
           Use {candidate.trackLabel} · {candidate.streamLabel}
         </Button>
       ))}
-      <Button onPress={() => onChange({ state: "omitted" })}>Omit {kind}</Button>
-    </Stack>
+      <Button
+        label={`Omit ${kind} for rough cut excerpt ${ordinal}`}
+        pressed={selection.state === "omitted"}
+        onPress={() => onChange({ state: "omitted" })}
+      >
+        Omit {kind}
+      </Button>
+    </ControlStrip>
   );
 }
 
@@ -296,7 +330,7 @@ function RoughCutReview({
             {item.video && item.audio ? "+" : ""}
             {item.audio ? "A" : ""}
           </Text>
-          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `Excerpt ${item.sourceExcerptId}`}</Text>
+          <Text>{occurrences[index]?.sourceExcerpt.effectiveText ?? `Excerpt ${index + 1}`}</Text>
         </Stack>
       ))}
       <Text>Nothing changes until you add this rough cut to the Timeline.</Text>

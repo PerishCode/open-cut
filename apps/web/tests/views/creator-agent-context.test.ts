@@ -42,6 +42,7 @@ const track = { id: id(503), revision: revisionString("4"), label: "Video 1", ty
 const clip = {
   id: id(504),
   revision: revisionString("5"),
+  assetId: asset.id,
   timelineRange: range,
 } as unknown as SequenceWindow["clips"][number];
 const caption = {
@@ -107,6 +108,19 @@ describe("Creator Agent workspace context", () => {
     );
     expect(candidates.some((candidate) => candidate.label.includes("Interview"))).toBe(true);
     expect(candidates.some((candidate) => candidate.label.includes("First sentence"))).toBe(true);
+    expect(new Set(candidates.map((candidate) => candidate.label))).toEqual(
+      new Set([
+        "Asset · Interview · r2",
+        "Story · Opening · r3",
+        "Clip · Interview · r5",
+        "Caption · Hello · r6",
+        "Track · Video 1 · r4",
+        "Transcript segment · First sentence",
+        "Sequence point · 00:00.00",
+        "Sequence range · 00:00.00 → 00:10.00",
+      ]),
+    );
+    expect(candidates.some((candidate) => candidate.label.includes("018f0a60"))).toBe(false);
   });
 
   it("focuses current durable state while labeling a historical receipt revision", () => {

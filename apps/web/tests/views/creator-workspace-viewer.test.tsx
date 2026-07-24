@@ -35,7 +35,7 @@ describe("SequencePreviewSurface", () => {
     const transport = screen.getByRole("region", { name: "Sequence transport" });
     const player = screen.getByLabelText("Main Sequence revision 14");
     expect(player.nextElementSibling?.contains(transport)).toBe(true);
-    expect(within(transport).getByText("SEQUENCE r14 · 00:08.00 / 00:09.00")).toBeTruthy();
+    expect(within(transport).getByText("SEQ r14 · 00:08.00 / 00:09.00")).toBeTruthy();
     expect(within(transport).getByText(/1920 × 1080 · 30 FPS/)).toBeTruthy();
     expect(within(transport).queryByText(/PLAN/)).toBeNull();
     expect(player.getAttribute("controls")).toBeNull();
@@ -75,7 +75,7 @@ describe("SequencePreviewSurface", () => {
     );
     expect(
       within(screen.getByRole("region", { name: "Sequence transport" })).getByText(
-        "SEQUENCE r14 · 2501999792983:36:33.00 / 2501999792983:36:33.00",
+        "SEQ r14 · 2501999792983:36:33.00 / 2501999792983:36:33.00",
       ),
     ).toBeTruthy();
   });

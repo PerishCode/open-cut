@@ -13,6 +13,8 @@ import type {
 } from "@open-cut/contracts";
 import { durableID } from "@open-cut/contracts";
 
+import { formatClock, formatClockEnd, narrativeNodeText } from "./creator-workspace-presentation.js";
+
 export type CreatorAgentContextCandidate = Readonly<{
   key: string;
   label: string;
@@ -83,6 +85,17 @@ export function creatorAgentContextCandidates(
     label: attachmentProjectionLabel(attachment, projection),
     attachment,
   }));
+}
+
+export function sequenceQuickContextCandidates(
+  sequence: SequenceWindow,
+  playhead: RationalTime,
+  projection: WorkspaceSelectionProjection,
+): readonly CreatorAgentContextCandidate[] {
+  return creatorAgentContextCandidates(
+    { items: [sequenceRangeContext(sequence), sequencePointContext(sequence, playhead)] },
+    projection,
+  );
 }
 
 export function assetContext(asset: Asset): AgentContextAttachment {
@@ -230,13 +243,27 @@ function attachmentProjectionLabel(
   if ("entity" in attachment) {
     if (attachment.kind === "asset") {
       const asset = projection.assets.find((candidate) => candidate.id === attachment.entity.id);
-      return `Asset · ${asset?.displayName ?? attachment.entity.id} · r${attachment.entity.revision}`;
+      return `Asset · ${asset?.displayName ?? "Selected media"} · r${attachment.entity.revision}`;
     }
     if (attachment.kind === "track") {
       const track = projection.tracks.find((candidate) => candidate.id === attachment.entity.id);
-      return `Track · ${track?.label ?? attachment.entity.id} · r${attachment.entity.revision}`;
+      return `Track · ${track?.label ?? "Selected track"} · r${attachment.entity.revision}`;
     }
-    return `${attachment.kind} · ${attachment.entity.id} · r${attachment.entity.revision}`;
+    if (attachment.kind === "narrative-node") {
+      const node = projection.narrative?.nodes.find(
+        (candidate) => narrativeEntity(candidate).id === attachment.entity.id,
+      );
+      return `Story · ${contextText(node ? narrativeNodeText(node) : "", "Selected node")} · r${
+        attachment.entity.revision
+      }`;
+    }
+    if (attachment.kind === "clip") {
+      const clip = projection.sequence?.clips.find((candidate) => candidate.id === attachment.entity.id);
+      const asset = projection.assets.find((candidate) => candidate.id === clip?.assetId);
+      return `Clip · ${asset?.displayName ?? "Selected clip"} · r${attachment.entity.revision}`;
+    }
+    const caption = projection.sequence?.captions.find((candidate) => candidate.id === attachment.entity.id);
+    return `Caption · ${contextText(caption?.text ?? "", "Selected cue")} · r${attachment.entity.revision}`;
   }
   if ("transcript" in attachment) {
     const segment = projection.transcript?.segments.find(
@@ -244,10 +271,15 @@ function attachmentProjectionLabel(
         projection.transcript?.artifact.id === attachment.transcript.artifactId &&
         candidate.id === attachment.transcript.segmentId,
     );
-    return `Transcript segment · ${segment?.text ?? attachment.transcript.segmentId}`;
+    return `Transcript segment · ${contextText(segment?.text ?? "", "Selected segment")}`;
   }
-  if ("point" in attachment) return `Sequence point · ${formatRational(attachment.point.time)}`;
-  return `Sequence range · ${formatRational(attachment.range.range.start)}`;
+  if ("point" in attachment) return `Sequence point · ${formatClock(attachment.point.time)}`;
+  return `Sequence range · ${formatClock(attachment.range.range.start)} → ${formatClockEnd(attachment.range.range)}`;
+}
+
+function contextText(value: string, fallback: string): string {
+  const normalized = value.trim().replaceAll(/\s+/g, " ");
+  return normalized.length === 0 ? fallback : normalized.length > 36 ? `${normalized.slice(0, 35)}…` : normalized;
 }
 
 function attachmentKey(attachment: AgentContextAttachment): string {

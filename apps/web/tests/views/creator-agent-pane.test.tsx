@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { ContractsProvider, durableID, revisionString } from "@open-cut/contracts";
+import { ContractsProvider, durableID, int64String, revisionString } from "@open-cut/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +27,14 @@ describe("CreatorAgentPane", () => {
     const secondTurnId = "018f0a60-7b80-7a01-8000-000000000405";
     const requestUUIDs = ["018f0a60-7b80-7a01-8000-000000000406", "018f0a60-7b80-7a01-8000-000000000407"];
     const attachment = { kind: "asset" as const, entity: { id: sequenceId, revision: revisionString("1") } };
+    const quickAttachment = {
+      kind: "sequence-point" as const,
+      point: {
+        sequenceId,
+        revision: revisionString("1"),
+        time: { value: int64String("0"), scale: 1 },
+      },
+    };
     vi.stubGlobal("crypto", { randomUUID: vi.fn(() => requestUUIDs.shift()) });
     const submissions: unknown[] = [];
     vi.stubGlobal(
@@ -63,6 +71,9 @@ describe("CreatorAgentPane", () => {
         <CreatorAgentPane
           contextCandidates={[{ key: "asset:current", label: "Current asset", attachment }]}
           projectId={projectId}
+          quickContextCandidates={[
+            { key: "point:current", label: "Sequence point · 00:00.00", attachment: quickAttachment },
+          ]}
           sequenceId={sequenceId}
         />
       </ContractsProvider>,
@@ -70,17 +81,23 @@ describe("CreatorAgentPane", () => {
     expect(await screen.findByText("Ready for tasks")).toBeTruthy();
     expect(screen.queryByText(/codex-cli 0\.144\.4/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Add @ Current asset" }));
+    const assetContext = screen.getByRole("button", { name: "Attach Agent context Current asset" });
+    fireEvent.click(assetContext);
+    expect(assetContext.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Attach quick context Sequence point · 00:00.00" }));
     fireEvent.change(screen.getByRole("textbox", { name: "New task · Ctrl/⌘ Enter" }), {
       target: { value: "Draft a sharp opening" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Start task" }));
-    expect(await screen.findByText("Draft a sharp opening")).toBeTruthy();
+    await waitFor(() => expect(submissions).toHaveLength(1));
+    expect((await screen.findByRole("article", { name: "Your request · message 1" })).textContent).toContain(
+      "Draft a sharp opening",
+    );
     expect(submissions[0]).toEqual({
       requestId: "ui:agent-begin:018f0a60-7b80-7a01-8000-000000000406",
       message: "Draft a sharp opening",
       sequenceId,
-      attachments: [attachment],
+      attachments: [quickAttachment, attachment],
     });
 
     const composer = screen.getByRole("textbox", { name: "Continue this task · Ctrl/⌘ Enter" });
@@ -199,7 +216,12 @@ describe("CreatorAgentPane", () => {
                 ordinal: "1",
                 role: "creator",
                 text: "Make the `ending` concise.",
-                attachments: [],
+                attachments: [
+                  {
+                    kind: "transcript-segment",
+                    transcript: { artifactId: transactionId, segmentId: creatorMessageId },
+                  },
+                ],
                 createdAt: "2026-07-16T07:00:00Z",
               },
               {
@@ -276,6 +298,8 @@ describe("CreatorAgentPane", () => {
     expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
     expect(screen.getByText("Make the `ending` concise.").tagName).toBe("P");
     expect(screen.getByText("edit apply").tagName).toBe("CODE");
+    expect(screen.getByText("@ Transcript segment")).toBeTruthy();
+    expect(screen.queryByText(creatorMessageId)).toBeNull();
     await waitFor(() =>
       expect(scrollIntoView).toHaveBeenCalledWith({
         block: "start",

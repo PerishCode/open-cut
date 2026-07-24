@@ -5,6 +5,7 @@ import styles from "./theme.module.css";
 export type TextAreaFieldProps = {
   label: string;
   value: string;
+  density?: "default" | "compact";
   focusRequest?: string | number;
   disabled?: boolean;
   keyboardShortcuts?: string;
@@ -20,6 +21,7 @@ export type TextAreaFieldProps = {
 export function TextAreaField({
   label,
   value,
+  density = "default",
   focusRequest,
   disabled = false,
   keyboardShortcuts,
@@ -37,7 +39,7 @@ export function TextAreaField({
   }, [focusRequest]);
 
   return (
-    <label className={styles.field}>
+    <label className={`${styles.field} ${density === "compact" ? styles.fieldCompact : ""}`}>
       <span className={styles.fieldLabel}>{label}</span>
       <textarea
         aria-keyshortcuts={keyboardShortcuts}

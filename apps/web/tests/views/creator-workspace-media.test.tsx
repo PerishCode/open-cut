@@ -41,6 +41,24 @@ describe("AssetSummary", () => {
     expect(screen.getByText("Transcript is waiting for local transcription support. Check System.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Open source" }) as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it("keeps the active Source visible as one pressed media-bin action", () => {
+    render(
+      <AssetSummary
+        asset={asset(true)}
+        onContext={vi.fn()}
+        onPreview={vi.fn()}
+        onTranscript={vi.fn()}
+        previewAvailable
+        selected
+      />,
+    );
+
+    const action = screen.getByRole("button", { name: "In Viewer" });
+    expect(action.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("region", { name: "story.webm actions" }).contains(action)).toBe(true);
+    expect(screen.getByText("story.webm")).toBeTruthy();
+  });
 });
 
 describe("TranscriptSurface", () => {

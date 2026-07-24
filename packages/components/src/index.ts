@@ -3,6 +3,11 @@ export { ControlStrip, type ControlStripProps } from "./primitives/control-strip
 export { EditorShell, type EditorShellProps } from "./primitives/editor-shell.js";
 export { EditorSplit, type EditorSplitProps } from "./primitives/editor-split.js";
 export { EmptyState, type EmptyStateProps } from "./primitives/empty-state.js";
+export {
+  FeedEntry,
+  type FeedEntryEmphasis,
+  type FeedEntryProps,
+} from "./primitives/feed-entry.js";
 export { FileField, type FileFieldProps } from "./primitives/file-field.js";
 export { Heading, type HeadingProps } from "./primitives/heading.js";
 export { MediaPlayer, type MediaPlayerActuator, type MediaPlayerProps } from "./primitives/media-player.js";

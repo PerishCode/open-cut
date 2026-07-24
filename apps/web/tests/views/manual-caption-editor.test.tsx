@@ -67,6 +67,12 @@ describe("Manual Caption editor", () => {
     renderEditor(base, viewer, [], onCommitted);
 
     fireEvent.click(screen.getByRole("button", { name: "New manual Caption" }));
+    expect(screen.getByLabelText("Caption language").getAttribute("placeholder")).toBe("Language · AUTO");
+    expect((screen.getByLabelText("Caption language") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByDisplayValue("und")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel manual Caption draft" }));
+    expect(screen.queryByLabelText("Caption text")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New manual Caption" }));
     fireEvent.change(screen.getByLabelText("Caption text"), { target: { value: "Manual title" } });
     fireEvent.click(screen.getByRole("button", { name: "Capture In at Viewer playhead" }));
     viewer.setPlayhead(time(5));
@@ -113,10 +119,12 @@ describe("Manual Caption editor", () => {
     const viewer = new SequenceViewerController(base.media.viewer);
     renderEditor(base, viewer, [caption()], onCommitted);
 
-    const cue = screen.getByRole("region", { name: `Caption ${ids.caption} actions` });
+    const cue = screen.getByRole("region", { name: "Caption 1 at 00:02.00 → 00:05.00 actions" });
     expect(within(cue).getByText("Original wording")).toBeTruthy();
     expect(within(cue).getByText(/00:02.00 → 00:05.00 · r3 · MANUAL/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: `Edit Caption ${ids.caption}` }));
+    expect(screen.queryByText(ids.caption)).toBeNull();
+    expect(screen.queryByRole("button", { name: new RegExp(ids.caption) })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Caption 1 at 00:02.00 → 00:05.00" }));
     fireEvent.change(screen.getByLabelText("Caption text"), { target: { value: "Creator-polished wording" } });
     expect(screen.getByText("Choose stale or unbind before checkpointing changed content")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save Caption checkpoint" }) as HTMLButtonElement).disabled).toBe(true);

@@ -7,6 +7,7 @@ export type TextFieldProps = {
   label: string;
   value: string;
   disabled?: boolean;
+  density?: "default" | "compact";
   focusRequest?: string | number;
   maxLength?: number;
   placeholder?: string;
@@ -20,6 +21,7 @@ export function TextField({
   label,
   value,
   disabled = false,
+  density = "default",
   focusRequest,
   maxLength,
   placeholder,
@@ -34,7 +36,7 @@ export function TextField({
   }, [focusRequest]);
 
   return (
-    <label className={styles.field}>
+    <label className={`${styles.field} ${density === "compact" ? styles.fieldCompact : ""}`}>
       <span className={styles.fieldLabel}>{label}</span>
       <input
         className={styles.fieldInput}

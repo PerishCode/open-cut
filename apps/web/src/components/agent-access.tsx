@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text } from "@open-cut/components";
 import { useCLIAuthorization } from "@open-cut/contracts";
 
 export function AgentAccess() {
@@ -53,19 +53,26 @@ export function AgentAccess() {
           </Stack>
         );
       })}
-      {activePairings.map((pairing) => (
-        <Stack key={pairing.id} spacing="compact">
-          <Status state="ready">CLI access active</Status>
-          <Text>{cliScopeSummary(pairing.scopes).text}</Text>
-          <Button
-            disabled={cli.pending}
-            variant="danger"
-            onPress={() => void cli.revoke(pairing.id).catch(() => undefined)}
+      {activePairings.map((pairing) => {
+        const access = cliScopeSummary(pairing.scopes);
+        return (
+          <ControlStrip
+            hint="CLI access active"
+            key={pairing.id}
+            label={`Active CLI access: ${access.text}`}
+            summary={access.text}
           >
-            Revoke CLI access
-          </Button>
-        </Stack>
-      ))}
+            <Status state="ready">Active</Status>
+            <Button
+              disabled={cli.pending}
+              variant="danger"
+              onPress={() => void cli.revoke(pairing.id).catch(() => undefined)}
+            >
+              Revoke CLI access
+            </Button>
+          </ControlStrip>
+        );
+      })}
       {pendingPairings.length === 0 && pendingUpgrades.length === 0 && activePairings.length === 0 ? (
         <Text>No CLI access configured.</Text>
       ) : null}

@@ -1,7 +1,7 @@
 import {
   Button,
   ControlStrip,
-  MessageContent,
+  FeedEntry,
   PanelDock,
   ResourceCard,
   Stack,
@@ -24,6 +24,7 @@ import {
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentConversationEntry } from "./agent-conversation-entry.js";
 import type { CreatorAgentContextCandidate } from "./creator-agent-context.js";
 
 type AgentPaneState = Readonly<{
@@ -55,17 +56,15 @@ const initialState: AgentPaneState = {
 
 export function CreatorAgentPane({
   contextCandidates,
-  onAddPlayheadContext,
-  onAddTimelineContext,
   onFocusReceiptRef,
   projectId,
+  quickContextCandidates = [],
   sequenceId,
 }: {
   contextCandidates: readonly CreatorAgentContextCandidate[];
-  onAddPlayheadContext?: () => void;
-  onAddTimelineContext?: () => void;
   onFocusReceiptRef?: (ref: CommandReceiptRef) => string;
   projectId: DurableID;
+  quickContextCandidates?: readonly CreatorAgentContextCandidate[];
   sequenceId: DurableID;
 }) {
   const contracts = useContracts();
@@ -209,7 +208,7 @@ export function CreatorAgentPane({
     if (!text || state.submitting || state.availability?.state !== "available") return;
     setState((current) => ({ ...current, submitting: true, error: undefined }));
     try {
-      const attachments = selectedAttachments(contextCandidates, contextKeys);
+      const attachments = selectedAttachments([...quickContextCandidates, ...contextCandidates], contextKeys);
       const submission = state.selected
         ? await contracts.agent.continue(projectId, state.selected.id, {
             requestId: requestID("continue"),
@@ -253,6 +252,7 @@ export function CreatorAgentPane({
     contracts,
     message,
     projectId,
+    quickContextCandidates,
     sequenceId,
     state.availability,
     state.selected,
@@ -388,23 +388,31 @@ export function CreatorAgentPane({
     <PanelDock
       footer={
         <Stack spacing="compact">
-          {onAddTimelineContext || onAddPlayheadContext ? (
-            <ControlStrip label="Quick Agent context" summary="QUICK CONTEXT">
-              {onAddTimelineContext ? (
-                <Button disabled={!canSubmit} onPress={onAddTimelineContext}>
-                  Add visible timeline
-                </Button>
-              ) : null}
-              {onAddPlayheadContext ? (
-                <Button disabled={!canSubmit} onPress={onAddPlayheadContext}>
-                  Add playhead
-                </Button>
-              ) : null}
+          {quickContextCandidates.length > 0 ? (
+            <ControlStrip
+              hint={contextSelectionHint(quickContextCandidates, contextKeys, "Attach to next message")}
+              label="Quick Agent context"
+              summary="QUICK CONTEXT"
+            >
+              {quickContextCandidates.map((candidate) => {
+                const selected = contextKeys.includes(candidate.key);
+                return (
+                  <Button
+                    disabled={!canSubmit}
+                    key={candidate.key}
+                    label={`${selected ? "Remove" : "Attach"} quick context ${candidate.label}`}
+                    pressed={selected}
+                    onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
+                  >
+                    {candidate.attachment.kind === "sequence-range" ? "Visible timeline" : "Playhead"}
+                  </Button>
+                );
+              })}
             </ControlStrip>
           ) : null}
           {contextCandidates.length > 0 ? (
             <ControlStrip
-              hint={contextKeys.length > 0 ? `${contextKeys.length} attached` : "Optional"}
+              hint={contextSelectionHint(contextCandidates, contextKeys, "Optional")}
               label="Agent context attachments"
               summary="@ CONTEXT"
             >
@@ -414,13 +422,11 @@ export function CreatorAgentPane({
                   <Button
                     disabled={!canSubmit}
                     key={candidate.key}
-                    onPress={() =>
-                      setContextKeys((current) =>
-                        selected ? current.filter((key) => key !== candidate.key) : [...current, candidate.key],
-                      )
-                    }
+                    label={`${selected ? "Remove" : "Attach"} Agent context ${candidate.label}`}
+                    pressed={selected}
+                    onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
                   >
-                    {selected ? `@ ${candidate.label} · remove` : `Add @ ${candidate.label}`}
+                    @ {candidate.label}
                   </Button>
                 );
               })}
@@ -496,8 +502,9 @@ export function CreatorAgentPane({
       <Stack spacing="compact">
         {state.selected ? (
           <ControlStrip
+            hint={state.selected.intent}
             label="Selected Agent task"
-            summary={`TASK · TURN ${state.selected.currentTurn.generation} · ${state.selected.intent}`}
+            summary={`TASK · TURN ${state.selected.currentTurn.generation}`}
           >
             {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
             <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
@@ -520,33 +527,23 @@ export function CreatorAgentPane({
           <Text>Describe a new writing or editing task.</Text>
         )}
         {latestOutcome ? (
-          <ResourceCard
+          <FeedEntry
             details={outcomeDetails(latestOutcome)}
             elementRef={latestOutcomeRef}
-            emphasis="strong"
-            eyebrow={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
-            status={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
-            title={outcomeTitle(latestOutcome)}
-          />
+            hint={receiptStatusLabel(latestOutcome)}
+            label={`Latest Agent outcome ${latestOutcome.ordinal}`}
+            summary={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
+          >
+            <Status state={receiptStatusState(latestOutcome)}>{outcomeTitle(latestOutcome)}</Status>
+          </FeedEntry>
         ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
         {state.messages.map((entry) => (
-          <ResourceCard
-            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+          <AgentConversationEntry
             elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
-            emphasis={entry.role === "agent" ? "default" : "quiet"}
-            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
             key={entry.id}
-            title={messageTitle(entry)}
-          >
-            {entry.role === "agent" ? (
-              <MessageContent text={entry.text} />
-            ) : (
-              <Text>
-                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-              </Text>
-            )}
-          </ResourceCard>
+            message={entry}
+          />
         ))}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
@@ -671,19 +668,24 @@ function selectedAttachments(
   keys: readonly string[],
 ): readonly AgentContextAttachment[] {
   const selected = new Set(keys);
-  return candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => candidate.attachment);
+  return [
+    ...new Map(
+      candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => [candidate.key, candidate]),
+    ).values(),
+  ].map((candidate) => candidate.attachment);
 }
 
-function messageRole(message: AgentConversationMessage): string {
-  if (message.role === "creator") return "YOU";
-  if (message.role === "agent") return "AGENT";
-  return "SYSTEM";
+function toggleContextKey(keys: readonly string[], key: string): readonly string[] {
+  return keys.includes(key) ? keys.filter((candidate) => candidate !== key) : [...keys, key];
 }
 
-function messageTitle(message: AgentConversationMessage): string {
-  if (message.role === "creator") return "Your request";
-  if (message.role === "agent") return "Agent response";
-  return "Context recovery";
+function contextSelectionHint(
+  candidates: readonly CreatorAgentContextCandidate[],
+  keys: readonly string[],
+  empty: string,
+): string {
+  const count = candidates.filter((candidate) => keys.includes(candidate.key)).length;
+  return count > 0 ? `${count} attached` : empty;
 }
 
 function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {
@@ -758,15 +760,6 @@ function receiptRefLabel(ref: CommandReceiptRef): string {
     .filter(Boolean)
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
-}
-
-function attachmentLabel(attachment: AgentContextAttachment): string {
-  if ("entity" in attachment) return `${attachment.kind} · ${attachment.entity.id} · r${attachment.entity.revision}`;
-  if ("transcript" in attachment) {
-    return `transcript segment · ${attachment.transcript.segmentId}`;
-  }
-  if ("point" in attachment) return `sequence point · ${attachment.point.time.value}/${attachment.point.time.scale}`;
-  return `sequence range · ${attachment.range.range.start.value}/${attachment.range.range.start.scale}`;
 }
 
 function requestID(action: string): string {
