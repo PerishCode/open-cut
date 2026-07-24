@@ -30,18 +30,19 @@ export function CommittedNarrativeParagraph({
         node.language,
       )} · r${node.revision} · COMMITTED`}
       label={`Narrative paragraph ${ordinal}`}
+      presentation="editorial"
       summary={value}
     >
-      <Button label={`Edit Narrative paragraph ${ordinal}`} onPress={onEdit}>
+      <Button label={`Edit Narrative paragraph ${ordinal}`} variant="quiet" onPress={onEdit}>
         Edit
       </Button>
-      <Button disabled={!canMoveUp} label="Move paragraph up" onPress={onMoveUp}>
+      <Button disabled={!canMoveUp} label="Move paragraph up" variant="quiet" onPress={onMoveUp}>
         Up
       </Button>
-      <Button disabled={!canMoveDown} label="Move paragraph down" onPress={onMoveDown}>
+      <Button disabled={!canMoveDown} label="Move paragraph down" variant="quiet" onPress={onMoveDown}>
         Down
       </Button>
-      <Button label="Remove paragraph" onPress={onRemove}>
+      <Button label="Remove paragraph" variant="quiet" onPress={onRemove}>
         Remove
       </Button>
     </ControlStrip>
@@ -72,13 +73,13 @@ export function NarrativeParagraphStructureControls({
       <Button disabled={!clean} label={`Finish editing Narrative paragraph ${ordinal}`} onPress={onDone}>
         Done
       </Button>
-      <Button disabled={!canMoveUp || !clean} label="Move paragraph up" onPress={onMoveUp}>
+      <Button disabled={!canMoveUp || !clean} label="Move paragraph up" variant="quiet" onPress={onMoveUp}>
         Up
       </Button>
-      <Button disabled={!canMoveDown || !clean} label="Move paragraph down" onPress={onMoveDown}>
+      <Button disabled={!canMoveDown || !clean} label="Move paragraph down" variant="quiet" onPress={onMoveDown}>
         Down
       </Button>
-      <Button disabled={!clean} label="Remove paragraph" onPress={onRemove}>
+      <Button disabled={!clean} label="Remove paragraph" variant="quiet" onPress={onRemove}>
         Remove
       </Button>
     </ControlStrip>

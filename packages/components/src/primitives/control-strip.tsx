@@ -1,14 +1,28 @@
 import type { KeyboardEventHandler, ReactNode } from "react";
 
+import editorial from "./control-strip.module.css";
 import styles from "./theme.module.css";
+
+export type ControlStripPresentation = "compact" | "editorial";
 
 export type ControlStripProps = Readonly<{
   /** Accessible name for the strip as a group. */
   label: string;
-  /** Compact identity / range line rendered above the control row. */
+  /**
+   * Compact: identity/range label (ellipsized).
+   * Editorial: primary creative body (wraps).
+   */
   summary?: ReactNode;
-  /** Optional readiness or policy hint, ellipsized beside the summary. */
+  /**
+   * Compact: readiness/policy hint beside the summary.
+   * Editorial: exact ordinal/kind/range/revision metadata below the body.
+   */
   hint?: ReactNode;
+  /**
+   * `compact` keeps operational log density for Timeline/Versions/Agent.
+   * `editorial` elevates body text for Story/Narrative content rows.
+   */
+  presentation?: ControlStripPresentation;
   /** Optional local shortcuts when the strip itself owns keyboard focus. */
   keyboardShortcuts?: string;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
@@ -17,26 +31,44 @@ export type ControlStripProps = Readonly<{
 }>;
 
 /**
- * Compact control chrome for editor canvases: keeps policy choices in a dense
- * accessory row of the Timeline editor unit without product semantics or raw
- * styling props.
+ * Dense control chrome: compact accessory rows by default, with an opt-in
+ * editorial presentation for content-first Story/Narrative strips.
  */
-export function ControlStrip({ label, summary, hint, keyboardShortcuts, onKeyDown, children }: ControlStripProps) {
+export function ControlStrip({
+  label,
+  summary,
+  hint,
+  presentation = "compact",
+  keyboardShortcuts,
+  onKeyDown,
+  children,
+}: ControlStripProps) {
+  const editorialMode = presentation === "editorial";
   return (
     <section
       aria-keyshortcuts={keyboardShortcuts}
       aria-label={label}
-      className={styles.controlStrip}
+      className={editorialMode ? `${styles.controlStrip} ${editorial.editorial}` : styles.controlStrip}
       tabIndex={onKeyDown ? 0 : undefined}
       onKeyDown={onKeyDown}
     >
       {summary || hint ? (
-        <div className={styles.controlStripMeta}>
-          {summary ? <div className={styles.controlStripSummary}>{summary}</div> : null}
-          {hint ? <div className={styles.controlStripHint}>{hint}</div> : null}
+        <div className={editorialMode ? editorial.editorialMeta : styles.controlStripMeta}>
+          {summary ? (
+            <div className={editorialMode ? editorial.editorialSummary : styles.controlStripSummary}>{summary}</div>
+          ) : null}
+          {hint ? (
+            <div className={editorialMode ? editorial.editorialHint : styles.controlStripHint}>{hint}</div>
+          ) : null}
         </div>
       ) : null}
-      {children ? <div className={styles.controlStripBody}>{children}</div> : null}
+      {children ? (
+        <div
+          className={editorialMode ? `${styles.controlStripBody} ${editorial.editorialBody}` : styles.controlStripBody}
+        >
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

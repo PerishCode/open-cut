@@ -1,0 +1,40 @@
+/**
+ * Opt-in editorial presentation for ControlStrip.
+ * Default compact strip styles stay in theme.module.css for other consumers.
+ */
+
+.editorial {
+  gap: 6px;
+  padding: 6px 0 8px;
+}
+
+.editorialMeta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.editorialSummary {
+  min-width: 0;
+  overflow: visible;
+  color: var(--oc-ink-strong);
+  font: 500 13px / 1.45 var(--oc-font-sans);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.editorialHint {
+  min-width: 0;
+  overflow: visible;
+  color: var(--oc-ink-faint);
+  font: 500 10px / 1.35 var(--oc-font-sans);
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.editorialBody {
+  margin-top: 2px;
+}

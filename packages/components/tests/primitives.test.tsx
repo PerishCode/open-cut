@@ -553,6 +553,29 @@ describe("atomic components", () => {
     expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  it("renders editorial strips with content-first hierarchy without consumer styling props", () => {
+    render(
+      <ControlStrip
+        hint="01 · SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r1"
+        label="Story node 1"
+        presentation="editorial"
+        summary="Alpha Bravo. Spoken ideas become an editable story."
+      >
+        <button type="button" aria-pressed="true">
+          Insert after
+        </button>
+        <button type="button">Rough cut</button>
+      </ControlStrip>,
+    );
+
+    const strip = screen.getByRole("region", { name: "Story node 1" });
+    const body = within(strip).getByText("Alpha Bravo. Spoken ideas become an editable story.");
+    const meta = within(strip).getByText("01 · SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r1");
+    expect(body.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Insert after" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(strip).getByRole("button", { name: "Rough cut" })).toBeTruthy();
+  });
+
   it("groups operational control rows without card chrome", () => {
     render(
       <ControlList label="Recent checkpoints">
