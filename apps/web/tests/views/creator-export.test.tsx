@@ -78,20 +78,34 @@ describe("CreatorExport", () => {
         />
       </ContractsProvider>,
     );
-    const saveAsButton = await screen.findByRole("button", { name: "Save As…" });
+    const saveAsButton = await screen.findByRole("button", {
+      name: "Save export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC as",
+    });
     expect(screen.getByText("DESTINATION AFTER RENDER · WEBM · VP9 / OPUS")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     fireEvent.click(saveAsButton);
     expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reveal in folder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal saved export History-story-r7.webm in folder" }));
     expect(await screen.findByText("Revealed History-story-r7.webm")).toBeTruthy();
     expect(revealRequests).toBe(1);
-    fireEvent.click(screen.getByRole("button", { name: "Delete export…" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    );
     expect(deleteRequests).toBe(0);
     expect(screen.getByText("This removes the exported media but keeps its job history.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Delete export permanently" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC permanently",
+      }),
+    );
     expect(await screen.findByText("Media deleted")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Retry export" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Retry export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    ).toBeTruthy();
     expect(deleteRequests).toBe(1);
     view.unmount();
   });
@@ -130,10 +144,14 @@ describe("CreatorExport", () => {
 
     expect(await screen.findByText("Rendering")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Export in progress" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Cancel export" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save As…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete export permanently" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Keep export" })).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Cancel export Running-story-r8.webm, history item 1, from 2026-07-16 00:00 UTC",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Save export/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Delete export .* permanently/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Keep export/ })).toBeNull();
     expect(screen.queryByText("This removes the exported media but keeps its job history.")).toBeNull();
   });
 

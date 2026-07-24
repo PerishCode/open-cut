@@ -206,92 +206,126 @@ export function CreatorExport({
           {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export current revision"}
         </Button>
       </ControlStrip>
-      <Text tone="eyebrow">RECENT EXPORTS</Text>
       {loadingHistory && !history ? <Text>Loading exports…</Text> : null}
       {history?.lineages.length === 0 ? (
         <EmptyState hint="Completed exports and retained job history will appear here." title="No exports yet" />
       ) : null}
-      {history?.lineages.map((lineage) => {
-        const rootID = lineage.export.job.rootJobId;
-        const lineageSave = save?.rootJobId === rootID ? save.result : undefined;
-        const overwrite = lineageSave?.status === "overwrite-required" ? lineageSave : undefined;
-        const activeLineage = isActive(lineage);
-        const availableArtifact = !activeLineage ? lineage.export.artifact : undefined;
-        const confirmingDelete = Boolean(availableArtifact && availableArtifact.id === deleteConfirmation);
-        const hasActions =
-          activeLineage ||
-          lineage.export.recovery === "retry-job" ||
-          Boolean(availableArtifact) ||
-          lineageSave?.status === "saved";
-        return (
-          <ResourceCard
-            actions={
-              hasActions ? (
-                <>
-                  {activeLineage ? (
-                    <Button disabled={pending} onPress={() => void cancel(lineage)}>
-                      Cancel export
+      {history && history.lineages.length > 0 ? (
+        <ResourceCard emphasis="quiet" eyebrow={`${history.lineages.length} LOADED`} title="Recent exports">
+          {history.lineages.map((lineage, index) => {
+            const rootID = lineage.export.job.rootJobId;
+            const filename = exportFilename(projectName, lineage.export.sequenceRevision);
+            const historyPosition = index + 1;
+            const actionIdentity = `${filename}, history item ${historyPosition}, from ${formatTimestamp(lineage.rootCreatedAt)}`;
+            const lineageSave = save?.rootJobId === rootID ? save.result : undefined;
+            const overwrite = lineageSave?.status === "overwrite-required" ? lineageSave : undefined;
+            const activeLineage = isActive(lineage);
+            const availableArtifact = !activeLineage ? lineage.export.artifact : undefined;
+            const confirmingDelete = Boolean(availableArtifact && availableArtifact.id === deleteConfirmation);
+            const details = exportDetails(lineage);
+            return (
+              <ControlStrip
+                hint={details[0]}
+                key={rootID}
+                label={`Export ${actionIdentity}`}
+                summary={`${index === 0 ? "LATEST" : `HISTORY ${historyPosition}`} · ${lineage.origin.toUpperCase()} · SEQUENCE r${
+                  lineage.export.sequenceRevision
+                } · ${filename}`}
+              >
+                <Status state={exportStatusState(lineage)}>{exportStatusLabel(lineage)}</Status>
+                {details.slice(1).map((detail) => (
+                  <Text key={detail}>{detail}</Text>
+                ))}
+                {confirmingDelete ? (
+                  <Status state="pending">This removes the exported media but keeps its job history.</Status>
+                ) : null}
+                {activeLineage ? (
+                  <Button
+                    disabled={pending}
+                    label={`Cancel export ${actionIdentity}`}
+                    onPress={() => void cancel(lineage)}
+                  >
+                    Cancel export
+                  </Button>
+                ) : null}
+                {lineage.export.recovery === "retry-job" ? (
+                  <Button
+                    disabled={!available || pending}
+                    label={`Retry export ${actionIdentity}`}
+                    onPress={() => void retry(lineage)}
+                  >
+                    Retry export
+                  </Button>
+                ) : null}
+                {availableArtifact && !confirmingDelete ? (
+                  <>
+                    <Button
+                      disabled={pending}
+                      label={`Save export ${actionIdentity} as`}
+                      onPress={() => void saveAs(lineage)}
+                    >
+                      Save As…
                     </Button>
-                  ) : null}
-                  {lineage.export.recovery === "retry-job" ? (
-                    <Button disabled={!available || pending} onPress={() => void retry(lineage)}>
-                      Retry export
+                    <Button
+                      disabled={pending}
+                      label={`Delete export ${actionIdentity}`}
+                      onPress={() => setDeleteConfirmation(availableArtifact.id)}
+                    >
+                      Delete export…
                     </Button>
-                  ) : null}
-                  {availableArtifact && !confirmingDelete ? (
-                    <>
-                      <Button disabled={pending} onPress={() => void saveAs(lineage)}>
-                        Save As…
-                      </Button>
-                      <Button disabled={pending} onPress={() => setDeleteConfirmation(availableArtifact.id)}>
-                        Delete export…
-                      </Button>
-                    </>
-                  ) : null}
-                  {overwrite ? (
-                    <Button disabled={pending} onPress={() => void saveAs(lineage, overwrite)}>
-                      Replace {overwrite.displayName}
+                  </>
+                ) : null}
+                {overwrite ? (
+                  <Button
+                    disabled={pending}
+                    label={`Replace ${overwrite.displayName} with export ${actionIdentity}`}
+                    onPress={() => void saveAs(lineage, overwrite)}
+                  >
+                    Replace {overwrite.displayName}
+                  </Button>
+                ) : null}
+                {confirmingDelete ? (
+                  <>
+                    <Button
+                      disabled={pending}
+                      label={`Delete export ${actionIdentity} permanently`}
+                      variant="danger"
+                      onPress={() => void deleteArtifact(lineage)}
+                    >
+                      Delete export permanently
                     </Button>
-                  ) : null}
-                  {confirmingDelete ? (
-                    <>
-                      <Button disabled={pending} variant="danger" onPress={() => void deleteArtifact(lineage)}>
-                        Delete export permanently
-                      </Button>
-                      <Button disabled={pending} onPress={() => setDeleteConfirmation(undefined)}>
-                        Keep export
-                      </Button>
-                    </>
-                  ) : null}
-                  {lineageSave?.status === "saved" ? (
-                    <Button disabled={pending} onPress={() => void reveal(lineageSave)}>
-                      Reveal in folder
+                    <Button
+                      disabled={pending}
+                      label={`Keep export ${actionIdentity}`}
+                      onPress={() => setDeleteConfirmation(undefined)}
+                    >
+                      Keep export
                     </Button>
-                  ) : null}
-                </>
-              ) : undefined
-            }
-            details={exportDetails(lineage)}
-            eyebrow={`${lineage.origin.toUpperCase()} · SEQUENCE r${lineage.export.sequenceRevision}`}
-            key={rootID}
-            status={<Status state={exportStatusState(lineage)}>{exportStatusLabel(lineage)}</Status>}
-            title={exportFilename(projectName, lineage.export.sequenceRevision)}
-          >
-            {confirmingDelete ? (
-              <Status state="pending">This removes the exported media but keeps its job history.</Status>
-            ) : null}
-            {lineageSave?.status === "saved" ? (
-              <Status state="ready">
-                Saved {lineageSave.displayName} · {lineageSave.byteLength} bytes ·{" "}
-                {lineageSave.contentSha256.slice(0, 19)}…
-              </Status>
-            ) : null}
-            {lineageSave?.status === "saved" && revealedName === lineageSave.displayName ? (
-              <Text>Revealed {revealedName}</Text>
-            ) : null}
-          </ResourceCard>
-        );
-      })}
+                  </>
+                ) : null}
+                {lineageSave?.status === "saved" ? (
+                  <Button
+                    disabled={pending}
+                    label={`Reveal saved export ${lineageSave.displayName} in folder`}
+                    onPress={() => void reveal(lineageSave)}
+                  >
+                    Reveal in folder
+                  </Button>
+                ) : null}
+                {lineageSave?.status === "saved" ? (
+                  <Status state="ready">
+                    Saved {lineageSave.displayName} · {lineageSave.byteLength} bytes ·{" "}
+                    {lineageSave.contentSha256.slice(0, 19)}…
+                  </Status>
+                ) : null}
+                {lineageSave?.status === "saved" && revealedName === lineageSave.displayName ? (
+                  <Text>Revealed {revealedName}</Text>
+                ) : null}
+              </ControlStrip>
+            );
+          })}
+        </ResourceCard>
+      ) : null}
       {history?.nextAfter ? (
         <Button disabled={pending} onPress={() => void loadMore()}>
           Load older exports
