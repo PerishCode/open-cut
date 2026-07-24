@@ -6,6 +6,7 @@ import {
   ControlStrip,
   EditorShell,
   EditorSplit,
+  FeedEntry,
   FileField,
   Heading,
   MediaPlayer,
@@ -213,6 +214,27 @@ describe("atomic components", () => {
     );
     expect(cards.every((card) => card.tagName === "ARTICLE")).toBe(true);
     expect(new Set(cards.map((card) => card.className)).size).toBe(3);
+  });
+
+  it("presents chronological feed content without resource-card chrome", () => {
+    const elementRef = { current: null as HTMLElement | null };
+    render(
+      <FeedEntry
+        details={["@ transcript segment"]}
+        elementRef={elementRef}
+        hint="Agent response"
+        label="Agent response · message 2"
+        summary="AGENT · MESSAGE #2"
+      >
+        <MessageContent text="The ending is now concise." />
+      </FeedEntry>,
+    );
+
+    const entry = screen.getByRole("article", { name: "Agent response · message 2" });
+    expect(elementRef.current).toBe(entry);
+    expect(within(entry).getByText("AGENT · MESSAGE #2")).toBeTruthy();
+    expect(within(entry).getByText("Agent response")).toBeTruthy();
+    expect(within(entry).getByText("@ transcript segment")).toBeTruthy();
   });
 
   it("keeps panel controls and composer around an independently scrolling feed", () => {

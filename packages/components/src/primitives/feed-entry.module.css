@@ -1,0 +1,66 @@
+.feedEntry {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 5px 7px 7px 10px;
+  border-left: 2px solid var(--oc-hairline-strong);
+}
+
+.feedEntryDefault {
+  background: var(--oc-input-wash);
+}
+
+.feedEntryQuiet {
+  border-left-color: var(--oc-hairline);
+  background: transparent;
+}
+
+.feedEntryMeta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.feedEntrySummary {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--oc-ink-strong);
+  font: 700 9px / 1.2 var(--oc-font-mono);
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedEntryHint {
+  min-width: 0;
+  flex: 0 1 42%;
+  overflow: hidden;
+  color: var(--oc-ink-faint);
+  font: 9px / 1.2 var(--oc-font-sans);
+  text-overflow: ellipsis;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.feedEntryBody {
+  min-width: 0;
+  color: var(--oc-ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.feedEntryBody > p {
+  max-width: none;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+
+.feedEntryDetails {
+  color: var(--oc-ink-faint);
+  font: 9px / 1.4 var(--oc-font-mono);
+  overflow-wrap: anywhere;
+}

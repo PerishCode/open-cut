@@ -1,7 +1,6 @@
 import {
   Button,
   ControlStrip,
-  MessageContent,
   PanelDock,
   ResourceCard,
   Stack,
@@ -24,6 +23,7 @@ import {
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentConversationEntry } from "./agent-conversation-entry.js";
 import type { CreatorAgentContextCandidate } from "./creator-agent-context.js";
 
 type AgentPaneState = Readonly<{
@@ -496,8 +496,9 @@ export function CreatorAgentPane({
       <Stack spacing="compact">
         {state.selected ? (
           <ControlStrip
+            hint={state.selected.intent}
             label="Selected Agent task"
-            summary={`TASK · TURN ${state.selected.currentTurn.generation} · ${state.selected.intent}`}
+            summary={`TASK · TURN ${state.selected.currentTurn.generation}`}
           >
             {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
             <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
@@ -531,22 +532,11 @@ export function CreatorAgentPane({
         ) : null}
         {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
         {state.messages.map((entry) => (
-          <ResourceCard
-            details={entry.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
+          <AgentConversationEntry
             elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
-            emphasis={entry.role === "agent" ? "default" : "quiet"}
-            eyebrow={`${messageRole(entry)} · MESSAGE #${entry.ordinal}`}
             key={entry.id}
-            title={messageTitle(entry)}
-          >
-            {entry.role === "agent" ? (
-              <MessageContent text={entry.text} />
-            ) : (
-              <Text>
-                {entry.role === "notice" ? "Agent context was safely rebuilt from this conversation." : entry.text}
-              </Text>
-            )}
-          </ResourceCard>
+            message={entry}
+          />
         ))}
         {state.nextAfter ? (
           <Button disabled={state.loading} onPress={() => void loadMore()}>
@@ -674,18 +664,6 @@ function selectedAttachments(
   return candidates.filter((candidate) => selected.has(candidate.key)).map((candidate) => candidate.attachment);
 }
 
-function messageRole(message: AgentConversationMessage): string {
-  if (message.role === "creator") return "YOU";
-  if (message.role === "agent") return "AGENT";
-  return "SYSTEM";
-}
-
-function messageTitle(message: AgentConversationMessage): string {
-  if (message.role === "creator") return "Your request";
-  if (message.role === "agent") return "Agent response";
-  return "Context recovery";
-}
-
 function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {
   if (run.status === "authorizing" || run.status === "active" || run.status === "waiting") return "pending";
   if (run.status === "failed" || run.status === "cancelled") return "unavailable";
@@ -758,15 +736,6 @@ function receiptRefLabel(ref: CommandReceiptRef): string {
     .filter(Boolean)
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
-}
-
-function attachmentLabel(attachment: AgentContextAttachment): string {
-  if ("entity" in attachment) return `${attachment.kind} · ${attachment.entity.id} · r${attachment.entity.revision}`;
-  if ("transcript" in attachment) {
-    return `transcript segment · ${attachment.transcript.segmentId}`;
-  }
-  if ("point" in attachment) return `sequence point · ${attachment.point.time.value}/${attachment.point.time.scale}`;
-  return `sequence range · ${attachment.range.range.start.value}/${attachment.range.range.start.scale}`;
 }
 
 function requestID(action: string): string {
