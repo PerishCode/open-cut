@@ -80,6 +80,47 @@ describe("AgentAccess", () => {
     expect((screen.getByRole("button", { name: "Deny CLI" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText(/sha256:|future:control|installation:test/)).toBeNull();
   });
+
+  it("keeps healthy access in one reviewable System row", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          grants: [
+            {
+              id: "018f0a60-7b80-7f01-8000-000000000111",
+              installationId: "installation:test",
+              agentId: "018f0a60-7b80-7f01-8000-000000000112",
+              publicKeyFingerprint: `sha256:${"a".repeat(64)}`,
+              scopes: ["project:read", "run:write"],
+              revision: "1",
+              scopeDigest: `sha256:${"b".repeat(64)}`,
+              status: "active",
+              createdAt: "2026-07-24T03:00:00Z",
+              expiresAt: "2026-07-24T03:10:00Z",
+            },
+          ],
+          upgrades: [],
+        }),
+      ),
+    );
+
+    render(
+      <ContractsProvider>
+        <AgentAccess />
+      </ContractsProvider>,
+    );
+
+    expect(await screen.findByText("CLI access active")).toBeTruthy();
+    expect(screen.getByText("Can change Agent runs · Can view projects")).toBeTruthy();
+    expect(
+      screen.getByRole("region", {
+        name: "Active CLI access: Can change Agent runs · Can view projects",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Revoke CLI access" })).toBeTruthy();
+    expect(screen.queryByText(/sha256:|installation:test/)).toBeNull();
+  });
 });
 
 function jsonResponse(value: unknown): Response {
