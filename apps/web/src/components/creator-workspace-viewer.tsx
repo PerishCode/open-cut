@@ -1,5 +1,11 @@
 import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Tabs, Text } from "@open-cut/components";
-import type { Asset, DurableID, SequencePreviewPreparation, SourceStream } from "@open-cut/contracts";
+import type {
+  Asset,
+  DurableID,
+  MediaRecoveryAction,
+  SequencePreviewPreparation,
+  SourceStream,
+} from "@open-cut/contracts";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import type { SequenceViewerController, SequenceViewerSnapshot } from "../lib/sequence-viewer-controller.js";
@@ -141,8 +147,10 @@ function SequencePreparationSurface({
     const diagnostic = preparation?.diagnostics[0];
     return (
       <Stack spacing="compact">
-        <Text>Sequence preview failed{diagnostic ? ` · ${diagnostic.code} · ${diagnostic.recovery}` : ""}</Text>
-        {diagnostic?.recovery === "retry-job" ? <Button onPress={() => controller.retry()}>Retry job</Button> : null}
+        <Text>{sequenceFailureText(diagnostic?.recovery)}</Text>
+        {diagnostic?.recovery === "retry-job" ? (
+          <Button onPress={() => controller.retry()}>Retry preview</Button>
+        ) : null}
       </Stack>
     );
   }
@@ -381,6 +389,15 @@ function StreamSelection({
 
 function formatSourceClock(value: { value: string; scale: number } | undefined): string {
   return value ? formatClock(value) : "—";
+}
+
+function sequenceFailureText(recovery: MediaRecoveryAction | undefined): string {
+  if (recovery === "automatic-retry") return "Sequence preview is retrying automatically.";
+  if (recovery === "relink-source") return "Relink the missing source, then try the preview again.";
+  if (recovery === "acquire-resource") return "Install the required local resource, then try the preview again.";
+  if (recovery === "adopt-revision") return "Adopt the available Sequence revision to continue previewing.";
+  if (recovery === "update-runtime") return "Update Open Cut to preview this Sequence.";
+  return "Sequence preview could not be prepared.";
 }
 
 function formatFrameRate(value: { value: string; scale: number }): string {

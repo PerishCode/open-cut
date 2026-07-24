@@ -5,6 +5,7 @@ import {
   digestString,
   durableID,
   int64String,
+  type MediaRecoveryAction,
   revisionString,
   type SequencePreviewPreparation,
   uint64String,
@@ -78,6 +79,20 @@ describe("SequencePreviewSurface", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("translates preview recovery codes into Creator actions", async () => {
+    const controller = sequenceController();
+    const view = render(<SequencePreviewSurface controller={controller} snapshot={failedSnapshot("retry-job")} />);
+
+    expect(screen.getByText("Sequence preview could not be prepared.")).toBeTruthy();
+    expect(screen.queryByText(/sequence-preview-job-failed|retry-job/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry preview" }));
+    expect(controller.retry).toHaveBeenCalledOnce();
+
+    view.rerender(<SequencePreviewSurface controller={controller} snapshot={failedSnapshot("update-runtime")} />);
+    expect(screen.getByText("Update Open Cut to preview this Sequence.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry preview" })).toBeNull();
+  });
 });
 
 describe("SourcePreviewSurface", () => {
@@ -150,6 +165,8 @@ function sequenceController() {
   return {
     attachActuator: vi.fn(),
     observePlaybackPosition: vi.fn(),
+    restart: vi.fn(),
+    retry: vi.fn(),
     seekToStart: vi.fn(),
     setPlaying: vi.fn(),
     stepFrame: vi.fn(),
@@ -158,6 +175,7 @@ function sequenceController() {
     wake: vi.fn(),
   } as unknown as SequenceViewerController & {
     seekToStart: ReturnType<typeof vi.fn>;
+    retry: ReturnType<typeof vi.fn>;
     stepFrame: ReturnType<typeof vi.fn>;
     togglePlayback: ReturnType<typeof vi.fn>;
   };
@@ -228,6 +246,37 @@ function readySnapshot(playhead = "8", duration = "9"): SequenceViewerSnapshot {
     playhead: { value: int64String(playhead), scale: 1 },
     playback: "paused",
     preparation,
+  };
+}
+
+function failedSnapshot(recovery: MediaRecoveryAction): SequenceViewerSnapshot {
+  const planDigest = digestString(`sha256:${"a".repeat(64)}`);
+  return {
+    status: "failed",
+    projectId,
+    sequenceId,
+    pinnedRevision: revisionString("14"),
+    availableRevision: revisionString("14"),
+    playhead: { value: int64String("0"), scale: 1 },
+    playback: "paused",
+    preparation: {
+      status: "failed",
+      purpose: "sequence-preview",
+      projectId,
+      sequenceId,
+      sequenceRevision: revisionString("14"),
+      continuation: { jobId, renderPlanDigest: planDigest },
+      stage: "render",
+      diagnostics: [
+        {
+          code: "sequence-preview-job-failed",
+          severity: "blocking",
+          subjectKind: "work-job",
+          subjectId: jobId,
+          recovery,
+        },
+      ],
+    },
   };
 }
 
