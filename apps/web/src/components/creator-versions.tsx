@@ -142,10 +142,7 @@ export function CreatorVersions({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">PROJECT VERSIONS · RECOVERY CHECKPOINTS</Text>
-      <Text>
-        Open Cut saves lightweight checkpoints before Agent turns. Named versions let you mark important states without
-        copying source media.
-      </Text>
+      <Text>Lightweight before Agent turns · named versions never copy Source media.</Text>
       <TextField
         disabled={saving || restoring}
         label="Version name"
