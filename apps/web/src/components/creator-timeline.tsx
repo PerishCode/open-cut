@@ -60,7 +60,7 @@ export function CreatorTimeline({
     [contracts.editing.timeline, viewer],
   );
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  const [validationError, setValidationError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
   const viewerSnapshot = useSyncExternalStore(viewer.subscribe, viewer.getSnapshot, viewer.getSnapshot);
   const handoffClipIds = useMemo(() => new Set(handoff?.clipIds ?? []), [handoff]);
 
@@ -72,14 +72,22 @@ export function CreatorTimeline({
 
   const run = useCallback(
     async (operation: () => Promise<CreatorEditCommit | undefined>) => {
-      setValidationError(undefined);
+      setActionError(undefined);
+      let receipt: CreatorEditCommit | undefined;
       try {
-        const receipt = await operation();
-        if (!receipt) return;
+        receipt = await operation();
+      } catch {
+        setActionError("This Timeline gesture is no longer available. Reselect the Clip and try again.");
+        return;
+      }
+      if (!receipt) return;
+      try {
         await onCommitted(receipt);
         adoptViewerSequenceFromCommit(viewer, receipt, sequenceId);
-      } catch (value) {
-        setValidationError(value instanceof Error ? value : new Error(String(value)));
+      } catch {
+        setActionError(
+          "The Timeline edit was committed, but the workspace could not refresh. Choose Sync now to reload it.",
+        );
       }
     },
     [onCommitted, sequenceId, viewer],
@@ -315,7 +323,11 @@ export function CreatorTimeline({
       ) : null}
       {snapshot.phase === "error" && snapshot.error ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Timeline operation failed · {snapshot.error.message}</Status>
+          <Status state="unavailable">
+            {snapshot.canRetryIdenticalApply
+              ? "Could not confirm the Timeline update."
+              : "Could not prepare this Timeline edit. Try the gesture again."}
+          </Status>
           {snapshot.canRetryIdenticalApply ? (
             <Button onPress={() => void run(() => controller.retryIdenticalApply())}>
               Retry identical Timeline apply
@@ -323,7 +335,7 @@ export function CreatorTimeline({
           ) : null}
         </Stack>
       ) : null}
-      {validationError ? <Status state="unavailable">Gesture unavailable · {validationError.message}</Status> : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
     </Stack>
   );
 }

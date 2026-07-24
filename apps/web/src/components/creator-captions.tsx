@@ -39,7 +39,7 @@ export function CreatorCaptions({
     [contracts.editing.captions],
   );
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  const [validationError, setValidationError] = useState<Error>();
+  const [actionError, setActionError] = useState(undefined as string | undefined);
 
   useEffect(() => {
     controller.setProjection({ projectId, sequenceId, source, clips, alignments, tracks });
@@ -48,22 +48,29 @@ export function CreatorCaptions({
 
   const run = useCallback(
     async (operation: () => Promise<CreatorEditCommit | undefined>) => {
-      setValidationError(undefined);
+      setActionError(undefined);
+      let receipt: CreatorEditCommit | undefined;
       try {
-        const receipt = await operation();
-        if (receipt) await onCommitted(receipt);
-      } catch (value) {
-        setValidationError(value instanceof Error ? value : new Error(String(value)));
+        receipt = await operation();
+      } catch {
+        setActionError("This Caption action is no longer available. Reselect the inputs and try again.");
+        return;
+      }
+      if (!receipt) return;
+      try {
+        await onCommitted(receipt);
+      } catch {
+        setActionError("Captions were committed, but the workspace could not refresh. Choose Sync now to reload it.");
       }
     },
     [onCommitted],
   );
   const preview = useCallback(async () => {
-    setValidationError(undefined);
+    setActionError(undefined);
     try {
       await controller.preview();
-    } catch (value) {
-      setValidationError(value instanceof Error ? value : new Error(String(value)));
+    } catch {
+      setActionError("Caption inputs changed. Reselect the Clip and Caption Track, then try again.");
     }
   }, [controller]);
 
@@ -162,7 +169,11 @@ export function CreatorCaptions({
       ) : null}
       {snapshot.phase === "error" && snapshot.error ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Caption operation failed · {snapshot.error.message}</Status>
+          <Status state="unavailable">
+            {snapshot.canRetryIdenticalApply
+              ? "Could not confirm the Caption update."
+              : "Could not prepare a Caption review. Check the selected inputs and try again."}
+          </Status>
           {snapshot.canRetryIdenticalApply ? (
             <Button onPress={() => void run(() => controller.retryIdenticalApply())}>
               Retry identical Caption apply
@@ -170,9 +181,7 @@ export function CreatorCaptions({
           ) : null}
         </Stack>
       ) : null}
-      {validationError ? (
-        <Status state="unavailable">Caption selection invalid · {validationError.message}</Status>
-      ) : null}
+      {actionError ? <Status state="unavailable">{actionError}</Status> : null}
     </Stack>
   );
 }
