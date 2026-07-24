@@ -32,6 +32,17 @@ afterEach(() => {
 });
 
 describe("CreatorNarrativeWriter", () => {
+  it("keeps empty paragraph authoring compact until the Creator opens it", () => {
+    renderWriter(vi.fn(async () => undefined));
+
+    expect(screen.queryByRole("textbox", { name: "New Narrative paragraph" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add paragraph" }));
+    expect(screen.getByRole("textbox", { name: "New Narrative paragraph" })).toBe(document.activeElement);
+    expect(screen.getByText("Ready to write")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("textbox", { name: "New Narrative paragraph" })).toBeNull();
+  });
+
   it("keeps committed paragraphs compact until the Creator enters edit mode", () => {
     renderWriter(vi.fn(async () => undefined));
 
@@ -395,7 +406,7 @@ describe("CreatorNarrativeWriter", () => {
 
     await waitFor(() => expect(reads).toHaveLength(1));
     expect(screen.getByRole("button", { name: "Collapse Section" })).toBeTruthy();
-    expect(screen.getAllByRole("textbox", { name: "New Narrative paragraph" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Add paragraph" })).toHaveLength(2);
   });
 });
 

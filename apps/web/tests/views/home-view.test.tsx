@@ -556,7 +556,7 @@ describe("HomeView", () => {
     expect((await screen.findByRole("tab", { name: "Story" })).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("Added from Transcript")).toBeTruthy();
     expect(screen.getByText("An alternate recognition.")).toBeTruthy();
-    expect(screen.getByText("Ready to write")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add paragraph" })).toBeTruthy();
     const addToRoughCut = screen.getAllByRole("button", { name: "Add excerpt to rough cut" }).at(-1);
     if (!addToRoughCut) throw new Error("inserted Story excerpt has no rough-cut action");
     fireEvent.click(addToRoughCut);
