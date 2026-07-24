@@ -119,6 +119,10 @@ describe("Creator rough cut", () => {
     );
     renderWithContracts(<RoughCutHarness onCommitted={onCommitted} />);
 
+    expect(screen.getByRole("region", { name: "Rough cut queue start" }).textContent).toContain(
+      "ROUGH CUT · EXCERPT QUEUE",
+    );
+    expect(screen.getByRole("region", { name: "Rough cut review" }).textContent).toContain("REVIEW · 1 READY");
     expect(screen.getByRole("button", { name: "Start at current playhead · 00:00.00" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Omit video" }));
     fireEvent.click(screen.getByRole("button", { name: "Review rough cut" }));

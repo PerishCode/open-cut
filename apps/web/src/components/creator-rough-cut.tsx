@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, Stack, Status, Text } from "@open-cut/components";
 import {
   type Asset,
   type CreatorEditCommit,
@@ -167,17 +167,20 @@ export function CreatorRoughCutPanel({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">ROUGH CUT · EXCERPT QUEUE</Text>
-      <Text>
-        Starts at {formatClock(timelineStart)} · {occurrences.length}{" "}
-        {occurrences.length === 1 ? "excerpt" : "excerpts"}
-      </Text>
-      <Button
-        disabled={phase === "applying" || phase === "previewing"}
-        onPress={() => onTimelineStartChange(currentPlayhead)}
+      <ControlStrip
+        hint={`START ${formatClock(timelineStart)} · ${occurrences.length} ${
+          occurrences.length === 1 ? "EXCERPT" : "EXCERPTS"
+        }`}
+        label="Rough cut queue start"
+        summary="ROUGH CUT · EXCERPT QUEUE"
       >
-        Start at current playhead · {formatClock(currentPlayhead)}
-      </Button>
+        <Button
+          disabled={phase === "applying" || phase === "previewing"}
+          onPress={() => onTimelineStartChange(currentPlayhead)}
+        >
+          Start at current playhead · {formatClock(currentPlayhead)}
+        </Button>
+      </ControlStrip>
       {occurrences.map((occurrence, index) => (
         <Stack key={occurrence.key} spacing="compact">
           <Text tone="eyebrow">
@@ -210,14 +213,19 @@ export function CreatorRoughCutPanel({
           </Button>
         </Stack>
       ))}
-      {occurrences.length === 0 ? <Text>Add an excerpt from Story to begin.</Text> : null}
       {blocker ? <Status state="unavailable">{blocker}</Status> : null}
-      <Button
-        disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
-        onPress={() => void previewDraft()}
+      <ControlStrip
+        hint={occurrences.length === 0 ? "ADD EXCERPTS FROM STORY TO BEGIN" : "CHECK LANES BEFORE TIMELINE"}
+        label="Rough cut review"
+        summary={occurrences.length === 0 ? "REVIEW · QUEUE EMPTY" : `REVIEW · ${occurrences.length} READY`}
       >
-        {phase === "previewing" ? "Preparing review…" : "Review rough cut"}
-      </Button>
+        <Button
+          disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
+          onPress={() => void previewDraft()}
+        >
+          {phase === "previewing" ? "Preparing review…" : "Review rough cut"}
+        </Button>
+      </ControlStrip>
       {review ? <RoughCutReview occurrences={occurrences} review={review} /> : null}
       {review ? (
         <Button disabled={phase === "applying"} onPress={() => void applyReview()}>
