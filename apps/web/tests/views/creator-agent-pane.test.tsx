@@ -93,6 +93,11 @@ describe("CreatorAgentPane", () => {
     expect((await screen.findByRole("article", { name: "Your request · message 1" })).textContent).toContain(
       "Draft a sharp opening",
     );
+    const agentControls = screen.getByRole("region", { name: "Agent controls" });
+    expect(agentControls.textContent).toContain("TASK · TURN 1");
+    expect(agentControls.textContent).toContain("Draft a sharp opening");
+    expect(screen.queryByRole("region", { name: "Selected Agent task" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Start a new task" }).textContent).toBe("New");
     expect(submissions[0]).toEqual({
       requestId: "ui:agent-begin:018f0a60-7b80-7a01-8000-000000000406",
       message: "Draft a sharp opening",

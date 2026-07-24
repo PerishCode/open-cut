@@ -466,14 +466,40 @@ export function CreatorAgentPane({
         </Stack>
       }
       header={
-        <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
+        <ControlStrip
+          hint={state.selected?.intent ?? availabilityText(state.availability)}
+          label="Agent controls"
+          summary={state.selected ? `TASK · TURN ${state.selected.currentTurn.generation}` : "LOCAL AGENT"}
+        >
           {!state.loading && (state.error || state.availability?.state !== "available") ? (
             <Button disabled={state.submitting} variant="quiet" onPress={() => void load()}>
               Check again
             </Button>
           ) : null}
+          {state.selected ? (
+            <>
+              {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
+              <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
+              {active ? (
+                <>
+                  <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
+                    Stop
+                  </Button>
+                  <Button disabled={state.submitting} label="Cancel task" onPress={() => void transition("cancel")}>
+                    Cancel
+                  </Button>
+                </>
+              ) : !terminal ? (
+                <Button disabled={state.submitting} label="Cancel task" onPress={() => void transition("cancel")}>
+                  Cancel
+                </Button>
+              ) : null}
+            </>
+          ) : null}
           <Button
             disabled={state.submitting}
+            label={state.selected ? "Start a new task" : undefined}
+            variant="quiet"
             onPress={() => {
               setState((current) => ({
                 ...current,
@@ -493,39 +519,14 @@ export function CreatorAgentPane({
               setReceiptsExpanded(false);
             }}
           >
-            New task
+            {state.selected ? "New" : "New task"}
           </Button>
         </ControlStrip>
       }
       label="Agent collaboration"
     >
       <Stack spacing="compact">
-        {state.selected ? (
-          <ControlStrip
-            hint={state.selected.intent}
-            label="Selected Agent task"
-            summary={`TASK · TURN ${state.selected.currentTurn.generation}`}
-          >
-            {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
-            <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
-            {active ? (
-              <>
-                <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
-                  Stop
-                </Button>
-                <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-                  Cancel task
-                </Button>
-              </>
-            ) : !terminal ? (
-              <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-                Cancel task
-              </Button>
-            ) : null}
-          </ControlStrip>
-        ) : (
-          <Text>Describe a new writing or editing task.</Text>
-        )}
+        {!state.selected ? <Text>Describe a new writing or editing task.</Text> : null}
         {latestOutcome ? (
           <FeedEntry
             details={outcomeDetails(latestOutcome)}
