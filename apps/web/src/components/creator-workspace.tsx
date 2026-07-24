@@ -78,7 +78,6 @@ type WorkspaceState =
       sequence: SequenceWindow;
       assets: AssetPage;
     }>;
-type RoughCutQueue = readonly CreatorRoughCutOccurrence[];
 export function CreatorWorkspace({ project, onExit }: { project: Project; onExit?: () => void }) {
   const contracts = useContracts();
   const sequenceViewer = useMemo(() => new SequenceViewerController(contracts.media.viewer), [contracts]);
@@ -102,7 +101,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [viewerMode, setViewerMode] = useState<"sequence" | "source">("sequence");
   const [workspaceSelection, setWorkspaceSelection] = useState<WorkspaceSelection>(emptyWorkspaceSelection);
   const narrativeHandoff = useNarrativeHandoff();
-  const [roughCutOccurrences, setRoughCutOccurrences] = useState<RoughCutQueue>([]);
+  const [roughCutOccurrences, setRoughCutOccurrences] = useState([] as readonly CreatorRoughCutOccurrence[]);
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
@@ -535,6 +534,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       projectId={project.id}
                       projectRevision={ready.overview.project.revision}
                       recentlyAddedNodeId={narrativeHandoff.recentlyAddedNodeId}
+                      selectedNodeId={activeNarrativeAnchor?.afterNodeId}
                       sequenceId={ready.overview.project.mainSequenceId}
                     />
                   ) : null}

@@ -62,6 +62,7 @@ type WriterProps = Readonly<{
   onReload(): Promise<AsyncResult>;
   onSelect(node: NarrativeNode, anchor: NarrativeInsertionAnchor, sectionPath: readonly DurableID[]): void;
   recentlyAddedNodeId?: DurableID;
+  selectedNodeId?: DurableID;
   sectionPath?: readonly DurableID[];
 }>;
 
@@ -78,6 +79,7 @@ export function CreatorNarrativeWriter({
   onReload,
   onSelect,
   recentlyAddedNodeId,
+  selectedNodeId,
   sectionPath = [],
 }: WriterProps) {
   const contracts = useContracts();
@@ -225,6 +227,7 @@ export function CreatorNarrativeWriter({
                     projectId={projectId}
                     projectRevision={projectRevision}
                     recentlyAddedNodeId={recentlyAddedNodeId}
+                    selectedNodeId={selectedNodeId}
                     sectionPath={[...sectionPath, node.section.id]}
                     sequenceId={sequenceId}
                   />
@@ -242,10 +245,11 @@ export function CreatorNarrativeWriter({
                 <Text>{narrativeNodeText(node)}</Text>
                 <ControlStrip label={`Story node ${index + 1} actions`}>
                   <Button
-                    label={node.kind === "source-excerpt" ? "Select Story excerpt" : "Select Story node"}
+                    label={`Set insertion point after Story node ${index + 1}`}
+                    pressed={nodeId === selectedNodeId}
                     onPress={() => selectNode(node)}
                   >
-                    Select
+                    Insert after
                   </Button>
                   {node.kind === "source-excerpt" ? (
                     <>
