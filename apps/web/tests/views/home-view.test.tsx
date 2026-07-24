@@ -572,7 +572,10 @@ describe("HomeView", () => {
     expect(sequenceRequests).toBe(2);
     fireEvent.click(screen.getByRole("tab", { name: "System" }));
     expect(await screen.findByRole("button", { name: "Approve scope upgrade" })).toBeTruthy();
-    expect(screen.getByText("Requested scopes: activity:read, project:read, run:write")).toBeTruthy();
+    expect(screen.getByText("CLI access active")).toBeTruthy();
+    expect(screen.getByText("Can view activity and projects")).toBeTruthy();
+    expect(screen.getByText("Requested access · Can change Agent runs · Can view activity and projects")).toBeTruthy();
+    expect(screen.queryByText(/sha256:/)).toBeNull();
     expect(screen.getByRole("main", { name: "Creator workspace" })).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/projects",
