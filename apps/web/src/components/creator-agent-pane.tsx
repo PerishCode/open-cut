@@ -375,6 +375,7 @@ export function CreatorAgentPane({
   const latestMessage = state.messages.at(-1);
   const latestRevealMessageId = latestMessage?.role === "creator" ? undefined : latestMessage?.id;
   const latestRevealItem = latestOutcome?.id ?? latestRevealMessageId;
+  const messageContextCandidates = [...quickContextCandidates, ...contextCandidates];
 
   useEffect(() => {
     if (!latestRevealItem || lastRevealedItemRef.current === latestRevealItem) return;
@@ -388,11 +389,11 @@ export function CreatorAgentPane({
     <PanelDock
       footer={
         <Stack spacing="compact">
-          {quickContextCandidates.length > 0 ? (
+          {messageContextCandidates.length > 0 ? (
             <ControlStrip
-              hint={contextSelectionHint(quickContextCandidates, contextKeys, "Attach to next message")}
-              label="Quick Agent context"
-              summary="QUICK CONTEXT"
+              hint={contextSelectionHint(messageContextCandidates, contextKeys, "Attach to next message")}
+              label="Agent message context"
+              summary="CONTEXT"
             >
               {quickContextCandidates.map((candidate) => {
                 const selected = contextKeys.includes(candidate.key);
@@ -408,14 +409,6 @@ export function CreatorAgentPane({
                   </Button>
                 );
               })}
-            </ControlStrip>
-          ) : null}
-          {contextCandidates.length > 0 ? (
-            <ControlStrip
-              hint={contextSelectionHint(contextCandidates, contextKeys, "Optional")}
-              label="Agent context attachments"
-              summary="@ CONTEXT"
-            >
               {contextCandidates.map((candidate) => {
                 const selected = contextKeys.includes(candidate.key);
                 return (
@@ -426,7 +419,7 @@ export function CreatorAgentPane({
                     pressed={selected}
                     onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
                   >
-                    @ {candidate.label}
+                    @ {compactContextLabel(candidate.label)}
                   </Button>
                 );
               })}
@@ -687,6 +680,10 @@ function contextSelectionHint(
 ): string {
   const count = candidates.filter((candidate) => keys.includes(candidate.key)).length;
   return count > 0 ? `${count} attached` : empty;
+}
+
+function compactContextLabel(value: string): string {
+  return value.length > 20 ? `${value.slice(0, 19).trimEnd()}…` : value;
 }
 
 function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {

@@ -85,6 +85,10 @@ describe("CreatorAgentPane", () => {
     fireEvent.click(assetContext);
     expect(assetContext.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Attach quick context Sequence point · 00:00.00" }));
+    const messageContext = screen.getByRole("region", { name: "Agent message context" });
+    expect(messageContext.textContent).toContain("2 attached");
+    expect(screen.queryByRole("region", { name: "Quick Agent context" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Agent context attachments" })).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "New task · Ctrl/⌘ Enter" }), {
       target: { value: "Draft a sharp opening" },
     });
