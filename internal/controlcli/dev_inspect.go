@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -85,11 +86,13 @@ func connectDevRenderer(
 }
 
 type devInspectOptions struct {
-	repository, baseDir, screenshot, evaluate, setFile, endpoint, match string
-	action, role, name                                                  string
-	snapshot                                                            bool
-	watchErrors                                                         time.Duration
+	repository, baseDir, screenshot, evaluate, evaluateFile, setFile, endpoint, match string
+	action, role, name                                                                string
+	snapshot                                                                          bool
+	watchErrors                                                                       time.Duration
 }
+
+const maximumDevEvaluationFileBytes = 256 * 1024
 
 func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command := &cobra.Command{Use: "inspect", Short: "Inspect the live development renderer over CDP", Args: cobra.NoArgs}
@@ -98,6 +101,7 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().StringVar(&options.baseDir, "base-dir", "", "development base directory; defaults below the repository")
 	command.Flags().StringVar(&options.screenshot, "screenshot", "", "write a PNG capture of the live renderer to this path")
 	command.Flags().StringVar(&options.evaluate, "eval", "", "JavaScript expression to evaluate in the live renderer")
+	command.Flags().StringVar(&options.evaluateFile, "eval-file", "", "read a JavaScript expression from a repository file")
 	command.Flags().BoolVar(&options.snapshot, "snapshot", false, "include structured accessibility and layout state")
 	command.Flags().StringVar(&options.match, "match", "", "filter snapshot nodes by case-insensitive role or name text")
 	command.Flags().StringVar(&options.action, "action", "", "generic renderer action; currently click")
@@ -114,7 +118,7 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 
 func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stderr io.Writer) int {
 	repository, baseDir, endpoint := &options.repository, &options.baseDir, &options.endpoint
-	screenshot, evaluate, setFile := &options.screenshot, &options.evaluate, &options.setFile
+	screenshot, evaluate, evaluateFile, setFile := &options.screenshot, &options.evaluate, &options.evaluateFile, &options.setFile
 	action, actionErr := parseDevRendererAction(options.action, options.role, options.name)
 	if actionErr != nil {
 		fmt.Fprintf(stderr, "dev inspect: %v\n", actionErr)
@@ -126,10 +130,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 			minimumDevErrorObservation, maximumDevErrorObservation)
 		return 2
 	}
-	if *screenshot == "" && *evaluate == "" && *setFile == "" && !options.snapshot &&
+	if *evaluate != "" && *evaluateFile != "" {
+		fmt.Fprintln(stderr, "dev inspect --eval and --eval-file are mutually exclusive")
+		return 2
+	}
+	if *screenshot == "" && *evaluate == "" && *evaluateFile == "" && *setFile == "" && !options.snapshot &&
 		action == nil && options.watchErrors == 0 {
 		fmt.Fprintln(stderr,
-			"dev inspect requires --snapshot, --screenshot, --eval, --set-file, --action, and/or --watch-errors")
+			"dev inspect requires --snapshot, --screenshot, --eval, --eval-file, --set-file, --action, and/or --watch-errors")
 		return 2
 	}
 	if options.match != "" && !options.snapshot {
@@ -143,6 +151,17 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		setFilePath, setFileBytes, inspectErr = inspectDevInputFile(*setFile)
 		if inspectErr != nil {
 			fmt.Fprintf(stderr, "inspect development input file: %v\n", inspectErr)
+			return 1
+		}
+	}
+	evaluateFilePath := ""
+	var evaluateFileBytes int64
+	if *evaluateFile != "" {
+		var inspectErr error
+		evaluateFilePath, *evaluate, evaluateFileBytes, inspectErr =
+			inspectDevEvaluationFile(*repository, *evaluateFile)
+		if inspectErr != nil {
+			fmt.Fprintf(stderr, "inspect development evaluation file: %v\n", inspectErr)
 			return 1
 		}
 	}
@@ -191,6 +210,10 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		}
 		result["valueType"] = evaluated.Result.Type
 		result["value"] = evaluated.Result.Value
+		if evaluateFilePath != "" {
+			result["evalFile"] = evaluateFilePath
+			result["evalFileBytes"] = evaluateFileBytes
+		}
 	}
 	if action != nil {
 		receipt, actionErr := performDevRendererAction(requestContext, cdp, *action)
@@ -242,6 +265,52 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		result["errors"] = report
 	}
 	return writeOutput(stdout, stderr, result)
+}
+
+func inspectDevEvaluationFile(repository, filename string) (string, string, int64, error) {
+	repositoryRoot, err := filepath.Abs(repository)
+	if err != nil {
+		return "", "", 0, err
+	}
+	candidate := filename
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(repositoryRoot, candidate)
+	}
+	path, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", "", 0, err
+	}
+	relative, err := filepath.Rel(repositoryRoot, path)
+	if err != nil {
+		return "", "", 0, err
+	}
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return "", "", 0, fmt.Errorf("evaluation file must stay within repository %s", repositoryRoot)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", "", 0, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", 0, fmt.Errorf("evaluation input must be a regular file")
+	}
+	if info.Size() == 0 {
+		return "", "", 0, fmt.Errorf("evaluation file is empty")
+	}
+	if info.Size() > maximumDevEvaluationFileBytes {
+		return "", "", 0, fmt.Errorf(
+			"evaluation file exceeds %d bytes",
+			maximumDevEvaluationFileBytes,
+		)
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", 0, err
+	}
+	if strings.TrimSpace(string(source)) == "" {
+		return "", "", 0, fmt.Errorf("evaluation file contains only whitespace")
+	}
+	return path, string(source), info.Size(), nil
 }
 
 func inspectDevInputFile(filename string) (string, int64, error) {
