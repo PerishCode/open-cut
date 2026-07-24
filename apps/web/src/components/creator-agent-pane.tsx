@@ -660,7 +660,7 @@ export function CreatorAgentPane({
           </>
         ) : null}
         {state.focusNotice ? <Status state="ready">{state.focusNotice}</Status> : null}
-        {state.error ? <Status state="unavailable">{state.error.message}</Status> : null}
+        {state.error ? <Status state="unavailable">Could not update Agent tasks. Choose Check again.</Status> : null}
       </Stack>
     </PanelDock>
   );

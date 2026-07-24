@@ -116,6 +116,16 @@ describe("CreatorAgentPane", () => {
         if (url === "/api/v1/events?after=0") return eventStream(init?.signal);
         if (url === "/api/v1/agent/availability") {
           availabilityRequests += 1;
+          if (availabilityRequests === 1) {
+            return new Response(
+              JSON.stringify({
+                title: "Internal Server Error",
+                status: 500,
+                detail: "codex process failed at /Users/creator/.local/bin/codex",
+              }),
+              { status: 500, headers: { "content-type": "application/problem+json" } },
+            );
+          }
           return jsonResponse({
             adapterId: "codex-cli-v1",
             promptVersion: "open-cut-agent-v2",
@@ -135,9 +145,11 @@ describe("CreatorAgentPane", () => {
       </ContractsProvider>,
     );
 
-    expect(await screen.findByText("Codex is not available on this device.")).toBeTruthy();
+    expect(await screen.findByText("Could not update Agent tasks. Choose Check again.")).toBeTruthy();
+    expect(screen.queryByText(/codex process|\.local\/bin/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(availabilityRequests).toBe(2));
+    expect(await screen.findByText("Codex is not available on this device.")).toBeTruthy();
   });
 
   it("loads authoritative historical Turns and focuses receipt refs without merging ledgers", async () => {
