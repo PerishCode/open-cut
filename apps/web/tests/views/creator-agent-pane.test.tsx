@@ -94,9 +94,10 @@ describe("CreatorAgentPane", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Start task" }));
     await waitFor(() => expect(submissions).toHaveLength(1));
-    expect((await screen.findByRole("article", { name: "Your request · message 1" })).textContent).toContain(
-      "Draft a sharp opening",
-    );
+    const requestEntry = await screen.findByRole("article", { name: "Your request · message 1" });
+    expect(requestEntry.textContent).toContain("Your request · #1");
+    expect(requestEntry.textContent).toContain("Draft a sharp opening");
+    expect(requestEntry.textContent).not.toContain("MESSAGE");
     const agentControls = screen.getByRole("region", { name: "Agent controls" });
     expect(agentControls.textContent).toContain("TASK · TURN 1");
     expect(agentControls.textContent).toContain("Draft a sharp opening");
@@ -317,7 +318,7 @@ describe("CreatorAgentPane", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Turn 1 · completed" }));
     const outcome = await screen.findByText("Creative change committed");
-    const latestResponse = screen.getByText("Agent response").closest("article");
+    const latestResponse = screen.getByText(/Agent response · #\d+/).closest("article");
     expect(latestResponse).toBeTruthy();
     expect(outcome.closest("article")?.compareDocumentPosition(latestResponse as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
