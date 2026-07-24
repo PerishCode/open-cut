@@ -88,6 +88,7 @@ type devInspectOptions struct {
 	repository, baseDir, screenshot, evaluate, setFile, endpoint, match string
 	action, role, name                                                  string
 	snapshot                                                            bool
+	watchErrors                                                         time.Duration
 }
 
 func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
@@ -102,6 +103,7 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().StringVar(&options.action, "action", "", "generic renderer action; currently click")
 	command.Flags().StringVar(&options.role, "role", "", "exact accessible role for --action")
 	command.Flags().StringVar(&options.name, "name", "", "exact accessible name for --action")
+	command.Flags().DurationVar(&options.watchErrors, "watch-errors", 0, "observe renderer errors for a bounded duration")
 	command.Flags().StringVar(&options.setFile, "set-file", "", "attach this file to the first enabled file input in the live renderer")
 	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -118,8 +120,16 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		fmt.Fprintf(stderr, "dev inspect: %v\n", actionErr)
 		return 2
 	}
-	if *screenshot == "" && *evaluate == "" && *setFile == "" && !options.snapshot && action == nil {
-		fmt.Fprintln(stderr, "dev inspect requires --snapshot, --screenshot, --eval, --set-file, and/or --action")
+	if options.watchErrors < 0 || options.watchErrors > maximumDevErrorObservation ||
+		(options.watchErrors > 0 && options.watchErrors < minimumDevErrorObservation) {
+		fmt.Fprintf(stderr, "dev inspect --watch-errors must be within [%s, %s]\n",
+			minimumDevErrorObservation, maximumDevErrorObservation)
+		return 2
+	}
+	if *screenshot == "" && *evaluate == "" && *setFile == "" && !options.snapshot &&
+		action == nil && options.watchErrors == 0 {
+		fmt.Fprintln(stderr,
+			"dev inspect requires --snapshot, --screenshot, --eval, --set-file, --action, and/or --watch-errors")
 		return 2
 	}
 	if options.match != "" && !options.snapshot {
@@ -145,6 +155,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 	}
 	defer cdp.Close()
 	result := map[string]any{"schema": 1, "endpoint": resolvedEndpoint}
+	var errorObservation *devErrorObservation
+	if options.watchErrors > 0 {
+		errorObservation, err = startDevErrorObservation(requestContext, cdp, options.watchErrors)
+		if err != nil {
+			fmt.Fprintf(stderr, "start development renderer error observation: %v\n", err)
+			return 1
+		}
+	}
 	if setFilePath != "" {
 		if err := setDevFileInput(requestContext, cdp, setFilePath); err != nil {
 			fmt.Fprintf(stderr, "attach file to development renderer: %v\n", err)
@@ -214,6 +232,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		}
 		result["screenshot"] = destination
 		result["screenshotBytes"] = len(decoded)
+	}
+	if errorObservation != nil {
+		report, observeErr := finishDevErrorObservation(requestContext, cdp, *errorObservation)
+		if observeErr != nil {
+			fmt.Fprintf(stderr, "observe development renderer errors: %v\n", observeErr)
+			return 1
+		}
+		result["errors"] = report
 	}
 	return writeOutput(stdout, stderr, result)
 }

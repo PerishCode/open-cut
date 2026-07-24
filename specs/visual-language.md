@@ -83,4 +83,5 @@ Every tenth phase replays:
 
 At each size the document body must not become a scroll owner, persistent panes
 must retain their own bounded overflow, focusable controls must have accessible
-names, and the console must have no product errors.
+names, and `oc-control dev inspect --watch-errors` must report no product errors
+for the interaction under acceptance.

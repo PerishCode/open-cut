@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInspectDevInputFileRequiresNonEmptyRegularBytes(t *testing.T) {
@@ -46,6 +47,13 @@ func TestDevInspectRequiresAnExplicitObservation(t *testing.T) {
 	if code := runDevInspect(context.Background(), devInspectOptions{
 		evaluate: "1", match: "Source",
 	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "--match requires --snapshot") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runDevInspect(context.Background(), devInspectOptions{
+		watchErrors: 31 * time.Second,
+	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "--watch-errors") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
