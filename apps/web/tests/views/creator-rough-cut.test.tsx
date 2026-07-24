@@ -124,7 +124,10 @@ describe("Creator rough cut", () => {
     );
     expect(screen.getByRole("region", { name: "Rough cut review" }).textContent).toContain("REVIEW · 1 READY");
     expect(screen.getByRole("button", { name: "Start at current playhead · 00:00.00" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Omit video" }));
+    const omitVideo = screen.getByRole("button", { name: "Omit video for rough cut excerpt 1" });
+    expect(omitVideo.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(omitVideo);
+    expect(omitVideo.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Review rough cut" }));
 
     expect(await screen.findByText(/01 · 00:05\.00 → 00:07\.00 · A/)).toBeTruthy();
