@@ -65,6 +65,8 @@ describe("CreatorVersions", () => {
     expect(screen.getByRole("region", { name: "Save named project version" })).toBeTruthy();
     expect(screen.getByText("AUTO BEFORE AGENT TURNS · SOURCE MEDIA STAYS SHARED")).toBeTruthy();
     expect(await screen.findByText(/CURRENT · AUTO · r8 · Project created/)).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recent project checkpoints" })).toBeTruthy();
+    expect(screen.queryByText("Recent checkpoints")).toBeNull();
     fireEvent.change(screen.getByLabelText("Version name"), { target: { value: " Approved assembly " } });
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));
 

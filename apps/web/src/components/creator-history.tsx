@@ -1,4 +1,4 @@
-import { Button, ControlStrip, ResourceCard, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlList, ControlStrip, Stack, Status, Text } from "@open-cut/components";
 import { type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -82,11 +82,7 @@ export function CreatorHistory({
       ) : null}
       {loadOlderError ? <Status state="unavailable">Could not load older history. Try again.</Status> : null}
       {state.status === "ready" && state.page.transactions.length > 0 ? (
-        <ResourceCard
-          emphasis="quiet"
-          eyebrow={`${state.page.transactions.length} LOADED`}
-          title="Recent creative transactions"
-        >
+        <ControlList label="Recent creative transactions">
           {state.page.transactions.map((transaction, index) => {
             const intent = presentTransactionIntent(transaction.intent);
             return (
@@ -100,7 +96,7 @@ export function CreatorHistory({
               />
             );
           })}
-        </ResourceCard>
+        </ControlList>
       ) : null}
       {state.status === "ready" && state.page.transactions.length === 0 ? (
         <Text>No committed creative transactions.</Text>

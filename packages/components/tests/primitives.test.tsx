@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   Button,
+  ControlList,
   ControlStrip,
   EditorShell,
   EditorSplit,
@@ -550,6 +551,21 @@ describe("atomic components", () => {
     expect(strip.tabIndex).toBe(0);
     fireEvent.keyDown(strip, { key: "ArrowLeft" });
     expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups operational control rows without card chrome", () => {
+    render(
+      <ControlList label="Recent checkpoints">
+        <ControlStrip label="Checkpoint 1" summary="AUTO · r8" />
+        <ControlStrip label="Checkpoint 2" summary="NAMED · r5" />
+      </ControlList>,
+    );
+
+    const list = screen.getByRole("region", { name: "Recent checkpoints" });
+    expect(list.tagName).toBe("SECTION");
+    expect(within(list).getByRole("region", { name: "Checkpoint 1" })).toBeTruthy();
+    expect(within(list).getByRole("region", { name: "Checkpoint 2" })).toBeTruthy();
+    expect(within(list).queryByRole("article")).toBeNull();
   });
 
   it("renders the policy accessory inside the same Timeline editor unit as the canvas", () => {

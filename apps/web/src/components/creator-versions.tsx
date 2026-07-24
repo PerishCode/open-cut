@@ -1,4 +1,4 @@
-import { Button, ControlStrip, EmptyState, ResourceCard, Stack, Status, Text, TextField } from "@open-cut/components";
+import { Button, ControlList, ControlStrip, EmptyState, Stack, Status, Text, TextField } from "@open-cut/components";
 import {
   type DurableID,
   type ProjectVersion,
@@ -176,7 +176,7 @@ export function CreatorVersions({
         <EmptyState hint="A checkpoint will be created before the next Agent turn." title="No versions yet" />
       ) : null}
       {state.status === "ready" && state.page.versions.length > 0 ? (
-        <ResourceCard emphasis="quiet" eyebrow={`${state.page.versions.length} LOADED`} title="Recent checkpoints">
+        <ControlList label="Recent project checkpoints">
           {state.page.versions.map((version) => {
             const current = version.capturedProjectRevision === currentRevision;
             const confirming = restoreCandidate === version.id;
@@ -220,7 +220,7 @@ export function CreatorVersions({
               </ControlStrip>
             );
           })}
-        </ResourceCard>
+        </ControlList>
       ) : null}
       {state.status === "ready" && state.page.nextBefore ? (
         <Button disabled={state.loadingOlder} onPress={() => void loadOlder()}>
