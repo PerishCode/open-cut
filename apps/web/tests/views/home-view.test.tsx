@@ -523,8 +523,8 @@ describe("HomeView", () => {
     expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
     expect(await screen.findByText("The pinned Sequence is empty.")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "System" }));
-    expect(await screen.findByText("Local transcription · not qualified for this build")).toBeTruthy();
-    expect(await screen.findByText("No optional local resources are declared by this build.")).toBeTruthy();
+    expect(await screen.findByText("Local transcription · Not included in this build")).toBeTruthy();
+    expect(await screen.findByText("No optional offline resources for this build.")).toBeTruthy();
     expect(screen.getByText("Main Sequence · pinned r2")).toBeTruthy();
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
