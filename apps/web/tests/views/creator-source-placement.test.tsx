@@ -67,8 +67,8 @@ describe("Creator source placement", () => {
     });
 
     expect(screen.getByText("IN −00:02.00 · 1.00s")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Selected · V1 · r5" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Selected · A1 · r6" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Selected · V1 · r5" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Selected · A1 · r6" }).getAttribute("aria-pressed")).toBe("true");
     expect((screen.getByRole("button", { name: "Place source" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Capture playhead" }));
     expect(screen.getByText("AT 00:04.00 · r7")).toBeTruthy();

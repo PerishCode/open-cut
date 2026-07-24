@@ -33,7 +33,9 @@ describe("atomic components", () => {
         <Button variant="primary" onPress={onPress}>
           Commit
         </Button>
-        <Button onPress={onPress}>Review</Button>
+        <Button pressed onPress={onPress}>
+          Review
+        </Button>
         <Button variant="quiet" onPress={onPress}>
           Refresh
         </Button>
@@ -50,6 +52,7 @@ describe("atomic components", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onPress).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("button", { name: "Review" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("provides semantic structure without consumer styling props", () => {

@@ -554,6 +554,14 @@
   background: var(--oc-surface-input);
 }
 
+.button[aria-pressed="true"],
+.controlStripBody > .button[aria-pressed="true"] {
+  border-color: var(--oc-accent-border-focus);
+  background: var(--oc-accent-wash);
+  box-shadow: inset 0 -2px 0 var(--oc-accent);
+  color: var(--oc-accent-ink);
+}
+
 .field {
   display: grid;
   gap: 9px;

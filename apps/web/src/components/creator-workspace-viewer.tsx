@@ -27,7 +27,9 @@ export function SourceViewerLayout({
       primary={
         <Stack spacing="compact">
           <ControlStrip label="Source Viewer controls" summary="SOURCE · VIEWER" hint={sourceHint}>
-            <Button onPress={onBack}>Back to Sequence</Button>
+            <Button variant="quiet" onPress={onBack}>
+              Back to Sequence
+            </Button>
           </ControlStrip>
           {preview}
         </Stack>
@@ -366,7 +368,7 @@ function StreamSelection({
         Clear
       </Button>
       {streams.map((stream) => (
-        <Button key={stream.id} onPress={() => onChange(stream.id)}>
+        <Button key={stream.id} pressed={selected === stream.id} onPress={() => onChange(stream.id)}>
           {selected === stream.id ? "Selected · " : ""}#{stream.descriptor.index} {stream.descriptor.codec}
           {stream.descriptor.language ? ` · ${stream.descriptor.language}` : ""}
           {stream.descriptor.dispositions.includes("default") ? " · default disposition" : ""}
