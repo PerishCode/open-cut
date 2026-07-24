@@ -19,7 +19,7 @@ import {
   type CreatorRoughCutOccurrence,
   roughCutLaneCandidates,
 } from "./creator-rough-cut-queue.js";
-import { formatTime, formatTimeEnd } from "./creator-workspace-presentation.js";
+import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 type RoughCutPhase = "idle" | "previewing" | "review" | "applying" | "error" | "conflict" | "success";
@@ -175,13 +175,14 @@ export function CreatorRoughCutPanel({
     <Stack spacing="compact">
       <Text tone="eyebrow">ROUGH CUT · EXCERPT QUEUE</Text>
       <Text>
-        Starts at {formatTime(timelineStart)} · {occurrences.length} {occurrences.length === 1 ? "excerpt" : "excerpts"}
+        Starts at {formatClock(timelineStart)} · {occurrences.length}{" "}
+        {occurrences.length === 1 ? "excerpt" : "excerpts"}
       </Text>
       <Button
         disabled={phase === "applying" || phase === "previewing"}
         onPress={() => onTimelineStartChange(currentPlayhead)}
       >
-        Start at current playhead · {formatTime(currentPlayhead)}
+        Start at current playhead · {formatClock(currentPlayhead)}
       </Button>
       {occurrences.map((occurrence, index) => (
         <Stack key={occurrence.key} spacing="compact">
@@ -292,8 +293,8 @@ function RoughCutReview({
       {review.items.map((item, index) => (
         <Stack key={item.alignmentLocal} spacing="compact">
           <Text tone="eyebrow">
-            {String(item.ordinal).padStart(2, "0")} · {formatTime(item.timelineRange.start)} →{" "}
-            {formatTimeEnd(item.timelineRange)} · {item.video ? "V" : ""}
+            {String(item.ordinal).padStart(2, "0")} · {formatClock(item.timelineRange.start)} →{" "}
+            {formatClockEnd(item.timelineRange)} · {item.video ? "V" : ""}
             {item.video && item.audio ? "+" : ""}
             {item.audio ? "A" : ""}
           </Text>

@@ -617,12 +617,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Rough cut",
               content: (
                 <Stack spacing="compact">
-                  {ready && roughCutOccurrences.length === 0 ? (
-                    <EmptyState
-                      hint="In Story, add an excerpt to the rough cut — queued excerpts appear here for one atomic apply."
-                      title="No rough cut queued"
-                    />
-                  ) : null}
                   {ready ? (
                     <CreatorRoughCutPanel
                       assets={ready.assets.assets}

@@ -119,10 +119,11 @@ describe("Creator rough cut", () => {
     );
     renderWithContracts(<RoughCutHarness onCommitted={onCommitted} />);
 
+    expect(screen.getByRole("button", { name: "Start at current playhead · 00:00.00" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Omit video" }));
     fireEvent.click(screen.getByRole("button", { name: "Review rough cut" }));
 
-    expect(await screen.findByText(/01 · 5\.00 → 7\.00 · A/)).toBeTruthy();
+    expect(await screen.findByText(/01 · 00:05\.00 → 00:07\.00 · A/)).toBeTruthy();
     expect(screen.getAllByText("A precise sentence.")).toHaveLength(2);
     expect(screen.getByText("Nothing changes until you add this rough cut to the Timeline.")).toBeTruthy();
     expect(screen.queryByText(/preconditions|paper-edit|OUTPUT DIGEST|GHOST/)).toBeNull();
