@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { ContractsProvider } from "@open-cut/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HomeView } from "../../src/views/home-view.js";
@@ -34,6 +34,7 @@ describe("HomeView", () => {
     const proposalId = "018f0a60-7b80-7a01-8000-000000000014";
     const transactionId = "018f0a60-7b80-7a01-8000-000000000015";
     const creatorId = "018f0a60-7b80-7a01-8000-000000000016";
+    let workspaceReadRequests = 0;
     let sequenceRequests = 0;
     let sourceRequests = 0;
     let exportRequests = 0;
@@ -75,6 +76,7 @@ describe("HomeView", () => {
           return jsonResponse({ schema: "open-cut/product-resource-snapshot/v1", resources: [] });
         }
         if (url === `/api/v1/projects/${projectId}`) {
+          workspaceReadRequests += 1;
           return jsonResponse({
             project: {
               id: projectId,
@@ -528,6 +530,10 @@ describe("HomeView", () => {
     expect(screen.getByText("Main Sequence · pinned r2")).toBeTruthy();
     expect(sequenceRequests).toBe(1);
     expect(sourceRequests).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    expect(screen.getByText("Open on a clear promise.")).toBeTruthy();
+    expect(screen.queryByText("Opening project")).toBeNull();
+    await waitFor(() => expect(workspaceReadRequests).toBe(2));
     fireEvent.click(screen.getByRole("tab", { name: "Export" }));
     expect((screen.getByRole("button", { name: "Nothing to export" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Add a clip or caption to the Sequence before exporting.")).toBeTruthy();

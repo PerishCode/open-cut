@@ -18,7 +18,7 @@ export function useCreatorTimelineHandoff() {
       clipIds,
       notice: projectionReady
         ? `Rough cut added · ${count} ${count === 1 ? "clip" : "clips"} highlighted`
-        : "Rough cut added · refresh reads to reveal it",
+        : "Rough cut added · use Sync now to reveal it",
     });
   }, []);
   return { clear, current, reset: clear, revealRoughCut };

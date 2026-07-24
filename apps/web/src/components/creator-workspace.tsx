@@ -18,7 +18,11 @@ import {
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CreatorCaptionSource } from "../lib/creator-caption-controller.js";
 import { adoptViewerSequenceFromCommit } from "../lib/creator-timeline-controller.js";
-import { createBackgroundWorkspaceInvalidation, workspaceStatus } from "../lib/creator-workspace-refresh.js";
+import {
+  createBackgroundWorkspaceInvalidation,
+  useCreatorWorkspaceSync,
+  workspaceSyncStatus,
+} from "../lib/creator-workspace-refresh.js";
 import { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import { SourceViewerController } from "../lib/source-viewer-controller.js";
 import { AgentAccess } from "./agent-access.js";
@@ -168,6 +172,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     return () => controller.abort();
   }, [load]);
   const refreshCommittedWorkspace = useCallback(() => load(undefined, true), [load]);
+  const sync = useCreatorWorkspaceSync(load, state.status === "ready");
   const reconcileBackgroundWorkspace = useMemo(() => createBackgroundWorkspaceInvalidation(load), [load]);
   const recordCreativeCommit = useCallback((_receipt: CreatorEditCommit) => {
     setHistoryRefreshEpoch((current) => current + 1);
@@ -426,16 +431,17 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
     },
     [contracts, importing, load, project.id, state],
   );
-  const status = state.status === "loading" ? "pending" : state.status === "ready" ? "ready" : "unavailable";
+  const syncStatus = workspaceSyncStatus(state.status, sync);
   return (
     <EditorShell
       actions={
         <CreatorWorkspaceActions
           importing={importing}
           ready={Boolean(ready)}
+          syncing={sync.syncing}
           onExit={onExit}
           onImport={() => void importFootage()}
-          onRefresh={() => void load()}
+          onSync={() => void sync.run()}
         />
       }
       brand="OPEN CUT"
@@ -578,7 +584,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
         />
       }
       sidebarLabel="Sources"
-      status={<Status state={status}>{workspaceStatus(state.status)}</Status>}
+      status={<Status state={syncStatus.state}>{syncStatus.text}</Status>}
       timeline={
         <Tabs
           activeTabId={timelinePanel}

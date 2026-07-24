@@ -120,7 +120,7 @@ describe("CreatorTranscriptExcerpt", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select token 3 · world" }));
     fireEvent.click(screen.getByRole("button", { name: "Insert excerpt" }));
 
-    expect(await screen.findByText("Excerpt added to Story · refresh reads to view it")).toBeTruthy();
+    expect(await screen.findByText("Excerpt added to Story · use Sync now to view it")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry identical excerpt insertion" })).toBeNull();
     expect(onInserted).not.toHaveBeenCalled();
   });

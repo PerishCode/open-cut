@@ -154,7 +154,7 @@ export function CreatorTranscriptExcerpt({
           await target.onReload();
           target.onInserted(insertedAnchor);
         } catch {
-          setNotice("Excerpt added to Story · refresh reads to view it");
+          setNotice("Excerpt added to Story · use Sync now to view it");
         }
       } catch (value) {
         const insertError = asError(value);

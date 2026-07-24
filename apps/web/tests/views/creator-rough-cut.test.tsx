@@ -144,7 +144,7 @@ describe("Creator rough cut", () => {
     await waitFor(() => expect(applyBodies).toHaveLength(2));
     await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
     expect(applyBodies[1]).toBe(applyBodies[0]);
-    expect(screen.getByText("Rough cut added · refresh reads to reveal it")).toBeTruthy();
+    expect(screen.getByText("Rough cut added · use Sync now to reveal it")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry same rough cut" })).toBeNull();
   });
 });

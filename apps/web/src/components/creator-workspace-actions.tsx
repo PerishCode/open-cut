@@ -3,17 +3,19 @@ import { Button } from "@open-cut/components";
 export type CreatorWorkspaceActionsProps = {
   importing: boolean;
   ready: boolean;
+  syncing: boolean;
   onExit?: () => void;
   onImport(): void;
-  onRefresh(): void;
+  onSync(): void;
 };
 
 export function CreatorWorkspaceActions({
   importing,
   onExit,
   onImport,
-  onRefresh,
+  onSync,
   ready,
+  syncing,
 }: CreatorWorkspaceActionsProps) {
   return (
     <>
@@ -22,11 +24,11 @@ export function CreatorWorkspaceActions({
           Projects
         </Button>
       ) : null}
-      <Button disabled={!ready || importing} variant="primary" onPress={onImport}>
+      <Button disabled={!ready || importing || syncing} variant="primary" onPress={onImport}>
         {importing ? "Selecting…" : "Add footage"}
       </Button>
-      <Button disabled={importing} variant="quiet" onPress={onRefresh}>
-        Refresh reads
+      <Button disabled={importing || syncing} variant="quiet" onPress={onSync}>
+        {syncing ? "Syncing…" : "Sync now"}
       </Button>
     </>
   );

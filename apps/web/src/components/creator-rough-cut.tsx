@@ -248,7 +248,7 @@ export function CreatorRoughCutPanel({
       ) : null}
       {phase === "success" ? (
         <Status state="ready">
-          {projectionWarning ? "Rough cut added · refresh reads to reveal it" : "Rough cut added to Timeline"}
+          {projectionWarning ? "Rough cut added · use Sync now to reveal it" : "Rough cut added to Timeline"}
         </Status>
       ) : null}
     </Stack>
