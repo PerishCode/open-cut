@@ -592,6 +592,72 @@ describe("HomeView", () => {
     expect(screen.getByRole("button", { name: "Alpha" })).toBeTruthy();
     view.unmount();
   });
+
+  it("keeps project storage details out of the unavailable workspace", async () => {
+    const projectId = "018f0a60-7b80-7a01-8000-000000000101";
+    const documentId = "018f0a60-7b80-7a01-8000-000000000102";
+    const sequenceId = "018f0a60-7b80-7a01-8000-000000000103";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/v1/projects") {
+          return jsonResponse({
+            activityCursor: "7",
+            projects: [
+              {
+                id: projectId,
+                revision: "1",
+                lifecycleRevision: "1",
+                name: "Unavailable project",
+                status: "active",
+                narrativeDocumentId: documentId,
+                mainSequenceId: sequenceId,
+              },
+            ],
+          });
+        }
+        if (url === `/api/v1/projects/${projectId}`) {
+          return new Response(
+            JSON.stringify({
+              title: "Internal Server Error",
+              status: 500,
+              detail: "sqlite read failed at /Users/creator/Library/Application Support/Open Cut/project.db",
+            }),
+            { status: 500, headers: { "content-type": "application/problem+json" } },
+          );
+        }
+        if (url === "/api/v1/product/status") {
+          return jsonResponse({ schema: "open-cut/product-status/v1", features: [] });
+        }
+        if (url === "/api/v1/agent/availability") {
+          return jsonResponse({
+            adapterId: "codex-cli-v1",
+            promptVersion: "open-cut-agent-v2",
+            state: "available",
+            version: "codex-cli 0.144.4",
+          });
+        }
+        if (url === `/api/v1/projects/${projectId}/agent/runs?limit=10`) {
+          return jsonResponse({ projectId, runs: [] });
+        }
+        if (url === "/api/v1/events?after=7") return eventStream(init?.signal);
+        throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+      }),
+    );
+
+    render(
+      <ContractsProvider>
+        <HomeView />
+      </ContractsProvider>,
+    );
+
+    expect(await screen.findByText("Project unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Story" }));
+    expect(await screen.findByText("Project data could not be loaded. Choose Sync now to try again.")).toBeTruthy();
+    expect(screen.queryByText(/sqlite|Application Support|project\.db/i)).toBeNull();
+    expect((screen.getByRole("button", { name: "Sync now" }) as HTMLButtonElement).disabled).toBe(false);
+  });
 });
 
 function cliAuthorizationSnapshot() {

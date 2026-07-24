@@ -539,7 +539,9 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                     />
                   ) : null}
                   {state.status === "loading" ? <Text>Loading story…</Text> : null}
-                  {state.status === "unavailable" ? <Text>{state.error.message}</Text> : null}
+                  {state.status === "unavailable" ? (
+                    <Text>Project data could not be loaded. Choose Sync now to try again.</Text>
+                  ) : null}
                 </Stack>
               ),
             },
