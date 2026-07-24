@@ -87,9 +87,11 @@ export function narrativeNodeText(node: NarrativeNode): string {
 export function narrativeNodeLabel(node: NarrativeNode): string {
   switch (node.kind) {
     case "section":
-      return `SECTION · ${node.section.language} · r${node.section.revision}`;
+      return `SECTION · ${formatLanguageLabel(node.section.language)} · r${node.section.revision}`;
     case "authored-text":
-      return `${node.authoredText.purpose.toUpperCase()} · ${node.authoredText.language} · r${node.authoredText.revision}`;
+      return `${node.authoredText.purpose.toUpperCase()} · ${formatLanguageLabel(node.authoredText.language)} · r${
+        node.authoredText.revision
+      }`;
     case "source-excerpt": {
       const range = node.sourceExcerpt.sourceRange;
       return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatClock(range.start)} → ${formatClockEnd(
@@ -97,10 +99,17 @@ export function narrativeNodeLabel(node: NarrativeNode): string {
       )} · r${node.sourceExcerpt.revision}`;
     }
     case "visual-intent":
-      return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${node.visualIntent.language} · r${node.visualIntent.revision}`;
+      return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${formatLanguageLabel(
+        node.visualIntent.language,
+      )} · r${node.visualIntent.revision}`;
     case "note":
-      return `NOTE · ${node.note.language} · r${node.note.revision}`;
+      return `NOTE · ${formatLanguageLabel(node.note.language)} · r${node.note.revision}`;
   }
+}
+
+export function formatLanguageLabel(language: string): string {
+  const normalized = language.trim();
+  return normalized === "" || normalized.toLowerCase() === "und" ? "AUTO" : normalized.toUpperCase();
 }
 
 export function formatTime(value: { value: string; scale: number }): string {

@@ -4,6 +4,7 @@ import {
   captionProvenanceLabel,
   formatClock,
   formatClockEnd,
+  formatLanguageLabel,
   formatTime,
   formatTimeEnd,
   narrativeNodeLabel,
@@ -68,5 +69,10 @@ describe("caption presentation", () => {
         },
       }),
     ).toBe("SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r4");
+  });
+
+  it("keeps automatic language policy out of Story metadata codes", () => {
+    expect(formatLanguageLabel("und")).toBe("AUTO");
+    expect(formatLanguageLabel("en-US")).toBe("EN-US");
   });
 });

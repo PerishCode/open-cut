@@ -14,7 +14,12 @@ import {
 } from "@open-cut/contracts";
 import { Fragment, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
-import { narrativeNodeID, narrativeNodeLabel, narrativeNodeText } from "./creator-workspace-presentation.js";
+import {
+  formatLanguageLabel,
+  narrativeNodeID,
+  narrativeNodeLabel,
+  narrativeNodeText,
+} from "./creator-workspace-presentation.js";
 import { CreatorNarrativeSection, NewNarrativeSection } from "./narrative-section-writer.js";
 import { NewNarrativeParagraph } from "./new-narrative-paragraph.js";
 
@@ -683,7 +688,8 @@ function NarrativeParagraphEditor({
   return (
     <Stack spacing="compact">
       <Text tone="eyebrow">
-        {String(ordinal).padStart(2, "0")} · {node.purpose.toUpperCase()} · {node.language} · r{node.revision}
+        {String(ordinal).padStart(2, "0")} · {node.purpose.toUpperCase()} · {formatLanguageLabel(node.language)} · r
+        {node.revision}
       </Text>
       <TextAreaField
         disabled={structuralSaving}

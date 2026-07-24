@@ -8,6 +8,7 @@ import {
   type RevisionString,
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatLanguageLabel } from "./creator-workspace-presentation.js";
 
 export type NewNarrativeDraftPhase = "clean" | "dirty" | "saving" | "saving-dirty" | "conflict" | "error";
 type AsyncResult = unknown;
@@ -140,7 +141,7 @@ export function NewNarrativeParagraph({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">NEW · SPOKEN · {language}</Text>
+      <Text tone="eyebrow">NEW · SPOKEN · {formatLanguageLabel(language)}</Text>
       <TextAreaField
         focusRequest={autoFocus ? "new-paragraph" : undefined}
         label="New Narrative paragraph"
