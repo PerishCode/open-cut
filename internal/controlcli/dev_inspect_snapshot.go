@@ -119,7 +119,7 @@ type devSnapshotRawAXNode struct {
 	} `json:"properties"`
 }
 
-type devSnapshotCDPCaller interface {
+type devCDPCaller interface {
 	Call(context.Context, string, any, any) error
 }
 
@@ -132,7 +132,7 @@ func captureDevRendererSnapshot(
 
 func captureDevRendererSnapshotWith(
 	ctx context.Context,
-	cdp devSnapshotCDPCaller,
+	cdp devCDPCaller,
 ) (devRendererSnapshot, error) {
 	var evaluated struct {
 		Result struct {

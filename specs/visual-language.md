@@ -66,11 +66,13 @@ least two real consumers need it.
 
 Visual changes are accepted in the real Electron renderer. Normal phase work
 uses `oc-control dev inspect --snapshot` for screenshots, browser-native
-semantics, focus, geometry, overflow, and clipping. Playwright is reserved for
-isolated or high-concurrency interaction suites. Any exploratory Playwright CLI
-session must have an explicit task-recorded name, use `detach` for an attached
-Electron target or `close` for a spawned browser, and be reconciled through
-`playwright-cli list --json` before the phase ends.
+semantics, focus, geometry, overflow, and clipping. Exact generic role/name
+clicks use the same inspect connection and must fail closed on ambiguous or
+disabled targets. Playwright is reserved for isolated or high-concurrency
+interaction suites. Any exploratory Playwright CLI session must have an
+explicit task-recorded name, use `detach` for an attached Electron target or
+`close` for a spawned browser, and be reconciled through `playwright-cli list
+--json` before the phase ends.
 
 Every tenth phase replays:
 

@@ -86,6 +86,7 @@ func connectDevRenderer(
 
 type devInspectOptions struct {
 	repository, baseDir, screenshot, evaluate, setFile, endpoint, match string
+	action, role, name                                                  string
 	snapshot                                                            bool
 }
 
@@ -98,6 +99,9 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().StringVar(&options.evaluate, "eval", "", "JavaScript expression to evaluate in the live renderer")
 	command.Flags().BoolVar(&options.snapshot, "snapshot", false, "include structured accessibility and layout state")
 	command.Flags().StringVar(&options.match, "match", "", "filter snapshot nodes by case-insensitive role or name text")
+	command.Flags().StringVar(&options.action, "action", "", "generic renderer action; currently click")
+	command.Flags().StringVar(&options.role, "role", "", "exact accessible role for --action")
+	command.Flags().StringVar(&options.name, "name", "", "exact accessible name for --action")
 	command.Flags().StringVar(&options.setFile, "set-file", "", "attach this file to the first enabled file input in the live renderer")
 	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -109,8 +113,13 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stderr io.Writer) int {
 	repository, baseDir, endpoint := &options.repository, &options.baseDir, &options.endpoint
 	screenshot, evaluate, setFile := &options.screenshot, &options.evaluate, &options.setFile
-	if *screenshot == "" && *evaluate == "" && *setFile == "" && !options.snapshot {
-		fmt.Fprintln(stderr, "dev inspect requires --snapshot, --screenshot, --eval, and/or --set-file")
+	action, actionErr := parseDevRendererAction(options.action, options.role, options.name)
+	if actionErr != nil {
+		fmt.Fprintf(stderr, "dev inspect: %v\n", actionErr)
+		return 2
+	}
+	if *screenshot == "" && *evaluate == "" && *setFile == "" && !options.snapshot && action == nil {
+		fmt.Fprintln(stderr, "dev inspect requires --snapshot, --screenshot, --eval, --set-file, and/or --action")
 		return 2
 	}
 	if options.match != "" && !options.snapshot {
@@ -164,6 +173,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		}
 		result["valueType"] = evaluated.Result.Type
 		result["value"] = evaluated.Result.Value
+	}
+	if action != nil {
+		receipt, actionErr := performDevRendererAction(requestContext, cdp, *action)
+		if actionErr != nil {
+			fmt.Fprintf(stderr, "act on development renderer: %v\n", actionErr)
+			return 1
+		}
+		result["action"] = receipt
 	}
 	if options.snapshot {
 		snapshot, snapshotErr := captureDevRendererSnapshot(requestContext, cdp)

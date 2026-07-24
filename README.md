@@ -125,6 +125,8 @@ oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --snapshot --match Viewer
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --action click --role tab --name Streams --snapshot --match Source
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --eval 'document.body?.innerText'
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --set-file .tmp/fixture.webm
@@ -136,6 +138,12 @@ starting a second browser. Its node sets are bounded; `--match` applies a
 case-insensitive role/name filter while retaining the full-page summary. Combine
 snapshot, eval, and screenshot flags when one settled renderer state should
 produce all three forms of evidence.
+
+`--action click` resolves one exact accessible role/name pair, rejects missing,
+ambiguous, ignored, disabled, or layout-less targets, dispatches viewport CDP
+mouse input, and waits for two animation frames before later snapshot or
+screenshot flags run. The receipt records the resolved target bounds and click
+point without exposing a reusable stale node reference.
 
 `--set-file` accepts only a non-empty regular file, reports the exact attached
 byte size, and targets the first enabled file input. It is a generic renderer
