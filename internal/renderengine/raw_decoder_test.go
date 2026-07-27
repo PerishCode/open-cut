@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -17,7 +17,7 @@ import (
 func TestRawYUVDecodeSpecIsOrdinalZeroAndCPUFixed(t *testing.T) {
 	spec := rawYUVDecodeProcessSpec(RawYUVDecoderSpec{
 		Executable: "/tool/ffmpeg", Directory: "/attempt", MediaPath: "/attempt/proxy.webm",
-		Width: 16, Height: 16, LastOrdinal: 9, Profile: lifecycle.ProfileHarness,
+		Width: 16, Height: 16, LastOrdinal: 9, Profile: process.ProfileHarness,
 	})
 	for _, sequence := range [][]string{
 		{"-cpuflags", "0"}, {"-threads", "1"}, {"-fps_mode", "passthrough"},
@@ -83,7 +83,7 @@ func TestPinnedRawYUVDecoderIsExactAndMonotonic(t *testing.T) {
 		frame[index] = 128
 	}
 	written, err := RunBoundedProcessStream(
-		context.Background(), rawVideoProcessSpec(ffmpeg, attemptRoot, videoPath, manifest, lifecycle.ProfileHarness),
+		context.Background(), rawVideoProcessSpec(ffmpeg, attemptRoot, videoPath, manifest, process.ProfileHarness),
 		videoBytes,
 		func(_ context.Context, destination io.Writer) error {
 			for count := uint64(0); count < manifest.Plan.Output.VideoFrameCount.Value(); count++ {
@@ -99,7 +99,7 @@ func TestPinnedRawYUVDecoderIsExactAndMonotonic(t *testing.T) {
 	}
 	decoder, err := StartRawYUVDecoder(context.Background(), RawYUVDecoderSpec{
 		Executable: ffmpeg, Directory: attemptRoot, MediaPath: videoPath,
-		Width: 16, Height: 16, LastOrdinal: 2, Profile: lifecycle.ProfileHarness,
+		Width: 16, Height: 16, LastOrdinal: 2, Profile: process.ProfileHarness,
 	})
 	if err != nil {
 		t.Fatal(err)

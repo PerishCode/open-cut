@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -21,7 +21,7 @@ func TestAudioEvaluatorStreamsExactPrefixSilenceOverlapGainAndGaps(t *testing.T)
 	fixture := newAudioEvaluatorFixture(t, executionClosure(t))
 	factory := &fakeAudioRunFactory{failInput: -1}
 	producer, err := newAudioStreamProducer(
-		fixture.manifest, fixture.attemptRoot, lifecycle.ProfileHarness, factory.start,
+		fixture.manifest, fixture.attemptRoot, process.ProfileHarness, factory.start,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestAudioEvaluatorClosesEveryLiveLaneAfterDecodeFailure(t *testing.T) {
 	fixture := newAudioEvaluatorFixture(t, executionClosure(t))
 	factory := &fakeAudioRunFactory{failInput: 1, failOrdinal: 1}
 	producer, err := newAudioStreamProducer(
-		fixture.manifest, fixture.attemptRoot, lifecycle.ProfileHarness, factory.start,
+		fixture.manifest, fixture.attemptRoot, process.ProfileHarness, factory.start,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestPinnedAudioEvaluatorTraversesRealFixedPointDecoder(t *testing.T) {
 	firstProxy := filepath.Join(fixture.artifactRoots[0], "proxy.webm")
 	written, err := RunBoundedProcessStream(
 		context.Background(),
-		rawAudioProcessSpec(ffmpeg, fixture.attemptRoot, firstProxy, fixture.manifest, lifecycle.ProfileHarness),
+		rawAudioProcessSpec(ffmpeg, fixture.attemptRoot, firstProxy, fixture.manifest, process.ProfileHarness),
 		audioBytes,
 		func(_ context.Context, destination io.Writer) error {
 			_, writeErr := destination.Write(make([]byte, int(audioBytes)))
@@ -123,7 +123,7 @@ func TestPinnedAudioEvaluatorTraversesRealFixedPointDecoder(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(fixture.artifactRoots[1], "proxy.webm"), encoded, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	producer, err := NewAudioStreamProducer(fixture.manifest, fixture.attemptRoot, lifecycle.ProfileHarness)
+	producer, err := NewAudioStreamProducer(fixture.manifest, fixture.attemptRoot, process.ProfileHarness)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func (factory *fakeAudioRunFactory) start(
 	_ ExecutionManifest,
 	run AudioDecodeRun,
 	_ string,
-	_ lifecycle.Profile,
+	_ process.Profile,
 ) (audioRunDecoder, error) {
 	factory.started++
 	return &fakeAudioRunDecoder{factory: factory, run: run}, nil

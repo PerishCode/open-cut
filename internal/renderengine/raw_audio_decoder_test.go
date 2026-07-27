@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -18,7 +18,7 @@ func TestRawPCMDecodeSpecPinsProfileCodecAndS16WithoutAudioFilters(t *testing.T)
 	for _, inputCodec := range []string{"libopus", "pcm_s16le"} {
 		spec := rawPCMDecodeProcessSpec(RawPCMDecoderSpec{
 			Executable: "/tool/ffmpeg", Directory: "/attempt", MediaPath: "/attempt/material",
-			InputCodec: inputCodec, LastOrdinal: 9, Profile: lifecycle.ProfileHarness,
+			InputCodec: inputCodec, LastOrdinal: 9, Profile: process.ProfileHarness,
 		})
 		for _, sequence := range [][]string{
 			{"-cpuflags", "0"}, {"-c:a", inputCodec}, {"-request_sample_fmt", "s16"},
@@ -75,7 +75,7 @@ func TestPinnedRawPCMDecoderIsBoundedAndMonotonic(t *testing.T) {
 	}
 	pcm := make([]byte, int(audioBytes))
 	written, err := RunBoundedProcessStream(
-		context.Background(), rawAudioProcessSpec(ffmpeg, attemptRoot, audioPath, manifest, lifecycle.ProfileHarness),
+		context.Background(), rawAudioProcessSpec(ffmpeg, attemptRoot, audioPath, manifest, process.ProfileHarness),
 		audioBytes,
 		func(_ context.Context, destination io.Writer) error {
 			_, writeErr := destination.Write(pcm)
@@ -87,7 +87,7 @@ func TestPinnedRawPCMDecoderIsBoundedAndMonotonic(t *testing.T) {
 	}
 	decoder, err := StartRawPCMDecoder(context.Background(), RawPCMDecoderSpec{
 		Executable: ffmpeg, Directory: attemptRoot, MediaPath: audioPath,
-		InputCodec: "libopus", LastOrdinal: rawPCMChunkSamples - 1, Profile: lifecycle.ProfileHarness,
+		InputCodec: "libopus", LastOrdinal: rawPCMChunkSamples - 1, Profile: process.ProfileHarness,
 	})
 	if err != nil {
 		t.Fatal(err)

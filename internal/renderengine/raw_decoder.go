@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/domain"
 )
 
@@ -22,13 +22,13 @@ type RawYUVDecoderSpec struct {
 	Width       uint32
 	Height      uint32
 	LastOrdinal uint64
-	Profile     lifecycle.Profile
+	Profile     process.Profile
 }
 
 type RawYUVDecoder struct {
 	reader         *io.PipeReader
 	writer         *io.PipeWriter
-	process        *lifecycle.Process
+	process        *process.Process
 	diagnostic     *pipelineDiagnostic
 	wait           chan error
 	frame          []byte
@@ -45,7 +45,7 @@ func StartVideoDecodeRun(
 	manifest ExecutionManifest,
 	run VideoDecodeRun,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (*RawYUVDecoder, error) {
 	if manifest.Validate() != nil || !cleanAbsoluteDirectory(attemptRoot) ||
 		validateVideoDecodeRun(manifest.Plan, run) != nil || int(run.InputIndex) >= len(manifest.Inputs) {
@@ -84,7 +84,7 @@ func StartRawYUVDecoder(ctx context.Context, spec RawYUVDecoderSpec) (*RawYUVDec
 	processSpec := rawYUVDecodeProcessSpec(spec)
 	processSpec.Stdout = writer
 	processSpec.Stderr = diagnostic
-	process, err := lifecycle.Start(ctx, processSpec)
+	process, err := process.Start(ctx, processSpec)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
@@ -177,8 +177,8 @@ func (decoder *RawYUVDecoder) childFailure(operation string, cause error) error 
 	return fmt.Errorf("%s (%w): %s", operation, cause, diagnostic)
 }
 
-func rawYUVDecodeProcessSpec(spec RawYUVDecoderSpec) lifecycle.ProcessSpec {
-	return lifecycle.ProcessSpec{
+func rawYUVDecodeProcessSpec(spec RawYUVDecoderSpec) process.ProcessSpec {
+	return process.ProcessSpec{
 		Executable: spec.Executable,
 		Args: []string{
 			"-v", "error", "-hide_banner", "-nostdin", "-cpuflags", "0",
@@ -188,7 +188,7 @@ func rawYUVDecodeProcessSpec(spec RawYUVDecoderSpec) lifecycle.ProcessSpec {
 			"-c:v", "rawvideo", "-pix_fmt", "yuv420p", "-flags:v", "+bitexact", "-f", "rawvideo", "pipe:1",
 		},
 		Directory: spec.Directory, Stdout: io.Discard, Stderr: io.Discard,
-		Profile: spec.Profile, Presentation: lifecycle.PresentationHeadless,
+		Profile: spec.Profile, Presentation: process.PresentationHeadless,
 		ContainProcessTree: true, TerminationGrace: 5 * time.Second,
 	}
 }

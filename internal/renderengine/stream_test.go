@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/domain"
 )
 
@@ -76,13 +76,13 @@ func TestBoundedProcessStreamPreservesStableCaptionFailure(t *testing.T) {
 	}
 }
 
-func boundedStreamHelperSpec(t *testing.T, root, output string) lifecycle.ProcessSpec {
+func boundedStreamHelperSpec(t *testing.T, root, output string) process.ProcessSpec {
 	t.Helper()
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return lifecycle.ProcessSpec{
+	return process.ProcessSpec{
 		Executable: executable,
 		Args:       []string{"-test.run=TestBoundedProcessStreamHelper", "--"},
 		Directory:  root,
@@ -91,7 +91,7 @@ func boundedStreamHelperSpec(t *testing.T, root, output string) lifecycle.Proces
 			"OPEN_CUT_BOUNDED_STREAM_OUTPUT="+output,
 		),
 		Stdout: io.Discard, Stderr: io.Discard,
-		Profile: lifecycle.ProfileHarness, Presentation: lifecycle.PresentationHeadless,
+		Profile: process.ProfileHarness, Presentation: process.PresentationHeadless,
 		ContainProcessTree: true, TerminationGrace: time.Second,
 	}
 }

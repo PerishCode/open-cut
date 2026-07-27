@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 )
 
 const (
@@ -31,7 +31,7 @@ func RunRawAVPipeline(
 	ctx context.Context,
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	producers RawAVProducers,
 ) error {
 	if manifest.Validate() != nil || !cleanAbsoluteDirectory(attemptRoot) || producers.Video == nil || producers.Audio == nil {
@@ -106,8 +106,8 @@ func RunRawAVPipeline(
 func rawVideoProcessSpec(
 	executable, directory, output string,
 	manifest ExecutionManifest,
-	profile lifecycle.Profile,
-) lifecycle.ProcessSpec {
+	profile process.Profile,
+) process.ProcessSpec {
 	policy := manifest.Plan.Output
 	rate := fmt.Sprintf("%d/%d", policy.FrameRate.Value.Value(), policy.FrameRate.Scale)
 	size := fmt.Sprintf("%dx%d", policy.CanvasWidth, policy.CanvasHeight)
@@ -131,8 +131,8 @@ func rawVideoProcessSpec(
 func rawAudioProcessSpec(
 	executable, directory, output string,
 	manifest ExecutionManifest,
-	profile lifecycle.Profile,
-) lifecycle.ProcessSpec {
+	profile process.Profile,
+) process.ProcessSpec {
 	policy := manifest.Plan.Output.Audio
 	return pipelineProcessSpec(executable, directory, profile, []string{
 		"-v", "error", "-hide_banner", "-nostdin", "-cpuflags", "0",
@@ -150,8 +150,8 @@ func rawAudioProcessSpec(
 func rawMuxProcessSpec(
 	executable, directory, video, audio, output string,
 	manifest ExecutionManifest,
-	profile lifecycle.Profile,
-) lifecycle.ProcessSpec {
+	profile process.Profile,
+) process.ProcessSpec {
 	return pipelineProcessSpec(executable, directory, profile, []string{
 		"-v", "error", "-hide_banner", "-nostdin", "-protocol_whitelist", "file,pipe,fd",
 		"-i", video, "-i", audio, "-map", "0:v:0", "-map", "1:a:0",
@@ -164,20 +164,20 @@ func rawMuxProcessSpec(
 
 func pipelineProcessSpec(
 	executable, directory string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	arguments []string,
-) lifecycle.ProcessSpec {
-	return lifecycle.ProcessSpec{
+) process.ProcessSpec {
+	return process.ProcessSpec{
 		Executable: executable, Args: arguments, Directory: directory,
 		Stdout: io.Discard, Stderr: &pipelineDiagnostic{limit: maximumPipelineDiagnostic},
-		Profile: profile, Presentation: lifecycle.PresentationHeadless,
+		Profile: profile, Presentation: process.PresentationHeadless,
 		ContainProcessTree: true, TerminationGrace: 5 * time.Second,
 	}
 }
 
-func runPipelineProcess(ctx context.Context, spec lifecycle.ProcessSpec) error {
+func runPipelineProcess(ctx context.Context, spec process.ProcessSpec) error {
 	diagnostic, _ := spec.Stderr.(*pipelineDiagnostic)
-	err := lifecycle.Run(ctx, spec)
+	err := process.Run(ctx, spec)
 	if err != nil || diagnostic == nil || diagnostic.exceeded {
 		message := ""
 		if diagnostic != nil {
@@ -188,7 +188,7 @@ func runPipelineProcess(ctx context.Context, spec lifecycle.ProcessSpec) error {
 	return nil
 }
 
-func pipelineStreamError(err error, spec lifecycle.ProcessSpec) error {
+func pipelineStreamError(err error, spec process.ProcessSpec) error {
 	diagnostic, _ := spec.Stderr.(*pipelineDiagnostic)
 	if diagnostic == nil {
 		return err

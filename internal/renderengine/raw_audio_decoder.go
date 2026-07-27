@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
@@ -29,13 +29,13 @@ type RawPCMDecoderSpec struct {
 	MediaPath   string
 	InputCodec  string
 	LastOrdinal uint64
-	Profile     lifecycle.Profile
+	Profile     process.Profile
 }
 
 type RawPCMDecoder struct {
 	reader          *io.PipeReader
 	writer          *io.PipeWriter
-	process         *lifecycle.Process
+	process         *process.Process
 	diagnostic      *pipelineDiagnostic
 	wait            chan error
 	chunk           []byte
@@ -54,7 +54,7 @@ func StartAudioDecodeRun(
 	manifest ExecutionManifest,
 	run AudioDecodeRun,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (*RawPCMDecoder, error) {
 	if manifest.Validate() != nil || !cleanAbsoluteDirectory(attemptRoot) ||
 		validateAudioDecodeRun(manifest.Plan, run) != nil || int(run.InputIndex) >= len(manifest.Inputs) {
@@ -97,7 +97,7 @@ func StartRawPCMDecoder(ctx context.Context, spec RawPCMDecoderSpec) (*RawPCMDec
 	processSpec := rawPCMDecodeProcessSpec(spec)
 	processSpec.Stdout = writer
 	processSpec.Stderr = diagnostic
-	process, err := lifecycle.Start(ctx, processSpec)
+	process, err := process.Start(ctx, processSpec)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
@@ -221,8 +221,8 @@ func (decoder *RawPCMDecoder) childFailure(operation string, cause error) error 
 	return fmt.Errorf("%s: %w", operation, cause)
 }
 
-func rawPCMDecodeProcessSpec(spec RawPCMDecoderSpec) lifecycle.ProcessSpec {
-	return lifecycle.ProcessSpec{
+func rawPCMDecodeProcessSpec(spec RawPCMDecoderSpec) process.ProcessSpec {
+	return process.ProcessSpec{
 		Executable: spec.Executable,
 		Args: []string{
 			"-v", "error", "-hide_banner", "-nostdin", "-cpuflags", "0",
@@ -232,7 +232,7 @@ func rawPCMDecodeProcessSpec(spec RawPCMDecoderSpec) lifecycle.ProcessSpec {
 			"-c:a", "pcm_s16le", "-flags:a", "+bitexact", "-f", "s16le", "pipe:1",
 		},
 		Directory: spec.Directory, Stdout: io.Discard, Stderr: io.Discard,
-		Profile: spec.Profile, Presentation: lifecycle.PresentationHeadless,
+		Profile: spec.Profile, Presentation: process.PresentationHeadless,
 		ContainProcessTree: true, TerminationGrace: 5 * time.Second,
 	}
 }

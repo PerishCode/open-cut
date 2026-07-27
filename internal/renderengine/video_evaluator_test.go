@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -23,7 +23,7 @@ func TestVideoEvaluatorSelectsEverySourceMapOrdinalAndStreamsCompositedFrames(t 
 	fixture := newVideoEvaluatorFixture(t, executionClosure(t))
 	factory := &fakeVideoRunFactory{}
 	producer, err := newVideoStreamProducer(
-		fixture.manifest, fixture.attemptRoot, lifecycle.ProfileHarness, factory.start,
+		fixture.manifest, fixture.attemptRoot, process.ProfileHarness, factory.start,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -61,8 +61,8 @@ func TestCaptionedVideoEvaluatorRendersCaptionOnlyFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	producer, err := newCaptionedVideoStreamProducer(
-		manifest, normalizeMaterialPath(t.TempDir()), lifecycle.ProfileHarness,
-		func(context.Context, ExecutionManifest, VideoDecodeRun, string, lifecycle.Profile) (videoRunDecoder, error) {
+		manifest, normalizeMaterialPath(t.TempDir()), process.ProfileHarness,
+		func(context.Context, ExecutionManifest, VideoDecodeRun, string, process.Profile) (videoRunDecoder, error) {
 			return nil, errors.New("caption-only producer started a video decoder")
 		}, captions,
 	)
@@ -115,7 +115,7 @@ func TestPinnedVideoEvaluatorTraversesRealDecoderAndCompositor(t *testing.T) {
 	black := solidYUV420(16, 16, 16, 128, 128)
 	written, err := RunBoundedProcessStream(
 		context.Background(),
-		rawVideoProcessSpec(ffmpeg, fixture.attemptRoot, proxyPath, fixture.manifest, lifecycle.ProfileHarness),
+		rawVideoProcessSpec(ffmpeg, fixture.attemptRoot, proxyPath, fixture.manifest, process.ProfileHarness),
 		videoBytes,
 		func(_ context.Context, destination io.Writer) error {
 			for range 30 {
@@ -129,7 +129,7 @@ func TestPinnedVideoEvaluatorTraversesRealDecoderAndCompositor(t *testing.T) {
 	if err != nil || written != videoBytes {
 		t.Fatalf("encode written=%d err=%v", written, err)
 	}
-	producer, err := NewVideoStreamProducer(fixture.manifest, fixture.attemptRoot, lifecycle.ProfileHarness)
+	producer, err := NewVideoStreamProducer(fixture.manifest, fixture.attemptRoot, process.ProfileHarness)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func (factory *fakeVideoRunFactory) start(
 	_ ExecutionManifest,
 	run VideoDecodeRun,
 	_ string,
-	_ lifecycle.Profile,
+	_ process.Profile,
 ) (videoRunDecoder, error) {
 	factory.started++
 	return &fakeVideoRunDecoder{factory: factory, run: run}, nil

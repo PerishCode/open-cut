@@ -13,7 +13,7 @@ import (
 
 	"github.com/PerishCode/open-cut/internal/renderengine"
 	"github.com/PerishCode/open-cut/internal/rendernative"
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/atomicfile"
 )
@@ -76,7 +76,7 @@ func execute(
 	if err != nil {
 		return failedResult(classify(err, renderengine.ResultCodePlanInvalid, "plan", "video-evaluator"))
 	}
-	audio, err := renderengine.NewAudioStreamProducer(manifest, attemptRoot, lifecycle.ProfilePackaged)
+	audio, err := renderengine.NewAudioStreamProducer(manifest, attemptRoot, process.ProfilePackaged)
 	if err != nil {
 		return failedResult(classify(err, renderengine.ResultCodePlanInvalid, "plan", "audio-evaluator"))
 	}
@@ -93,7 +93,7 @@ func execute(
 	)
 	defer cancel()
 	err = renderengine.RunRawAVPipeline(
-		executionContext, manifest, attemptRoot, lifecycle.ProfilePackaged,
+		executionContext, manifest, attemptRoot, process.ProfilePackaged,
 		renderengine.RawAVProducers{Video: video, Audio: audio},
 	)
 	if err != nil {
@@ -136,7 +136,7 @@ func videoProducer(
 		if len(manifest.Resources) != 0 {
 			return nil, fmt.Errorf("caption-free execution contains an ambient font resource")
 		}
-		return renderengine.NewVideoStreamProducer(manifest, attemptRoot, lifecycle.ProfilePackaged)
+		return renderengine.NewVideoStreamProducer(manifest, attemptRoot, process.ProfilePackaged)
 	}
 	if len(manifest.Resources) != 1 {
 		return nil, fmt.Errorf("caption execution font closure is invalid")
@@ -157,7 +157,7 @@ func videoProducer(
 		return nil, err
 	}
 	return renderengine.NewCaptionedVideoStreamProducer(
-		manifest, attemptRoot, lifecycle.ProfilePackaged, captions,
+		manifest, attemptRoot, process.ProfilePackaged, captions,
 	)
 }
 
