@@ -540,7 +540,7 @@ describe("HomeView", () => {
     expect(exportRequests).toBe(0);
     expect(exportHistoryRequests).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
-    expect(screen.queryByLabelText("Drop footage here or choose a local file")).toBeNull();
+    expect(screen.getByLabelText("Drop footage here or choose a local file")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add footage" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Transcript" }));
     expect(screen.getByRole("tab", { name: "Transcript" }).getAttribute("aria-selected")).toBe("true");

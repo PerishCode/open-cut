@@ -467,15 +467,6 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               label: "Media",
               content: (
                 <Stack spacing="compact">
-                  {!ready || ready.assets.assets.length === 0 ? (
-                    <SourceImportSurface
-                      disabled={!ready || importing}
-                      error={importError}
-                      onSelect={(file) => void importFootage(file)}
-                    />
-                  ) : importError ? (
-                    <Status state="unavailable">Footage could not be added. Choose the file again.</Status>
-                  ) : null}
                   {ready?.assets.assets.map((asset) => (
                     <AssetSummary
                       asset={asset}
@@ -491,6 +482,11 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       selected={viewerMode === "source" && asset.id === sourceStreamSelection?.assetId}
                     />
                   ))}
+                  <SourceImportSurface
+                    disabled={!ready || importing}
+                    error={importError}
+                    onSelect={(file) => void importFootage(file)}
+                  />
                 </Stack>
               ),
             },
