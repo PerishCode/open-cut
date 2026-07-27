@@ -250,7 +250,8 @@
    the selection policy strip and in titles. */
 @container (max-width: 96px) {
   .timelineItemBadge,
-  .timelineItemLabelExtension {
+  .timelineItemLabelExtension,
+  .timelineItemLabelOrdinal {
     display: none;
   }
 }

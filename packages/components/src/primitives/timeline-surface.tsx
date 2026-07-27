@@ -634,10 +634,21 @@ function formatRuler(seconds: number): string {
 }
 
 const timelineLabelExtension = /^(.+)(\.[0-9a-z]{2,5})$/i;
+const timelineLabelOrdinal = /^(\d+ · )(.+)$/;
 
-/* Narrow clips keep the recognizable name stem; the file extension yields at
-   the same width tier where the LINK badge already does. */
+/* Narrow clips keep the most recognizable part of the identity: the file
+   extension and a leading ordinal prefix yield at the same width tier where
+   the LINK badge already does. */
 function renderTimelineItemLabel(label: string) {
+  const ordinal = timelineLabelOrdinal.exec(label);
+  if (ordinal) {
+    return (
+      <span className={styles.timelineItemLabel}>
+        <span className={styles.timelineItemLabelOrdinal}>{ordinal[1]}</span>
+        {ordinal[2]}
+      </span>
+    );
+  }
   const match = timelineLabelExtension.exec(label);
   if (!match) return <span className={styles.timelineItemLabel}>{label}</span>;
   return (
