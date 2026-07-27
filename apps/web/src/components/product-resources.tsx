@@ -1,4 +1,4 @@
-import { Button, Heading, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, Heading, Stack, Status, Text } from "@open-cut/components";
 import type { ProductResource, ProductResourceSnapshot } from "@open-cut/contracts";
 import { useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useState } from "react";
@@ -116,20 +116,26 @@ function ProductResourceRow({
 }) {
   const canAcquire = resource.state === "not-acquired" || resource.state === "failed" || resource.state === "cancelled";
   return (
-    <Stack spacing="compact">
-      <Text>Multilingual transcription</Text>
-      <Status state={resourceStatusState(resource)}>{resourceStatus(resource)}</Status>
-      <Text tone="eyebrow">{formatBytes(resource.byteSize)}</Text>
-      {canAcquire ? (
-        <Button disabled={acquiring} onPress={onAcquire}>
-          {acquiring
-            ? "Starting download…"
-            : resource.state === "not-acquired"
-              ? "Download for offline use"
-              : "Retry download"}
-        </Button>
-      ) : null}
-    </Stack>
+    <ControlStrip
+      action={
+        canAcquire ? (
+          <Button disabled={acquiring} onPress={onAcquire}>
+            {acquiring
+              ? "Starting download…"
+              : resource.state === "not-acquired"
+                ? "Download for offline use"
+                : "Retry download"}
+          </Button>
+        ) : (
+          <Status state={resourceStatusState(resource)}>{resourceStatus(resource)}</Status>
+        )
+      }
+      label={`Offline resource Multilingual transcription, ${resourceStatus(resource)}`}
+      summary="Multilingual transcription"
+      summaryDetail={formatBytes(resource.byteSize)}
+    >
+      {canAcquire ? <Status state={resourceStatusState(resource)}>{resourceStatus(resource)}</Status> : null}
+    </ControlStrip>
   );
 }
 

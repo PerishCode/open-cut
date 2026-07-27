@@ -59,20 +59,22 @@ export function AgentAccess() {
         const access = cliScopeSummary(pairing.scopes);
         return (
           <ControlStrip
-            hint="CLI access active"
+            action={
+              <>
+                <Status state="ready">Active</Status>
+                <Button
+                  disabled={cli.pending}
+                  variant="danger"
+                  onPress={() => void cli.revoke(pairing.id).catch(() => undefined)}
+                >
+                  Revoke CLI access
+                </Button>
+              </>
+            }
             key={pairing.id}
             label={`Active CLI access: ${access.text}`}
             summary={access.text}
-          >
-            <Status state="ready">Active</Status>
-            <Button
-              disabled={cli.pending}
-              variant="danger"
-              onPress={() => void cli.revoke(pairing.id).catch(() => undefined)}
-            >
-              Revoke CLI access
-            </Button>
-          </ControlStrip>
+          />
         );
       })}
       {pendingPairings.length === 0 && pendingUpgrades.length === 0 && activePairings.length === 0 ? (
