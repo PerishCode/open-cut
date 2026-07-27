@@ -305,7 +305,7 @@ describe("CreatorAgentPane", () => {
         />
       </ContractsProvider>,
     );
-    expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Turn 1 · completed" })).toBeTruthy();
     expect(screen.getByText("Make the `ending` concise.").tagName).toBe("P");
     expect(screen.getByText("edit apply").tagName).toBe("CODE");
     expect(screen.getByText("@ Transcript segment")).toBeTruthy();
@@ -327,7 +327,7 @@ describe("CreatorAgentPane", () => {
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
     expect(screen.queryByText("OUTCOME · #1")).toBeNull();
     expect(screen.queryByText(transactionId)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show 1 receipt" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show 1 receipt for Turn 1" }));
     expect(screen.getByText("OUTCOME · #1")).toBeTruthy();
     expect(screen.getByText("Activity #12")).toBeTruthy();
     expect(screen.queryByText(transactionId)).toBeNull();
