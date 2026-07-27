@@ -242,10 +242,12 @@
   container-type: inline-size;
 }
 
-/* On narrow clips the identity wins: the LINK badge yields its space to the
-   name; linked state stays on the selection policy strip and in titles. */
+/* On narrow clips the identity wins: the LINK badge and the file extension
+   yield their space to the name stem; linked state and the full name stay on
+   the selection policy strip and in titles. */
 @container (max-width: 96px) {
-  .timelineItemBadge {
+  .timelineItemBadge,
+  .timelineItemLabelExtension {
     display: none;
   }
 }
@@ -300,6 +302,12 @@
 
 .timelineItemBodyStatic {
   cursor: default;
+}
+/* The narrowest chips also trade horizontal padding for name glyphs. */
+@container (max-width: 56px) {
+  .timelineItemBody {
+    padding: 0 3px;
+  }
 }
 
 .timelineItemInteractive .timelineItemBody {
