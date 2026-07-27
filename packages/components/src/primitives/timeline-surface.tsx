@@ -642,10 +642,12 @@ const timelineLabelOrdinal = /^(\d+ · )(.+)$/;
 function renderTimelineItemLabel(label: string) {
   const ordinal = timelineLabelOrdinal.exec(label);
   if (ordinal) {
+    const quoted = ordinal[2].startsWith("“");
     return (
       <span className={styles.timelineItemLabel}>
         <span className={styles.timelineItemLabelOrdinal}>{ordinal[1]}</span>
-        {ordinal[2]}
+        {quoted ? <span className={styles.timelineItemLabelQuote}>{"“"}</span> : null}
+        {quoted ? ordinal[2].slice(1) : ordinal[2]}
       </span>
     );
   }
