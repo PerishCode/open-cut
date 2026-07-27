@@ -1,4 +1,4 @@
-import { Button, ControlStrip, EmptyState, FeedEntry, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, FeedEntry, Heading, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -162,7 +162,11 @@ export function TranscriptSurface({
       {state.selectionError ? (
         <Status state="unavailable">Could not change the default transcript. Try again.</Status>
       ) : null}
-      {state.corrections.length > 0 ? <Text tone="eyebrow">CREATOR CORRECTIONS</Text> : null}
+      {state.corrections.length > 0 ? (
+        <Heading level={3} tone="eyebrow">
+          CREATOR CORRECTIONS
+        </Heading>
+      ) : null}
       {state.corrections.map((correction) => (
         <FeedEntry
           emphasis="quiet"

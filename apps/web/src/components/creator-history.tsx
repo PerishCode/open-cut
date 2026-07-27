@@ -1,4 +1,4 @@
-import { Button, ControlList, ControlStrip, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlList, ControlStrip, Heading, Stack, Status, Text } from "@open-cut/components";
 import { type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -72,7 +72,9 @@ export function CreatorHistory({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">TRANSACTION LOG · TECHNICAL DETAIL</Text>
+      <Heading level={3} tone="eyebrow">
+        TRANSACTION LOG · TECHNICAL DETAIL
+      </Heading>
       {state.status === "loading" ? <Text>Loading recent creative transactions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">

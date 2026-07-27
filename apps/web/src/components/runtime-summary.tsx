@@ -22,7 +22,9 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
       </Text>
       {onOpen && projects.projects.length > 0 ? (
         <Stack spacing="compact">
-          <Text tone="eyebrow">PROJECTS</Text>
+          <Heading level={2} tone="eyebrow">
+            PROJECTS
+          </Heading>
           <ProjectList
             label="Projects"
             projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
@@ -34,7 +36,9 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
         </Stack>
       ) : null}
       <Stack spacing="compact">
-        <Text tone="eyebrow">NEW PROJECT</Text>
+        <Heading level={2} tone="eyebrow">
+          NEW PROJECT
+        </Heading>
         <TextField
           disabled={write.pending}
           label="Name your story"

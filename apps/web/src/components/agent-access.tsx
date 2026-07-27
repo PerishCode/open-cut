@@ -1,4 +1,4 @@
-import { Button, ControlStrip, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, Heading, Stack, Status, Text } from "@open-cut/components";
 import { useCLIAuthorization } from "@open-cut/contracts";
 
 export function AgentAccess() {
@@ -8,7 +8,9 @@ export function AgentAccess() {
   const activePairings = cli.pairings.filter((pairing) => pairing.status === "active");
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">LOCAL AGENT CLI</Text>
+      <Heading level={3} tone="eyebrow">
+        LOCAL AGENT CLI
+      </Heading>
       {pendingPairings.map((pairing) => {
         const request = cliScopeSummary(pairing.scopes);
         return (

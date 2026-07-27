@@ -2,6 +2,7 @@ import {
   Button,
   ControlStrip,
   FeedEntry,
+  Heading,
   PanelDock,
   ResourceCard,
   Stack,
@@ -531,7 +532,11 @@ export function CreatorAgentPane({
             <Status state={receiptStatusState(latestOutcome)}>{outcomeTitle(latestOutcome)}</Status>
           </FeedEntry>
         ) : null}
-        {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
+        {state.messages.length > 0 ? (
+          <Heading level={3} tone="eyebrow">
+            CONVERSATION · {state.messages.length} MESSAGES
+          </Heading>
+        ) : null}
         {state.messages.map((entry) => (
           <AgentConversationEntry
             elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
@@ -571,7 +576,9 @@ export function CreatorAgentPane({
         ) : null}
         {state.selected && (state.turns.length > 1 || state.turnNextBefore) ? (
           <>
-            <Text tone="eyebrow">TURNS</Text>
+            <Heading level={3} tone="eyebrow">
+              TURNS
+            </Heading>
             <ControlStrip
               hint={`${state.turns.length} loaded`}
               label="Agent task Turns"

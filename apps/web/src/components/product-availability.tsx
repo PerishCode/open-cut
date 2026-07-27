@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, Heading, Stack, Status } from "@open-cut/components";
 import type {
   ProductFeatureAvailability,
   ProductFeatureUnavailableReason,
@@ -13,7 +13,9 @@ export type ProductAvailabilityState =
 export function ProductAvailability({ state, onRetry }: { state: ProductAvailabilityState; onRetry: () => void }) {
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">LOCAL CREATION FEATURES</Text>
+      <Heading level={3} tone="eyebrow">
+        LOCAL CREATION FEATURES
+      </Heading>
       {state.status === "loading" ? <Status state="pending">Checking local features</Status> : null}
       {state.status === "unavailable" ? (
         <>

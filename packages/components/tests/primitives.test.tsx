@@ -73,6 +73,16 @@ describe("atomic components", () => {
     expect(screen.getByRole("textbox", { name: "Project name" })).toBeTruthy();
   });
 
+  it("offers leveled eyebrow headings for tool sections", () => {
+    render(
+      <Heading level={3} tone="eyebrow">
+        TRANSACTION LOG
+      </Heading>,
+    );
+    const heading = screen.getByRole("heading", { level: 3, name: "TRANSACTION LOG" });
+    expect(heading.tagName).toBe("H3");
+  });
+
   it("owns the native browser media surface behind one semantic atom", () => {
     const onActuator = vi.fn();
     const onPlaybackPosition = vi.fn();
