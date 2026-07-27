@@ -112,7 +112,7 @@ describe("CreatorAgentPane", () => {
 
     const composer = screen.getByRole("textbox", { name: "Continue this task · Ctrl/⌘ Enter" });
     expect(composer.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
-    expect(composer.getAttribute("rows")).toBe("3");
+    expect(composer.getAttribute("rows")).toBe("2");
     fireEvent.change(composer, {
       target: { value: "Make it warmer" },
     });
