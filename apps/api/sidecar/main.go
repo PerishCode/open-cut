@@ -520,7 +520,7 @@ func run(args []string) error {
 	}
 	defer session.Close(0)
 
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Handler: errorLogHandler(mux, os.Stderr), ReadHeaderTimeout: 5 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 

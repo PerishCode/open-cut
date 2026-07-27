@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,6 +93,10 @@ func TestCreatorCaptionPreviewCommitsOneAtomicInsertOnlyTransactionAndUndo(t *te
 	)
 	if !errors.Is(err, application.ErrEditInvalid) {
 		t.Fatalf("insert-only collision error=%v", err)
+	}
+	var invalid application.EditInvalidError
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Reason, "insert-only") {
+		t.Fatalf("insert-only collision reason=%v", err)
 	}
 	undone, err := fixture.edits.UndoForCreator(
 		creator, fixture.project.Project.Project.ID, fixture.project.Project.Project.MainSequenceID,

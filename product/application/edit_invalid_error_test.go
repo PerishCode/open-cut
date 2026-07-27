@@ -6,7 +6,7 @@ import (
 )
 
 func TestEditInvalidErrorUnwrapsAndCarriesReason(t *testing.T) {
-	err := editInvalidf("operation %d (%s) is malformed", 2, "insert-source-excerpt")
+	err := EditInvalidf("operation %d (%s) is malformed", 2, "insert-source-excerpt")
 	if !errors.Is(err, ErrEditInvalid) {
 		t.Fatal("EditInvalidError must unwrap to ErrEditInvalid so existing status mapping holds")
 	}

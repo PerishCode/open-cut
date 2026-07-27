@@ -10,28 +10,28 @@ import (
 
 func validateEditProposeInput(input EditProposeInput) error {
 	if _, err := domain.ParseRequestID(input.RequestID.String()); err != nil {
-		return editInvalidf("requestId is missing or malformed")
+		return EditInvalidf("requestId is missing or malformed")
 	}
 	if validateEditIntent(input.Intent, false) != nil {
-		return editInvalidf("intent is missing or exceeds its length bound")
+		return EditInvalidf("intent is missing or exceeds its length bound")
 	}
 	if input.BaseProjectRevision.Value() < 1 {
-		return editInvalidf("baseProjectRevision must be a positive revision")
+		return EditInvalidf("baseProjectRevision must be a positive revision")
 	}
 	if len(input.Operations) < 1 || len(input.Operations) > 512 {
-		return editInvalidf("a proposal carries 1 to 512 operations, got %d", len(input.Operations))
+		return EditInvalidf("a proposal carries 1 to 512 operations, got %d", len(input.Operations))
 	}
 	if len(input.Preconditions) > 2048 {
-		return editInvalidf("a proposal carries at most 2048 preconditions, got %d", len(input.Preconditions))
+		return EditInvalidf("a proposal carries at most 2048 preconditions, got %d", len(input.Preconditions))
 	}
 	preconditions := make(map[string]struct{}, len(input.Preconditions))
 	for _, precondition := range input.Preconditions {
 		if precondition.Revision.Value() < 1 || validateEntityID(precondition.Kind, precondition.ID) != nil {
-			return editInvalidf("precondition on %s %q is malformed", precondition.Kind, precondition.ID)
+			return EditInvalidf("precondition on %s %q is malformed", precondition.Kind, precondition.ID)
 		}
 		key := string(precondition.Kind) + "\x00" + precondition.ID
 		if _, duplicate := preconditions[key]; duplicate {
-			return editInvalidf("duplicate precondition on %s %q", precondition.Kind, precondition.ID)
+			return EditInvalidf("duplicate precondition on %s %q", precondition.Kind, precondition.ID)
 		}
 		preconditions[key] = struct{}{}
 	}
@@ -39,7 +39,7 @@ func validateEditProposeInput(input EditProposeInput) error {
 	afterGraph := make(map[string]string)
 	for index, operation := range input.Operations {
 		if err := validateEditOperation(operation); err != nil {
-			return editInvalidf("operation %d (%s) is malformed", index, operation.Type)
+			return EditInvalidf("operation %d (%s) is malformed", index, operation.Type)
 		}
 		if operation.CreateAs != nil {
 			local := operation.CreateAs.String()
@@ -130,11 +130,11 @@ func validateEditProposeInput(input EditProposeInput) error {
 	}
 	for index, operation := range input.Operations {
 		if err := validateEditReferences(operation, created); err != nil {
-			return editInvalidf("operation %d (%s) references an unknown or mistyped local id", index, operation.Type)
+			return EditInvalidf("operation %d (%s) references an unknown or mistyped local id", index, operation.Type)
 		}
 	}
 	if hasLocalReferenceCycle(afterGraph) {
-		return editInvalidf("operations form an `after` reference cycle")
+		return EditInvalidf("operations form an `after` reference cycle")
 	}
 	return nil
 }
