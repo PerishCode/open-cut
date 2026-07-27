@@ -3,6 +3,7 @@ package application
 import (
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PerishCode/open-cut/product/domain"
@@ -309,11 +310,12 @@ func wrapCaptionUnits(
 			current = candidate
 			continue
 		}
-		if len(current) == 0 {
+		breakIndex := lastCaptionWordBoundary(candidate)
+		if breakIndex == 0 {
 			return "", ErrEditInvalid
 		}
-		lines = append(lines, current)
-		current = []captionEvidenceUnit{unit}
+		lines = append(lines, candidate[:breakIndex])
+		current = candidate[breakIndex:]
 		if len(lines) >= int(policy.MaximumLines) ||
 			uniseg.GraphemeClusterCount(joinCaptionUnits(current)) > int(policy.MaximumLineGraphemes) {
 			return "", ErrEditInvalid
@@ -334,6 +336,24 @@ func wrapCaptionUnits(
 		return "", ErrEditInvalid
 	}
 	return value, nil
+}
+
+// lastCaptionWordBoundary returns the largest index whose unit may start a
+// wrapped line: the joined text carries whitespace between it and its
+// predecessor. Zero means the units form a single unbreakable word cluster.
+func lastCaptionWordBoundary(units []captionEvidenceUnit) int {
+	for index := len(units) - 1; index > 0; index-- {
+		previous, unit := units[index-1], units[index]
+		last, _ := utf8.DecodeLastRuneInString(previous.text)
+		first, _ := utf8.DecodeRuneInString(unit.text)
+		if unicode.IsSpace(last) || unicode.IsSpace(first) {
+			return index
+		}
+		if unit.ensureBoundary && needsTranscriptSpace(previous.text, unit.text) {
+			return index
+		}
+	}
+	return 0
 }
 
 func joinCaptionUnits(units []captionEvidenceUnit) string {

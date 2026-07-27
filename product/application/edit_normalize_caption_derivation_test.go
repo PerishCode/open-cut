@@ -53,6 +53,24 @@ func TestCaptionWrappingCountsUnicodeGraphemeClusters(t *testing.T) {
 	}
 }
 
+func TestCaptionWrappingBreaksOnlyAtWordBoundaries(t *testing.T) {
+	policy := domain.ReadableCaptionPolicyV1()
+	combined, err := wrapCaptionUnits([]captionEvidenceUnit{
+		{text: "Spoken ideas become an unforgettable"},
+		{text: " edit"},
+		{text: "able"},
+	}, policy)
+	if err != nil || combined != "Spoken ideas become an unforgettable\neditable" {
+		t.Fatalf("combined = %q err=%v", combined, err)
+	}
+	if _, err := wrapCaptionUnits([]captionEvidenceUnit{
+		{text: strings.Repeat("a", 30)},
+		{text: strings.Repeat("b", 20)},
+	}, policy); !errors.Is(err, ErrEditInvalid) {
+		t.Fatalf("unbreakable cluster error = %v", err)
+	}
+}
+
 func TestDeriveCaptionCuesDoesNotSplitCorrectionReplacement(t *testing.T) {
 	fixture := newCaptionDerivationFixture(t)
 	tooLong := strings.Repeat("x", 43)
