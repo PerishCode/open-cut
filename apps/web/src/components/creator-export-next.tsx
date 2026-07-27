@@ -73,7 +73,8 @@ export function CreatorExportNext({
             : "Add a clip or caption to the Sequence before exporting."
         }
         label="Next export"
-        summary={`${suggestedName} · NEXT · SEQUENCE r${sequenceRevision}`}
+        summary={suggestedName}
+        summaryDetail={`NEXT · SEQUENCE r${sequenceRevision}`}
       >
         <Status state={nextStatus.state}>{nextStatus.label}</Status>
         <Button

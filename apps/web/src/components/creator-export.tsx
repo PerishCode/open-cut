@@ -229,7 +229,8 @@ export function CreatorExport({ projectId, projectName, available, refreshEpoch,
                 hint={details[0]}
                 key={rootID}
                 label={`Export ${actionIdentity}`}
-                summary={`${filename} · ${index === 0 ? "LATEST" : `HISTORY ${historyPosition}`} · ${lineage.origin.toUpperCase()} · SEQUENCE r${
+                summary={filename}
+                summaryDetail={`${index === 0 ? "LATEST" : `HISTORY ${historyPosition}`} · ${lineage.origin.toUpperCase()} · SEQUENCE r${
                   lineage.export.sequenceRevision
                 }`}
               >

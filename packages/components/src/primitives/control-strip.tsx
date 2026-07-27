@@ -14,6 +14,11 @@ export type ControlStripProps = Readonly<{
    */
   summary?: ReactNode;
   /**
+   * Optional exact trail beside a compact summary. It ellipsizes before the
+   * human summary text does; ignored in editorial presentation.
+   */
+  summaryDetail?: ReactNode;
+  /**
    * Compact: readiness/policy hint beside the summary.
    * Editorial: exact ordinal/kind/range/revision metadata below the body.
    */
@@ -43,6 +48,7 @@ export type ControlStripProps = Readonly<{
 export function ControlStrip({
   label,
   summary,
+  summaryDetail,
   hint,
   presentation = "compact",
   keyboardShortcuts,
@@ -59,7 +65,24 @@ export function ControlStrip({
       {summary || hint ? (
         <div className={editorialMode ? editorial.editorialMeta : styles.controlStripMeta}>
           {summary ? (
-            <div className={editorialMode ? editorial.editorialSummary : styles.controlStripSummary}>{summary}</div>
+            <div
+              className={
+                editorialMode
+                  ? editorial.editorialSummary
+                  : summaryDetail !== undefined
+                    ? `${styles.controlStripSummary} ${editorial.summarySplit}`
+                    : styles.controlStripSummary
+              }
+            >
+              {!editorialMode && summaryDetail !== undefined ? (
+                <>
+                  <span className={editorial.summaryName}>{summary}</span>
+                  <span className={editorial.summaryDetail}>{summaryDetail}</span>
+                </>
+              ) : (
+                summary
+              )}
+            </div>
           ) : null}
           {hint ? (
             <div className={editorialMode ? editorial.editorialHint : styles.controlStripHint}>{hint}</div>

@@ -92,7 +92,8 @@ export function CreatorHistory({
                 hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
                 key={transaction.id}
                 label={`Transaction r${transaction.committedProjectRevision}: ${intent}`}
-                summary={`${intent} · ${index === 0 ? "LATEST · " : ""}${transaction.actor.toUpperCase()} · r${
+                summary={intent}
+                summaryDetail={`${index === 0 ? "LATEST · " : ""}${transaction.actor.toUpperCase()} · r${
                   transaction.committedProjectRevision
                 }${transaction.undoesTransactionId ? " · UNDO/REDO" : ""}`}
               />

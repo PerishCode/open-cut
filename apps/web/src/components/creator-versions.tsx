@@ -158,7 +158,8 @@ export function CreatorVersions({
                 hint={`${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`}
                 key={version.id}
                 label={`Project version ${title} at revision ${version.capturedProjectRevision}`}
-                summary={`${title} · ${
+                summary={title}
+                summaryDetail={`${
                   version.source === "manual" ? "NAMED" : "AUTO"
                 } · r${version.capturedProjectRevision}`}
               >

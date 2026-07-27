@@ -67,3 +67,36 @@
   padding: 3px 8px;
   font-size: 10px;
 }
+
+/**
+ * Structured compact summary: the human name yields space last, the exact
+ * detail trail ellipsizes first.
+ */
+
+.summarySplit {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.summaryName,
+.summaryDetail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summaryName {
+  flex: 0 1 auto;
+}
+
+.summaryDetail {
+  flex: 0 1000 auto;
+  color: var(--oc-ink-dim);
+  font-weight: 500;
+}
+
+.summaryDetail::before {
+  content: "· ";
+}
