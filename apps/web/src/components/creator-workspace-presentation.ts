@@ -161,11 +161,10 @@ export function formatMediaFacts(facts: NonNullable<Asset["facts"]>): string {
   const video = facts.streams.find((stream) => stream.descriptor.video)?.descriptor.video;
   const audio = facts.streams.find((stream) => stream.descriptor.audio)?.descriptor.audio;
   return [
-    facts.container,
     facts.duration ? `${formatTime(facts.duration)}s` : "duration unknown",
     video ? `${video.width} × ${video.height}` : undefined,
-    audio ? `${audio.sampleRate} Hz · ${audio.channels} ch` : undefined,
-    `${facts.streams.length} streams`,
+    !video && audio ? `${audio.sampleRate} Hz · ${audio.channels} ch` : undefined,
+    facts.container,
   ]
     .filter((value): value is string => value !== undefined)
     .join(" · ");
