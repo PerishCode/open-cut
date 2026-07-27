@@ -1,13 +1,13 @@
 .feedEntry {
   display: grid;
   min-width: 0;
-  gap: 5px;
-  padding: 5px 7px 7px 10px;
+  gap: 4px;
+  padding: 4px 6px 6px 9px;
   border-left: 2px solid var(--oc-hairline-strong);
 }
 
 .feedEntryDefault {
-  background: var(--oc-input-wash);
+  background: var(--oc-ink-wash-faint);
 }
 
 .feedEntryQuiet {
@@ -48,7 +48,7 @@
   min-width: 0;
   color: var(--oc-ink-soft);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 

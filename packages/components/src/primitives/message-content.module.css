@@ -2,7 +2,7 @@
   min-width: 0;
   color: var(--oc-ink-soft);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -38,7 +38,7 @@
 .messageContent pre {
   max-width: 100%;
   overflow-x: auto;
-  padding: 9px 10px;
+  padding: 7px 9px;
   border: 1px solid var(--oc-hairline-input);
   background: var(--oc-input-wash);
   color: var(--oc-ink-strong);
