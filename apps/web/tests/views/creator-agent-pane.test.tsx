@@ -320,7 +320,7 @@ describe("CreatorAgentPane", () => {
     const outcome = await screen.findByText("Creative change committed");
     const latestResponse = screen.getByText(/Agent response · #\d+/).closest("article");
     expect(latestResponse).toBeTruthy();
-    expect(outcome.closest("article")?.compareDocumentPosition(latestResponse as Node)).toBe(
+    expect(outcome.closest("section")?.compareDocumentPosition(latestResponse as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(screen.getByText("Captions updated · Project r9")).toBeTruthy();

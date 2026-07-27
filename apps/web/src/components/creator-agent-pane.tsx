@@ -1,7 +1,6 @@
 import {
   Button,
   ControlStrip,
-  FeedEntry,
   Heading,
   PanelDock,
   ResourceCard,
@@ -522,15 +521,13 @@ export function CreatorAgentPane({
       <Stack spacing="compact">
         {!state.selected ? <Text>Describe a new writing or editing task.</Text> : null}
         {latestOutcome ? (
-          <FeedEntry
-            details={outcomeDetails(latestOutcome)}
+          <ControlStrip
+            action={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             elementRef={latestOutcomeRef}
-            hint={receiptStatusLabel(latestOutcome)}
+            hint={outcomeDetails(latestOutcome).join(" · ")}
             label={`Latest Agent outcome ${latestOutcome.ordinal}`}
-            summary={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
-          >
-            <Status state={receiptStatusState(latestOutcome)}>{outcomeTitle(latestOutcome)}</Status>
-          </FeedEntry>
+            summary={outcomeTitle(latestOutcome)}
+          />
         ) : null}
         {state.messages.length > 0 ? (
           <Heading level={3} tone="eyebrow">
