@@ -365,8 +365,7 @@
   overflow: auto;
   max-height: 58vh;
   border-top: 1px solid var(--oc-hairline-strong);
-  background: var(--oc-surface-raised);
-  box-shadow: 0 -12px 28px rgb(0 0 0 / 6%);
+  background: transparent;
 }
 
 .panelDockFooter > .stackCompact {
