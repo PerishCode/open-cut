@@ -226,6 +226,9 @@
   white-space: nowrap;
 }
 
+/* Resting chips paint only inside their time slot (the inline width keeps a
+   ~0.8% floor); the interactive minimum below applies once a chip is selected
+   and elevated, where trim handles need room. */
 .timelineItem {
   position: absolute;
   z-index: 2;
@@ -233,7 +236,7 @@
   bottom: 3px;
   display: flex;
   overflow: visible;
-  min-width: 44px;
+  min-width: 8px;
   align-items: stretch;
   border: 1px solid var(--oc-hairline-input);
   color: var(--oc-ink-strong);
@@ -303,13 +306,6 @@
 .timelineItemBodyStatic {
   cursor: default;
 }
-/* The narrowest chips also trade horizontal padding for name glyphs. */
-@container (max-width: 56px) {
-  .timelineItemBody {
-    padding: 0 3px;
-  }
-}
-
 .timelineItemInteractive .timelineItemBody {
   cursor: grab;
 }
@@ -327,6 +323,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The narrowest chips trade horizontal padding for name glyphs and clip the
+   stem raw instead of spending glyph space on an ellipsis. */
+@container (max-width: 56px) {
+  .timelineItemBody {
+    padding: 0 3px;
+  }
+
+  .timelineItemLabel {
+    text-overflow: clip;
+  }
 }
 
 .timelineItemBadge {
