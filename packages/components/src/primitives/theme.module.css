@@ -100,11 +100,11 @@
 }
 
 .editorSidebar {
-  background: var(--oc-surface);
+  background: var(--oc-surface-rail);
 }
 
 .editorInspector {
-  background: var(--oc-surface);
+  background: var(--oc-surface-rail);
 }
 
 .editorPaneHeader {
