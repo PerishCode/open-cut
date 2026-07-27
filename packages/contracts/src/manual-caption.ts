@@ -116,7 +116,7 @@ export function createCreatorManualCaptionPort(): CreatorManualCaptionPort {
       const response = await previewCreatorCaptionGesture(request.projectId, request.sequenceId, request.body, {
         signal,
       });
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       const { review, envelope } = normalizeGestureReview(response.data, request);
       envelopes.set(review, envelope);
       return review;

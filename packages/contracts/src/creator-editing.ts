@@ -113,12 +113,15 @@ export type CreatorEditFailureCode = "conflict" | "not-found" | "invalid" | "den
 export class CreatorEditError extends Error {
   readonly code: CreatorEditFailureCode;
   readonly status: number;
+  /** Product-authored failure reason, when the API response carried one. Display-only. */
+  readonly reason?: string;
 
-  constructor(code: CreatorEditFailureCode, status: number) {
+  constructor(code: CreatorEditFailureCode, status: number, reason?: string) {
     super(`Creator edit failed: ${code}`);
     this.name = "CreatorEditError";
     this.code = code;
     this.status = status;
+    if (reason !== undefined) this.reason = reason;
   }
 }
 
@@ -145,7 +148,7 @@ export function createEditWritePort(): EditWritePort {
         { requestId: input.requestId, ...(input.intent === undefined ? {} : { intent: input.intent }) },
         { signal },
       );
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       return normalizeCreatorEditCommit(response.data, input.projectId, input.sequenceId);
     },
   };
@@ -158,7 +161,7 @@ export async function commitCreatorWireEdit(
   signal?: AbortSignal,
 ): Promise<CreatorEditCommit> {
   const response = await commitCreatorEdit(projectId, sequenceId, body, { signal });
-  if (response.status !== 200) throw creatorEditResponseError(response.status);
+  if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
   return normalizeCreatorEditCommit(response.data, projectId, sequenceId);
 }
 
@@ -350,12 +353,39 @@ export function normalizeCreatorEditCommit(
   };
 }
 
-export function creatorEditResponseError(status: number): CreatorEditError {
-  if (status === 409) return new CreatorEditError("conflict", status);
-  if (status === 404) return new CreatorEditError("not-found", status);
-  if (status === 422 || status === 400) return new CreatorEditError("invalid", status);
-  if (status === 401 || status === 403) return new CreatorEditError("denied", status);
-  return new CreatorEditError("failed", status);
+export function creatorEditResponseError(status: number, body?: unknown): CreatorEditError {
+  const reason = editFailureReason(body);
+  if (status === 409) return new CreatorEditError("conflict", status, reason);
+  if (status === 404) return new CreatorEditError("not-found", status, reason);
+  if (status === 422 || status === 400) return new CreatorEditError("invalid", status, reason);
+  if (status === 401 || status === 403) return new CreatorEditError("denied", status, reason);
+  return new CreatorEditError("failed", status, reason);
+}
+
+/**
+ * Best-effort extraction of the product-authored failure sentence from a
+ * problem+json body. Diagnostic display only — never product data, so any
+ * shape mismatch yields undefined instead of a validation failure.
+ */
+function editFailureReason(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const payload = body as Record<string, unknown>;
+  let text: string | undefined;
+  if (Array.isArray(payload.errors)) {
+    const first = payload.errors[0];
+    if (typeof first === "object" && first !== null) {
+      const message = (first as Record<string, unknown>).message;
+      if (typeof message === "string") text = message;
+    }
+  }
+  if (text === undefined && typeof payload.detail === "string") text = payload.detail;
+  if (text === undefined) return undefined;
+  let normalized = text.trim();
+  while (normalized.startsWith("edit request is invalid: ")) {
+    normalized = normalized.slice("edit request is invalid: ".length);
+  }
+  if (normalized.length === 0 || normalized === "edit request is invalid") return undefined;
+  return normalized.length > 300 ? `${normalized.slice(0, 299)}…` : normalized;
 }
 
 export function validateCreatorRequestID(value: string): void {

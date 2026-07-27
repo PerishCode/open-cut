@@ -3,11 +3,12 @@ import {
   type Alignment,
   type Clip,
   type CreatorEditCommit,
+  CreatorEditError,
   type DurableID,
   type Track,
   useContracts,
 } from "@open-cut/contracts";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { CreatorCaptionController, type CreatorCaptionSource } from "../lib/creator-caption-controller.js";
 import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
@@ -81,12 +82,32 @@ export function CreatorCaptions({
     snapshot.selectedTrack !== undefined &&
     !busy;
 
+  const conflictRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (snapshot.phase === "conflict") {
+      conflictRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [snapshot.phase]);
+
   if (!snapshot.source) {
     return <Text tone="eyebrow">Story caption draft · choose captions in Story</Text>;
   }
 
   return (
     <Stack spacing="compact">
+      {snapshot.phase === "conflict" ? (
+        <Stack elementRef={conflictRef} spacing="compact">
+          <Status state="unavailable">Caption conflict · refresh and reselect Clip and Caption Track</Status>
+          <Button
+            onPress={() => {
+              controller.clear();
+              void onReload();
+            }}
+          >
+            Refresh committed Caption inputs
+          </Button>
+        </Stack>
+      ) : null}
       <Text tone="eyebrow">CAPTION DRAFT · STORY EXCERPT</Text>
       <Text>Choose one exact Story excerpt, one committed Clip instance, and one Caption Track.</Text>
       <Stack spacing="compact">
@@ -104,9 +125,9 @@ export function CreatorCaptions({
       ) : null}
       {snapshot.clipCandidates.map((candidate) => (
         <Button disabled={busy} key={candidate.clip.id} onPress={() => controller.selectClip(candidate.clip.id)}>
-          {candidate.clip.id === snapshot.selectedClip?.id ? "✓ " : ""}Choose Clip {candidate.clip.id} ·{" "}
-          {candidateLabel(candidate.recommendation)} · {formatClock(candidate.clip.timelineRange.start)} →{" "}
-          {formatClockEnd(candidate.clip.timelineRange)}
+          {candidate.clip.id === snapshot.selectedClip?.id ? "✓ " : ""}Choose Clip ·{" "}
+          {clipTrackLabel(candidate.clip, tracks)} · {formatClock(candidate.clip.timelineRange.start)} →{" "}
+          {formatClockEnd(candidate.clip.timelineRange)} · {candidateLabel(candidate.recommendation)}
         </Button>
       ))}
       {snapshot.clipCandidates.length === 0 ? (
@@ -154,25 +175,13 @@ export function CreatorCaptions({
       ) : null}
       {snapshot.phase === "applying" ? <Status state="pending">Applying one atomic Caption transaction…</Status> : null}
       {snapshot.phase === "success" ? <Status state="ready">Creator Caption transaction committed</Status> : null}
-      {snapshot.phase === "conflict" ? (
-        <Stack spacing="compact">
-          <Status state="unavailable">Caption conflict · refresh and reselect Clip and Caption Track</Status>
-          <Button
-            onPress={() => {
-              controller.clear();
-              void onReload();
-            }}
-          >
-            Refresh committed Caption inputs
-          </Button>
-        </Stack>
-      ) : null}
       {snapshot.phase === "error" && snapshot.error ? (
         <Stack spacing="compact">
           <Status state="unavailable">
             {snapshot.canRetryIdenticalApply
               ? "Could not confirm the Caption update."
-              : "Could not prepare a Caption review. Check the selected inputs and try again."}
+              : (editFailureReason(snapshot.error) ??
+                "Could not prepare a Caption review. Check the selected inputs and try again.")}
           </Status>
           {snapshot.canRetryIdenticalApply ? (
             <Button onPress={() => void run(() => controller.retryIdenticalApply())}>
@@ -190,4 +199,12 @@ function candidateLabel(value: "exact-alignment" | "source-stream" | "compatible
   if (value === "exact-alignment") return "recommended by exact Alignment";
   if (value === "source-stream") return "recommended by SourceStream";
   return "compatible source range";
+}
+
+function clipTrackLabel(clip: Clip, tracks: readonly Track[]): string {
+  return tracks.find((track) => track.id === clip.trackId)?.label ?? "unlabeled track";
+}
+
+function editFailureReason(error: Error): string | undefined {
+  return error instanceof CreatorEditError ? error.reason : undefined;
 }

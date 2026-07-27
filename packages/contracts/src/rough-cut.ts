@@ -111,7 +111,7 @@ export function createCreatorRoughCutPort(): CreatorRoughCutPort {
       const projectId = durableID(input.projectId);
       const sequenceId = durableID(input.sequenceId);
       const response = await previewCreatorRoughCut(projectId, sequenceId, normalized, { signal });
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       const { review, envelope } = normalizeReview(response.data, projectId, sequenceId, normalized);
       envelopes.set(review, envelope);
       return review;

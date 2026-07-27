@@ -174,7 +174,7 @@ export function createCreatorTimelinePort(): CreatorTimelinePort {
         normalized.body,
         { signal },
       );
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       const plan = normalizeGesturePlan(response.data, normalized);
       if (plan.status === "ready") envelopes.set(plan.review, plan.envelope);
       return plan.status === "ready"
