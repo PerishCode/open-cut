@@ -42,7 +42,7 @@ import {
 } from "./creator-agent-context.js";
 import { CreatorAgentPane } from "./creator-agent-pane.js";
 import { CreatorCaptions } from "./creator-captions.js";
-import { CreatorExport } from "./creator-export.js";
+import { creatorExportTab } from "./creator-export-tab.js";
 import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-narrative-anchor.js";
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
@@ -103,6 +103,8 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
+  const [exportRefreshEpoch, setExportRefreshEpoch] = useState(0);
+  const [exportActive, setExportActive] = useState(false);
   const [sourcePanel, setSourcePanel] = useState("source-media");
   const [timelinePanel, setTimelinePanel] = useState("timeline");
   const timelineHandoff = useCreatorTimelineHandoff();
@@ -693,22 +695,19 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
               projectId: project.id,
               refreshEpoch: historyRefreshEpoch,
             }),
-            {
-              id: "export",
-              label: "Export",
-              content: ready ? (
-                <CreatorExport
-                  available={sequenceExportAvailable}
-                  hasContent={ready.sequence.clips.length > 0 || ready.sequence.captions.length > 0}
-                  projectId={project.id}
-                  projectName={project.name}
-                  sequenceId={ready.overview.project.mainSequenceId}
-                  sequenceRevision={ready.sequence.sequenceRevision}
-                />
-              ) : (
-                <Text>Synchronizing the project…</Text>
-              ),
-            },
+            creatorExportTab({
+              activeExport: exportActive,
+              available: sequenceExportAvailable,
+              hasContent: ready ? ready.sequence.clips.length > 0 || ready.sequence.captions.length > 0 : false,
+              onActiveChange: setExportActive,
+              onStarted: () => setExportRefreshEpoch((current) => current + 1),
+              projectId: project.id,
+              projectName: project.name,
+              refreshEpoch: exportRefreshEpoch,
+              sequence: ready
+                ? { id: ready.overview.project.mainSequenceId, revision: ready.sequence.sequenceRevision }
+                : undefined,
+            }),
             {
               id: "system",
               label: "System",
