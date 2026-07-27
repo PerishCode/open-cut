@@ -7,7 +7,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/domain"
 )
 
@@ -22,7 +22,7 @@ type audioRunDecoderFactory func(
 	ExecutionManifest,
 	AudioDecodeRun,
 	string,
-	lifecycle.Profile,
+	process.Profile,
 ) (audioRunDecoder, error)
 
 type audioMixBinding struct {
@@ -39,7 +39,7 @@ type audioLaneEvaluator struct {
 	decoder     audioRunDecoder
 	manifest    ExecutionManifest
 	attemptRoot string
-	profile     lifecycle.Profile
+	profile     process.Profile
 	factory     audioRunDecoderFactory
 }
 
@@ -49,7 +49,7 @@ type audioLaneEvaluator struct {
 func NewAudioStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (StreamProducer, error) {
 	return newAudioStreamProducer(manifest, attemptRoot, profile, startAudioRunDecoder)
 }
@@ -57,7 +57,7 @@ func NewAudioStreamProducer(
 func newAudioStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	factory audioRunDecoderFactory,
 ) (StreamProducer, error) {
 	if manifest.Validate() != nil || !cleanAbsoluteDirectory(attemptRoot) || factory == nil ||
@@ -142,7 +142,7 @@ func evaluateAudioStream(
 	destination io.Writer,
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	decodePlan AudioDecodePlan,
 	bindings []audioMixBinding,
 	factory audioRunDecoderFactory,
@@ -303,7 +303,7 @@ func startAudioRunDecoder(
 	manifest ExecutionManifest,
 	run AudioDecodeRun,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (audioRunDecoder, error) {
 	return StartAudioDecodeRun(ctx, manifest, run, attemptRoot, profile)
 }

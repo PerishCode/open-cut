@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 )
 
 type videoRunDecoder interface {
@@ -22,7 +22,7 @@ type videoRunDecoderFactory func(
 	ExecutionManifest,
 	VideoDecodeRun,
 	string,
-	lifecycle.Profile,
+	process.Profile,
 ) (videoRunDecoder, error)
 
 type videoEvaluatorBinding struct {
@@ -42,7 +42,7 @@ type videoLaneEvaluator struct {
 	hasSelected  bool
 	manifest     ExecutionManifest
 	attemptRoot  string
-	profile      lifecycle.Profile
+	profile      process.Profile
 	factory      videoRunDecoderFactory
 	sources      map[uint32]*SourceMap
 }
@@ -50,7 +50,7 @@ type videoLaneEvaluator struct {
 func NewVideoStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (StreamProducer, error) {
 	return newVideoStreamProducer(manifest, attemptRoot, profile, startVideoRunDecoder)
 }
@@ -58,7 +58,7 @@ func NewVideoStreamProducer(
 func NewCaptionedVideoStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	captions *CaptionCoverageEvaluator,
 ) (StreamProducer, error) {
 	return newCaptionedVideoStreamProducer(
@@ -69,7 +69,7 @@ func NewCaptionedVideoStreamProducer(
 func newVideoStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	factory videoRunDecoderFactory,
 ) (StreamProducer, error) {
 	if manifest.Validate() != nil || !cleanAbsoluteDirectory(attemptRoot) || factory == nil ||
@@ -94,7 +94,7 @@ func newVideoStreamProducer(
 func newCaptionedVideoStreamProducer(
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	factory videoRunDecoderFactory,
 	captions *CaptionCoverageEvaluator,
 ) (StreamProducer, error) {
@@ -167,7 +167,7 @@ func evaluateVideoStream(
 	destination io.Writer,
 	manifest ExecutionManifest,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 	decodePlan VideoDecodePlan,
 	bindings []videoEvaluatorBinding,
 	factory videoRunDecoderFactory,
@@ -401,7 +401,7 @@ func startVideoRunDecoder(
 	manifest ExecutionManifest,
 	run VideoDecodeRun,
 	attemptRoot string,
-	profile lifecycle.Profile,
+	profile process.Profile,
 ) (videoRunDecoder, error) {
 	return StartVideoDecodeRun(ctx, manifest, run, attemptRoot, profile)
 }

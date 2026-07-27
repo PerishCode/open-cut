@@ -1,6 +1,6 @@
 //go:build linux
 
-package lifecycle
+package process
 
 func applyPlatformProcessPolicy(spec ProcessSpec) ProcessSpec {
 	if spec.Profile == ProfileHarness && spec.Sandbox == SandboxChromium {

@@ -1,5 +1,5 @@
 //go:build !linux
 
-package lifecycle
+package process
 
 func applyPlatformProcessPolicy(spec ProcessSpec) ProcessSpec { return spec }

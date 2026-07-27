@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 	"github.com/PerishCode/open-cut/product/application"
 	"github.com/PerishCode/open-cut/product/domain"
 	"github.com/PerishCode/open-cut/utils/target"
@@ -51,7 +51,7 @@ func TestPinnedRawAVPipelineIsByteStable(t *testing.T) {
 	for attempt := 0; attempt < 2; attempt++ {
 		root := normalizeMaterialPath(t.TempDir())
 		if err := RunRawAVPipeline(
-			context.Background(), manifest, root, lifecycle.ProfileHarness, blackSilenceProducers(manifest),
+			context.Background(), manifest, root, process.ProfileHarness, blackSilenceProducers(manifest),
 		); err != nil {
 			t.Fatal(err)
 		}

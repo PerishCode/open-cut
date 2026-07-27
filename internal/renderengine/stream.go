@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/PerishCode/open-cut/lifecycle"
+	"github.com/PerishCode/open-cut/lifecycle/process"
 )
 
 type StreamProducer func(context.Context, io.Writer) error
@@ -17,7 +17,7 @@ type StreamProducer func(context.Context, io.Writer) error
 // unset; this function is its sole owner.
 func RunBoundedProcessStream(
 	ctx context.Context,
-	spec lifecycle.ProcessSpec,
+	spec process.ProcessSpec,
 	byteLimit uint64,
 	produce StreamProducer,
 ) (uint64, error) {
@@ -26,7 +26,7 @@ func RunBoundedProcessStream(
 	}
 	reader, writer := io.Pipe()
 	spec.Stdin = reader
-	process, err := lifecycle.Start(ctx, spec)
+	process, err := process.Start(ctx, spec)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
