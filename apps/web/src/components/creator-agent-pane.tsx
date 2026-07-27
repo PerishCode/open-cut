@@ -524,9 +524,9 @@ export function CreatorAgentPane({
           <ControlStrip
             action={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             elementRef={latestOutcomeRef}
-            hint={outcomeDetails(latestOutcome).join(" · ")}
             label={`Latest Agent outcome ${latestOutcome.ordinal}`}
             summary={outcomeTitle(latestOutcome)}
+            summaryDetail={outcomeDetails(latestOutcome).join(" · ")}
           />
         ) : null}
         {state.messages.length > 0 ? (
