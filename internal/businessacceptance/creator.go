@@ -78,7 +78,7 @@ func (creator Creator) ApprovePairing(ctx context.Context) error {
 	if err := creator.evaluateBoolean(ctx, buttonExpression("Approve CLI", true)); err != nil {
 		return fmt.Errorf("approve CLI pairing through Creator: %w", err)
 	}
-	if err := creator.wait(ctx, textExpression("CLI access active")); err != nil {
+	if err := creator.wait(ctx, buttonExpression("Revoke CLI access", false)); err != nil {
 		return fmt.Errorf("wait for active CLI pairing: %w", err)
 	}
 	return nil
