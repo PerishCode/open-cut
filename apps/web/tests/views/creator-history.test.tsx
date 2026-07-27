@@ -57,7 +57,7 @@ describe("Creator Workspace history", () => {
     renderHistory();
 
     expect(await screen.findByText(/Move selected Timeline Clip/)).toBeTruthy();
-    expect(screen.getByText(/LATEST · r8 · AGENT/)).toBeTruthy();
+    expect(screen.getByText(/LATEST · AGENT · r8/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recent creative transactions" })).toBeTruthy();
     expect(screen.queryByText(ids.clip)).toBeNull();
     expect(screen.queryByRole("region", { name: new RegExp(ids.clip) })).toBeNull();

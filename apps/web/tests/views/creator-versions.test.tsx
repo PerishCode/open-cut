@@ -52,7 +52,7 @@ describe("CreatorVersions", () => {
     );
 
     renderVersions();
-    expect(await screen.findByText(/CURRENT · AUTO · r8 · Project created/)).toBeTruthy();
+    expect(await screen.findByText(/Project created · AUTO · r8/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recent project checkpoints" })).toBeTruthy();
     expect(screen.queryByText("Recent checkpoints")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save version" })).toBeNull();

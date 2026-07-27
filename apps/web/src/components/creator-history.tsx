@@ -92,9 +92,9 @@ export function CreatorHistory({
                 hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
                 key={transaction.id}
                 label={`Transaction r${transaction.committedProjectRevision}: ${intent}`}
-                summary={`${index === 0 ? "LATEST · " : ""}r${transaction.committedProjectRevision} · ${transaction.actor.toUpperCase()}${
-                  transaction.undoesTransactionId ? " · UNDO/REDO" : ""
-                } · ${intent}`}
+                summary={`${intent} · ${index === 0 ? "LATEST · " : ""}${transaction.actor.toUpperCase()} · r${
+                  transaction.committedProjectRevision
+                }${transaction.undoesTransactionId ? " · UNDO/REDO" : ""}`}
               />
             );
           })}
