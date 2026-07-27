@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import fades from "./scroll-affordance.module.css";
 import styles from "./tabs.module.css";
 
 export type TabDefinition = {
@@ -54,7 +55,7 @@ export function Tabs({ activeTabId, density = "default", label, onTabChange, tab
       {active.header !== undefined ? <div className={styles.tabHeader}>{active.header}</div> : null}
       <div
         aria-labelledby={`tab-${active.id}`}
-        className={styles.tabPanel}
+        className={`${styles.tabPanel} ${fades.scrollFade}`}
         id={`tab-panel-${active.id}`}
         ref={activePanelRef}
         role="tabpanel"
