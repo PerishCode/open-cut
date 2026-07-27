@@ -28,6 +28,12 @@ export type ControlStripProps = Readonly<{
    * `editorial` elevates body text for Story/Narrative content rows.
    */
   presentation?: ControlStripPresentation;
+  /**
+   * Collapse the horizontal controls until the strip is hovered, holds focus,
+   * or contains a pressed choice — list density under load without losing the
+   * tools on the row you are working.
+   */
+  revealActions?: boolean;
   /** Optional local shortcuts when the strip itself owns keyboard focus. */
   keyboardShortcuts?: string;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
@@ -53,6 +59,7 @@ export function ControlStrip({
   summaryDetail,
   hint,
   presentation = "compact",
+  revealActions = false,
   keyboardShortcuts,
   onKeyDown,
   children,
@@ -63,6 +70,7 @@ export function ControlStrip({
   const classNames = [styles.controlStrip];
   if (editorialMode) classNames.push(editorial.editorial);
   if (action) classNames.push(editorial.withAction);
+  if (revealActions) classNames.push(editorial.revealActions);
   const lead = (
     <>
       {summary || hint ? (

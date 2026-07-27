@@ -1,4 +1,5 @@
 import type { Asset, Caption, DurableID, NarrativeNode, SourceStream, TranscriptCorrection } from "@open-cut/contracts";
+import { CreatorEditError } from "@open-cut/contracts";
 
 export type SourceStreamSelection = Readonly<{
   assetId: DurableID;
@@ -173,4 +174,12 @@ export function formatMediaFacts(facts: NonNullable<Asset["facts"]>): string {
 export function scheduleTimer(callback: () => void, delay: number): () => void {
   const timer = setTimeout(callback, delay);
   return () => clearTimeout(timer);
+}
+
+export function isCreatorEditConflict(value: Error): boolean {
+  return value instanceof CreatorEditError && value.code === "conflict";
+}
+
+export function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }
