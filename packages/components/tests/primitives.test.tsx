@@ -348,6 +348,10 @@ describe("atomic components", () => {
     const timeline = screen.getByRole("region", { name: "Timeline" });
     expect(timeline).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agent" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Story" })).toBeTruthy();
+    for (const pane of ["Sources", "Viewer", "Timeline", "Agent"]) {
+      expect(screen.getByRole("heading", { level: 2, name: pane })).toBeTruthy();
+    }
     expect(screen.getByRole("separator", { name: "Resize Sources" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Timeline" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Agent" })).toBeTruthy();

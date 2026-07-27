@@ -117,7 +117,7 @@ export function EditorShell({
             value={timelineHeight}
           />
           <section aria-label={timelineLabel} className={styles.editorTimeline}>
-            <div className={styles.editorPaneHeader}>{timelineLabel}</div>
+            <h2 className={styles.editorPaneHeader}>{timelineLabel}</h2>
             <div className={styles.editorTimelineContent} ref={timelineContentRef}>
               {timeline}
             </div>
@@ -150,7 +150,7 @@ function EditorPane({ children, label, tone }: EditorPaneProps) {
     tone === "viewer" ? styles.editorViewer : tone === "inspector" ? styles.editorInspector : styles.editorSidebar;
   return (
     <section aria-label={label} className={className}>
-      <div className={styles.editorPaneHeader}>{label}</div>
+      <h2 className={styles.editorPaneHeader}>{label}</h2>
       <div className={styles.editorPaneContent}>{children}</div>
     </section>
   );
