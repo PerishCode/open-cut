@@ -44,38 +44,19 @@ describe("CreatorVersions", () => {
     expect(attempts).toBe(2);
   });
 
-  it("creates a named lightweight checkpoint from the Versions panel", async () => {
-    const requests: RequestInit[] = [];
+  it("presents the checkpoint list without owning the save composer", async () => {
     const entries = [version(ids.current, "8", "genesis", "Project created")];
-    vi.stubGlobal("crypto", { randomUUID: () => ids.request });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-        if (init?.method === "POST") {
-          requests.push(init);
-          const saved = version(ids.version, "8", "manual", "Approved assembly");
-          entries.unshift(saved);
-          return jsonResponse({ version: saved, activityCursor: "12", replayed: false });
-        }
-        return jsonResponse({ versions: entries, activityCursor: "11" });
-      }),
+      vi.fn(async () => jsonResponse({ versions: entries, activityCursor: "11" })),
     );
 
     renderVersions();
-    expect(screen.getByRole("region", { name: "Save named project version" })).toBeTruthy();
-    expect(screen.getByText("AUTO BEFORE AGENT TURNS · SOURCE MEDIA STAYS SHARED")).toBeTruthy();
     expect(await screen.findByText(/CURRENT · AUTO · r8 · Project created/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recent project checkpoints" })).toBeTruthy();
     expect(screen.queryByText("Recent checkpoints")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Version name"), { target: { value: " Approved assembly " } });
-    fireEvent.click(screen.getByRole("button", { name: "Save version" }));
-
-    expect(await screen.findByText("Saved “Approved assembly” at r8.")).toBeTruthy();
-    expect(requests).toHaveLength(1);
-    expect(JSON.parse(String(requests[0]?.body))).toEqual({
-      requestId: `ui:project-version-create:${ids.request}`,
-      name: "Approved assembly",
-    });
+    expect(screen.queryByRole("button", { name: "Save version" })).toBeNull();
+    expect(screen.queryByLabelText("Version name")).toBeNull();
   });
 
   it("requires review and describes the automatic safety checkpoint before restore", async () => {

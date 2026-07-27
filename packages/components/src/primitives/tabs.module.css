@@ -42,6 +42,19 @@
   outline-offset: -2px;
 }
 
+.tabsWithHeader {
+  grid-template-rows: auto auto 1fr;
+}
+
+.tabHeader {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--oc-hairline);
+}
+
+.tabsCompact .tabHeader {
+  padding-bottom: 4px;
+}
+
 .tabPanel {
   min-height: 0;
   overflow: auto;

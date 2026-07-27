@@ -43,7 +43,6 @@ import {
 import { CreatorAgentPane } from "./creator-agent-pane.js";
 import { CreatorCaptions } from "./creator-captions.js";
 import { CreatorExport } from "./creator-export.js";
-import { CreatorHistory } from "./creator-history.js";
 import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-narrative-anchor.js";
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
@@ -52,7 +51,7 @@ import { createSourcePanelNavigation } from "./creator-source-panel-navigation.j
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
-import { CreatorVersions } from "./creator-versions.js";
+import { creatorVersionsTab } from "./creator-versions-tab.js";
 import { CreatorWorkspaceActions } from "./creator-workspace-actions.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
 import {
@@ -687,23 +686,13 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 </Stack>
               ),
             },
-            {
-              id: "versions",
-              label: "Versions",
-              content: ready ? (
-                <Stack spacing="compact">
-                  <CreatorVersions
-                    currentRevision={ready.overview.project.revision}
-                    onRestored={refreshRestoredWorkspace}
-                    projectId={project.id}
-                    refreshEpoch={historyRefreshEpoch}
-                  />
-                  <CreatorHistory projectId={project.id} refreshEpoch={historyRefreshEpoch} />
-                </Stack>
-              ) : (
-                <Text>Synchronizing project versions…</Text>
-              ),
-            },
+            creatorVersionsTab({
+              currentRevision: ready?.overview.project.revision,
+              onCheckpointSaved: () => setHistoryRefreshEpoch((current) => current + 1),
+              onRestored: refreshRestoredWorkspace,
+              projectId: project.id,
+              refreshEpoch: historyRefreshEpoch,
+            }),
             {
               id: "export",
               label: "Export",

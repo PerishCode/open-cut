@@ -290,6 +290,27 @@ describe("atomic components", () => {
     expect(panel.scrollTop).toBe(0);
   });
 
+  it("pins a tab's header outside its scrolling panel", () => {
+    render(
+      <Tabs
+        initialTabId="versions"
+        label="Timeline panels"
+        tabs={[
+          { id: "timeline", label: "Timeline", content: "Track surface" },
+          { id: "versions", label: "Versions", content: "Checkpoint list", header: "Checkpoint composer" },
+        ]}
+      />,
+    );
+
+    const panel = screen.getByRole("tabpanel");
+    const header = screen.getByText("Checkpoint composer");
+    expect(panel.textContent).toBe("Checkpoint list");
+    expect(panel.contains(header)).toBe(false);
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline" }));
+    expect(screen.queryByText("Checkpoint composer")).toBeNull();
+    expect(screen.getByRole("tabpanel").textContent).toBe("Track surface");
+  });
+
   it("normalizes file selection and drop behind one semantic atom", () => {
     const onSelect = vi.fn();
     render(<FileField label="Drop footage or browse" accept="video/*,audio/*" onSelect={onSelect} />);
