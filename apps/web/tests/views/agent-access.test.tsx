@@ -111,7 +111,7 @@ describe("AgentAccess", () => {
       </ContractsProvider>,
     );
 
-    expect(await screen.findByText("CLI access active")).toBeTruthy();
+    expect(await screen.findByText("Active")).toBeTruthy();
     expect(screen.getByText("Can change Agent runs · Can view projects")).toBeTruthy();
     expect(
       screen.getByRole("region", {

@@ -1,4 +1,4 @@
-import type { KeyboardEventHandler, ReactNode } from "react";
+import type { KeyboardEventHandler, ReactNode, Ref } from "react";
 
 import editorial from "./control-strip.module.css";
 import styles from "./theme.module.css";
@@ -39,6 +39,8 @@ export type ControlStripProps = Readonly<{
    * the body row.
    */
   action?: ReactNode;
+  /** Optional host ref, e.g. for reveal-into-view behavior. */
+  elementRef?: Ref<HTMLElement>;
 }>;
 
 /**
@@ -55,6 +57,7 @@ export function ControlStrip({
   onKeyDown,
   children,
   action,
+  elementRef,
 }: ControlStripProps) {
   const editorialMode = presentation === "editorial";
   const classNames = [styles.controlStrip];
@@ -103,6 +106,7 @@ export function ControlStrip({
       aria-keyshortcuts={keyboardShortcuts}
       aria-label={label}
       className={classNames.join(" ")}
+      ref={elementRef}
       tabIndex={onKeyDown ? 0 : undefined}
       onKeyDown={onKeyDown}
     >

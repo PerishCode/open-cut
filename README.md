@@ -50,7 +50,7 @@ oc-control bootstrap
 oc-control doctor
 oc-control protocol check
 oc-control clean --scope quick
-oc-control dev
+oc-control dev start
 ```
 
 `oc-control bootstrap` validates the installed Node and pnpm versions, performs
@@ -58,11 +58,11 @@ a frozen workspace install, and enables the repository pre-commit hook. It never
 installs or replaces development tools. After control source changes, rerun
 `go install ./cmd/oc-control`.
 
-By default `oc-control dev` owns
+By default the dev suite owns
 `<repo>/.tmp/oc-control/dev/dev/default`; the final two segments are the cell's
 channel and namespace. `--base-dir` may select another clean absolute path with
-the same suffix. The runner passes that final path unchanged, each sidecar
-derives its app directory, and the API stores SQLite at
+the same suffix. That final path travels unchanged into each member's launch
+envelope, each sidecar derives its app directory, and the API stores SQLite at
 `<base-dir>/api/database/open-cut.db`.
 
 The current executable acceptance paths are:
@@ -83,9 +83,15 @@ oc-control verify mac --arch arm64 --bundle dist/releases/0.1.0-beta.1/mac-arm64
 - `cold-start` builds real B0/L1 and fixture payload binaries, performs genesis
   confirmation, rotates the trust root, executes a broker-mediated v1→v2
   steady-state handoff, proves offline last-good boot, and proves pre-READY rollback.
-- `dev` builds and starts the generic Go runtime runner in headed mode. Electron,
-  web, and API are peer sidecars; Electron discovers the web endpoint through the
-  shared TCP broker and never owns the other processes. Its renderer always loads
+- `dev start` builds the workspace, then conducts the cell as a suite of
+  detached, argv-stamped member processes and exits once READY is confirmed:
+  one control member (an `oc-control` internal mode hosting the cell broker and
+  development signer) plus the Electron, web, and API peer sidecars. No process
+  supervises the suite; `dev status` reports recorded-versus-live truth
+  fail-closed, `dev stop` terminates only stamp-verified members, `dev restart`
+  advances the generation, and `dev logs` snapshots per-member per-generation
+  files. Electron discovers the web endpoint through the shared TCP broker and
+  never owns the other processes. Its renderer always loads
   `oc://app/`; an Electron protocol adapter proxies that stable origin to the current
   loopback Web lease. Web runs React through Vite in dev and serves the Vite
   production build through the same thin sidecar wrapper in a release. Its
@@ -113,11 +119,16 @@ isolated base directory. The path must end in the canonical `dev/default` cell
 suffix, and every companion command must use the same value:
 
 ```sh
-oc-control dev --base-dir .tmp/oc-control/ui-audit/dev/default
+oc-control dev start --base-dir .tmp/oc-control/ui-audit/dev/default
+oc-control dev status --base-dir .tmp/oc-control/ui-audit/dev/default
+oc-control dev logs --base-dir .tmp/oc-control/ui-audit/dev/default --app api
+oc-control dev restart --base-dir .tmp/oc-control/ui-audit/dev/default
+oc-control dev stop --base-dir .tmp/oc-control/ui-audit/dev/default
 ```
 
-From another terminal, inspect the live Electron renderer without discovering
-its transient CDP port by hand:
+`start` returns once READY is confirmed and leaves only the detached suite
+running; every command above is bounded. Inspect the live Electron renderer
+without discovering its transient CDP port by hand:
 
 ```sh
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
@@ -176,7 +187,7 @@ oc-control dev record --base-dir .tmp/oc-control/ui-audit/dev/default \
   --speech 'A clear local workflow keeps creative work moving.'
 ```
 
-Use `Ctrl-C` to end the owning `dev` command. `oc-control clean --scope quick`
+Use `oc-control dev stop` to end the suite. `oc-control clean --scope quick`
 removes stopped ad-hoc dev and harness data while preserving the expensive
 media-toolchain cache; it refuses directories belonging to a live cell.
 

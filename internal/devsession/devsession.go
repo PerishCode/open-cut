@@ -256,3 +256,15 @@ func ResolvePlan(repositoryRoot string, config workspace.Config, topology worksp
 	}
 	return plan, nil
 }
+
+// BuildWorkspace runs the workspace build exactly as a dev session does, so
+// non-resident dev tooling shares one build definition.
+func BuildWorkspace(ctx context.Context, repositoryRoot string, output io.Writer) error {
+	return buildWorkspace(ctx, repositoryRoot, output)
+}
+
+// ReserveLoopbackPort exposes the dev CDP port reservation to non-resident
+// dev tooling.
+func ReserveLoopbackPort() (int, error) {
+	return reserveLoopbackPort()
+}

@@ -1,0 +1,48 @@
+/**
+ * Shared scroll-edge affordance: sticky fades appear only while content lies
+ * beyond the top or bottom edge of a scrolling region. The fade color follows
+ * --scroll-fade-surface so hosts on different surfaces stay seamless.
+ */
+
+.scrollFade {
+  --scroll-fade-surface: var(--oc-surface-pane);
+
+  container-type: scroll-state;
+}
+
+.scrollFade::before,
+.scrollFade::after {
+  content: "";
+  display: block;
+  position: sticky;
+  height: 0;
+  pointer-events: none;
+}
+
+.scrollFade::before {
+  top: 0;
+}
+
+.scrollFade::after {
+  bottom: 0;
+}
+
+@container scroll-state(scrollable: block-start) {
+  .scrollFade::before {
+    height: 14px;
+    margin-bottom: -14px;
+    background: linear-gradient(var(--scroll-fade-surface), transparent);
+  }
+}
+
+@container scroll-state(scrollable: block-end) {
+  .scrollFade::after {
+    height: 14px;
+    margin-top: -14px;
+    background: linear-gradient(transparent, var(--scroll-fade-surface));
+  }
+}
+
+.scrollFadeRail {
+  --scroll-fade-surface: var(--oc-surface-rail);
+}

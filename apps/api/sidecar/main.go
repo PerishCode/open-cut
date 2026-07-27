@@ -49,6 +49,7 @@ func main() {
 }
 
 func run(args []string) error {
+	args = sidecarclient.StripCellStampArguments(args)
 	if len(args) > 0 && args[0] == "__media-executor" {
 		return service.RunMediaExecutor(args[1:], os.Stdin, os.Stdout)
 	}

@@ -149,7 +149,7 @@ func TestTimingCacheReportClassifiesExactFallbackMissAndNotNeeded(t *testing.T) 
 
 func TestDevRejectsUnexpectedArguments(t *testing.T) {
 	for _, arguments := range [][]string{
-		{"dev", "stop"},
+		{"dev", "stop", "unexpected"},
 		{"dev", "--repo", ".", "unexpected"},
 		{"dev", "inspect", "--eval", "1", "unexpected"},
 		{"dev", "record", "--output", "out.webm", "unexpected"},

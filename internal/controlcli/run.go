@@ -194,13 +194,16 @@ func newCleanCommand(stdout, stderr io.Writer) *cobra.Command {
 }
 
 func newDevCommand(stdout, stderr io.Writer) *cobra.Command {
-	command := &cobra.Command{Use: "dev", Short: "Run the development cell", Args: cobra.NoArgs}
-	repository := command.Flags().String("repo", ".", "open-cut repository root")
-	baseDir := command.Flags().String("base-dir", "", "development base directory; defaults below the repository")
-	command.RunE = func(cmd *cobra.Command, _ []string) error {
-		return asExit(runDev(cmd.Context(), *repository, *baseDir, stdout, stderr))
+	command := &cobra.Command{Use: "dev", Short: "Control the detached development suite", Args: cobra.NoArgs}
+	command.RunE = func(_ *cobra.Command, _ []string) error {
+		fmt.Fprintln(stderr, "the resident dev session is gone; use `oc-control dev start` and manage the suite with stop|status|restart|logs")
+		return asExit(1)
 	}
-	command.AddCommand(newDevInspectCommand(stdout, stderr), newDevRecordCommand(stdout, stderr))
+	command.AddCommand(
+		newDevStartCommand(stdout, stderr), newDevStopCommand(stdout, stderr), newDevStatusCommand(stdout, stderr),
+		newDevRestartCommand(stdout, stderr), newDevLogsCommand(stdout, stderr), newDevControlMemberCommand(stderr),
+		newDevInspectCommand(stdout, stderr), newDevRecordCommand(stdout, stderr),
+	)
 	return command
 }
 

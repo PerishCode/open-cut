@@ -1,7 +1,6 @@
 import {
   Button,
   ControlStrip,
-  FeedEntry,
   Heading,
   PanelDock,
   ResourceCard,
@@ -522,15 +521,13 @@ export function CreatorAgentPane({
       <Stack spacing="compact">
         {!state.selected ? <Text>Describe a new writing or editing task.</Text> : null}
         {latestOutcome ? (
-          <FeedEntry
-            details={outcomeDetails(latestOutcome)}
+          <ControlStrip
+            action={<Status state={receiptStatusState(latestOutcome)}>{receiptStatusLabel(latestOutcome)}</Status>}
             elementRef={latestOutcomeRef}
-            hint={receiptStatusLabel(latestOutcome)}
             label={`Latest Agent outcome ${latestOutcome.ordinal}`}
-            summary={`LATEST OUTCOME · #${latestOutcome.ordinal}`}
-          >
-            <Status state={receiptStatusState(latestOutcome)}>{outcomeTitle(latestOutcome)}</Status>
-          </FeedEntry>
+            summary={outcomeTitle(latestOutcome)}
+            summaryDetail={outcomeDetails(latestOutcome).join(" · ")}
+          />
         ) : null}
         {state.messages.length > 0 ? (
           <Heading level={3} tone="eyebrow">
@@ -549,31 +546,46 @@ export function CreatorAgentPane({
             {state.loading ? "Loading…" : "Load more conversation"}
           </Button>
         ) : null}
-        {recentRuns.length > 0 ? (
-          <ControlStrip
-            hint={`${recentRuns.length} other ${recentRuns.length === 1 ? "task" : "tasks"}`}
-            label="Recent Agent tasks"
-            summary="RECENT TASKS"
-          >
-            <Button
-              disabled={state.loading || state.submitting}
-              onPress={() => setRecentRunsExpanded((value) => !value)}
-            >
-              {recentRunsExpanded ? "Hide recent tasks" : `Show ${recentRuns.length} recent tasks`}
-            </Button>
-            {recentRunsExpanded
-              ? recentRuns.map((run) => (
-                  <Button
-                    disabled={state.loading || state.submitting}
-                    key={run.id}
-                    onPress={() => void selectRun(run.id)}
-                  >
-                    {runLabel(run)}
-                  </Button>
-                ))
-              : null}
+        {recentRuns.length > 0 || (state.selected && state.selectedTurn) ? (
+          <ControlStrip label="Task history">
+            {recentRuns.length > 0 ? (
+              <Button
+                disabled={state.loading || state.submitting}
+                label={recentRunsExpanded ? "Hide recent tasks" : `Show ${recentRuns.length} recent tasks`}
+                variant="quiet"
+                onPress={() => setRecentRunsExpanded((value) => !value)}
+              >
+                {recentRunsExpanded ? "Hide recent tasks" : `Recent tasks (${recentRuns.length})`}
+              </Button>
+            ) : null}
+            {state.selected && state.selectedTurn && state.receipts.length > 0 ? (
+              <Button
+                disabled={state.loading}
+                label={
+                  receiptsExpanded
+                    ? `Hide command receipts for Turn ${state.selectedTurn.generation}`
+                    : `Show ${state.receipts.length} ${
+                        state.receipts.length === 1 ? "receipt" : "receipts"
+                      } for Turn ${state.selectedTurn.generation}`
+                }
+                variant="quiet"
+                onPress={() => setReceiptsExpanded((value) => !value)}
+              >
+                {receiptsExpanded ? "Hide receipts" : `Receipts (${state.receipts.length})`}
+              </Button>
+            ) : null}
+            {state.selected && state.selectedTurn && state.receipts.length === 0 && active ? (
+              <Status state="pending">Waiting for the first command receipt.</Status>
+            ) : null}
           </ControlStrip>
         ) : null}
+        {recentRunsExpanded
+          ? recentRuns.map((run) => (
+              <Button disabled={state.loading || state.submitting} key={run.id} onPress={() => void selectRun(run.id)}>
+                {runLabel(run)}
+              </Button>
+            ))
+          : null}
         {state.selected && (state.turns.length > 1 || state.turnNextBefore) ? (
           <>
             <Heading level={3} tone="eyebrow">
@@ -607,23 +619,6 @@ export function CreatorAgentPane({
         ) : null}
         {state.selected && state.selectedTurn ? (
           <>
-            <ControlStrip
-              hint={`${state.receipts.length} recorded`}
-              label={`Command receipts for Turn ${state.selectedTurn.generation}`}
-              summary={`COMMAND RECEIPTS · TURN ${state.selectedTurn.generation}`}
-            >
-              {state.receipts.length === 0 ? (
-                <Status state={active ? "pending" : "ready"}>
-                  {active ? "Waiting for the first command receipt." : "No command receipts for this Turn."}
-                </Status>
-              ) : (
-                <Button disabled={state.loading} onPress={() => setReceiptsExpanded((value) => !value)}>
-                  {receiptsExpanded
-                    ? "Hide receipts"
-                    : `Show ${state.receipts.length} ${state.receipts.length === 1 ? "receipt" : "receipts"}`}
-                </Button>
-              )}
-            </ControlStrip>
             {receiptsExpanded
               ? state.receipts.map((receipt) => (
                   <ResourceCard

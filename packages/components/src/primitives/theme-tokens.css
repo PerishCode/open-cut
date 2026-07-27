@@ -19,6 +19,7 @@
   --oc-viewer-glow: none;
   --oc-timeline-ruler: rgb(235 238 240 / 6%);
   --oc-input-wash: var(--oc-surface-input);
+  --oc-ink-wash-faint: rgb(241 243 244 / 4%);
 
   /* Text roles. */
   --oc-ink: #f1f3f4;

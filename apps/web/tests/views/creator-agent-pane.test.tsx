@@ -305,7 +305,7 @@ describe("CreatorAgentPane", () => {
         />
       </ContractsProvider>,
     );
-    expect(await screen.findByText("COMMAND RECEIPTS · TURN 2")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Turn 1 · completed" })).toBeTruthy();
     expect(screen.getByText("Make the `ending` concise.").tagName).toBe("P");
     expect(screen.getByText("edit apply").tagName).toBe("CODE");
     expect(screen.getByText("@ Transcript segment")).toBeTruthy();
@@ -320,14 +320,14 @@ describe("CreatorAgentPane", () => {
     const outcome = await screen.findByText("Creative change committed");
     const latestResponse = screen.getByText(/Agent response · #\d+/).closest("article");
     expect(latestResponse).toBeTruthy();
-    expect(outcome.closest("article")?.compareDocumentPosition(latestResponse as Node)).toBe(
+    expect(outcome.closest("section")?.compareDocumentPosition(latestResponse as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(screen.getByText("Captions updated · Project r9")).toBeTruthy();
     expect(screen.queryByText("CONVERSATION · 0 MESSAGES")).toBeNull();
     expect(screen.queryByText("OUTCOME · #1")).toBeNull();
     expect(screen.queryByText(transactionId)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show 1 receipt" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show 1 receipt for Turn 1" }));
     expect(screen.getByText("OUTCOME · #1")).toBeTruthy();
     expect(screen.getByText("Activity #12")).toBeTruthy();
     expect(screen.queryByText(transactionId)).toBeNull();

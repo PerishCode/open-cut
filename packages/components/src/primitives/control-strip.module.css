@@ -75,8 +75,9 @@
 
 .summarySplit {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px;
+  gap: 1px 4px;
 }
 
 .summaryName,
@@ -92,7 +93,8 @@
 }
 
 .summaryDetail {
-  flex: 0 1000 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
   color: var(--oc-ink-dim);
   font-weight: 500;
 }

@@ -114,14 +114,21 @@ export function CreatorTimeline({
       selected: clip.id === selected?.id || clip.id === snapshot.selectionHint?.clipId || handoffClipIds.has(clip.id),
       linked: clip.linkGroupId !== undefined,
     })),
-    ...captions.map((caption) => ({
-      id: caption.id,
-      trackId: caption.trackId,
-      label: caption.text.length > 42 ? `${caption.text.slice(0, 41)}…` : caption.text,
-      startSeconds: seconds(caption.range.start),
-      durationSeconds: seconds(caption.range.duration),
-      selectable: false,
-    })),
+    ...captions.map((caption) => {
+      const trackOrdinal = captions.filter(
+        (peer) => peer.trackId === caption.trackId && seconds(caption.range.start) > seconds(peer.range.start),
+      ).length;
+      return {
+        id: caption.id,
+        trackId: caption.trackId,
+        label: `${String(trackOrdinal + 1).padStart(2, "0")} · ${
+          caption.text.length > 38 ? `${caption.text.slice(0, 37)}…` : caption.text
+        }`,
+        startSeconds: seconds(caption.range.start),
+        durationSeconds: seconds(caption.range.duration),
+        selectable: false,
+      };
+    }),
   ];
 
   const commitMove = useCallback(

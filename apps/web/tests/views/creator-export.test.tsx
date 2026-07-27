@@ -182,7 +182,7 @@ describe("CreatorExport", () => {
     const saveAsButton = await screen.findByRole("button", {
       name: "Save export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC as",
     });
-    expect(screen.getByText("Destination chosen after render · WebM · VP9 / Opus")).toBeTruthy();
+    expect(screen.getByText("Sequence r7 · Destination chosen after render · WebM · VP9 / Opus")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     fireEvent.click(saveAsButton);
     expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
