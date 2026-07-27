@@ -42,7 +42,7 @@ export function CreatorVersionCheckpoint({
       <ControlStrip
         hint="AUTO BEFORE AGENT TURNS · SOURCE MEDIA STAYS SHARED"
         label="Save named project version"
-        summary="MANUAL CHECKPOINT"
+        summary="Manual checkpoint"
       >
         <TextField
           density="compact"

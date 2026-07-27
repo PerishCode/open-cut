@@ -82,7 +82,7 @@ export function CreatorCaptions({
     !busy;
 
   if (!snapshot.source) {
-    return <Text tone="eyebrow">STORY CAPTION DRAFT · CHOOSE CAPTIONS IN STORY</Text>;
+    return <Text tone="eyebrow">Story caption draft · choose captions in Story</Text>;
   }
 
   return (

@@ -16,7 +16,9 @@ import { Fragment, type KeyboardEvent, useCallback, useEffect, useRef, useState 
 import { CommittedNarrativeParagraph, NarrativeParagraphStructureControls } from "./committed-narrative-paragraph.js";
 import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
 import {
+  asError,
   formatLanguageLabel,
+  isCreatorEditConflict,
   narrativeNodeID,
   narrativeNodeLabel,
   narrativeNodeText,
@@ -243,6 +245,7 @@ export function CreatorNarrativeWriter({
                   hint={`${String(index + 1).padStart(2, "0")} · ${narrativeNodeLabel(node)}`}
                   label={`Story node ${index + 1} actions`}
                   presentation="editorial"
+                  revealActions
                   summary={narrativeNodeText(node)}
                 >
                   <Button
@@ -438,7 +441,7 @@ function NarrativeParagraphEditor({
       await onReceipt(receipt);
     } catch (value) {
       const error = asError(value);
-      setDraft((current) => ({ ...current, phase: isConflict(error) ? "conflict" : "error", error }));
+      setDraft((current) => ({ ...current, phase: isCreatorEditConflict(error) ? "conflict" : "error", error }));
     } finally {
       inFlightRef.current = false;
       if (draftRef.current !== baseNodeRef.current.text) {
@@ -473,7 +476,7 @@ function NarrativeParagraphEditor({
         draftRef.current = attempt.visibleValue;
         setDraft({
           value: attempt.visibleValue,
-          phase: isConflict(error) ? "conflict" : "error",
+          phase: isCreatorEditConflict(error) ? "conflict" : "error",
           error,
         });
       } finally {
@@ -789,12 +792,4 @@ function useIdleCheckpoint(phase: DraftPhase, value: string, checkpoint: () => P
 
 function creatorEditRequestID(kind: string): string {
   return `ui:creator-edit-${kind}:${crypto.randomUUID()}`;
-}
-
-function isConflict(value: Error): boolean {
-  return value instanceof CreatorEditError && value.code === "conflict";
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
 }

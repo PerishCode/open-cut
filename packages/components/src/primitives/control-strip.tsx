@@ -28,6 +28,14 @@ export type ControlStripProps = Readonly<{
    * `editorial` elevates body text for Story/Narrative content rows.
    */
   presentation?: ControlStripPresentation;
+  /**
+   * Collapse the horizontal controls until the strip is hovered or holds
+   * focus — list density under load without losing the tools on the row you
+   * are working. `true` also keeps rows with a pressed choice expanded;
+   * `"hover"` collapses even those (for strips whose settled choice already
+   * reads from the meta line).
+   */
+  revealActions?: boolean | "hover";
   /** Optional local shortcuts when the strip itself owns keyboard focus. */
   keyboardShortcuts?: string;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
@@ -53,6 +61,7 @@ export function ControlStrip({
   summaryDetail,
   hint,
   presentation = "compact",
+  revealActions = false,
   keyboardShortcuts,
   onKeyDown,
   children,
@@ -63,6 +72,8 @@ export function ControlStrip({
   const classNames = [styles.controlStrip];
   if (editorialMode) classNames.push(editorial.editorial);
   if (action) classNames.push(editorial.withAction);
+  if (revealActions) classNames.push(editorial.revealActions);
+  if (revealActions === true) classNames.push(editorial.revealActionsSelected);
   const lead = (
     <>
       {summary || hint ? (
@@ -94,7 +105,13 @@ export function ControlStrip({
       ) : null}
       {children ? (
         <div
-          className={editorialMode ? `${styles.controlStripBody} ${editorial.editorialBody}` : styles.controlStripBody}
+          className={
+            editorialMode
+              ? `${styles.controlStripBody} ${editorial.editorialBody}`
+              : revealActions
+                ? `${styles.controlStripBody} ${editorial.revealBody}`
+                : styles.controlStripBody
+          }
         >
           {children}
         </div>

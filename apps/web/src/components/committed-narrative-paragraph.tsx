@@ -31,6 +31,7 @@ export function CommittedNarrativeParagraph({
       )} · r${node.revision} · COMMITTED`}
       label={`Narrative paragraph ${ordinal}`}
       presentation="editorial"
+      revealActions
       summary={value}
     >
       <Button label={`Edit Narrative paragraph ${ordinal}`} variant="quiet" onPress={onEdit}>

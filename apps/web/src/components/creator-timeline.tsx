@@ -175,7 +175,6 @@ export function CreatorTimeline({
 
   const accessory = policyVisible ? (
     <ControlStrip
-      hint={readinessHint}
       label="Timeline selection policy"
       summary={
         selected ? (
@@ -190,6 +189,7 @@ export function CreatorTimeline({
         )
       }
     >
+      <Text tone="eyebrow">Scope</Text>
       {selected?.linkGroupId ? (
         <>
           <Button disabled={busy || awaitingProjection} onPress={() => controller.chooseScope("linked")}>
@@ -200,8 +200,9 @@ export function CreatorTimeline({
           </Button>
         </>
       ) : selected ? (
-        <Text>Scope · selected Clip only</Text>
+        <Text>selected Clip only</Text>
       ) : null}
+      <Text tone="eyebrow">Alignment</Text>
       <Button
         disabled={busy || awaitingProjection || !selected}
         onPress={() => controller.chooseAlignmentHandling("preserve-if-provable")}
@@ -222,6 +223,7 @@ export function CreatorTimeline({
       </Button>
       {selected ? (
         <>
+          <Text tone="eyebrow">Gesture</Text>
           <Button disabled={!ready} onPress={() => void run(() => controller.moveToPlayhead())}>
             Move here
           </Button>
@@ -243,6 +245,7 @@ export function CreatorTimeline({
           <Button onPress={() => onContextClip(selected)}>Add @ context</Button>
         </>
       ) : null}
+      {readinessHint ? <Text>{readinessHint}</Text> : null}
     </ControlStrip>
   ) : undefined;
 

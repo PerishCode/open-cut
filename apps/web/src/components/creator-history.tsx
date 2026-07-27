@@ -73,7 +73,7 @@ export function CreatorHistory({
   return (
     <Stack spacing="compact">
       <Heading level={3} tone="eyebrow">
-        TRANSACTION LOG · TECHNICAL DETAIL
+        Transaction log · technical detail
       </Heading>
       {state.status === "loading" ? <Text>Loading recent creative transactions…</Text> : null}
       {state.status === "unavailable" ? (

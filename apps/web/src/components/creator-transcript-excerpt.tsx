@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { NarrativeInsertionAnchor } from "./creator-narrative-anchor.js";
-import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
+import { asError, formatClock, formatClockEnd, isCreatorEditConflict } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
 type InsertPhase = "idle" | "saving" | "error" | "conflict";
@@ -155,7 +155,7 @@ export function CreatorTranscriptExcerpt({
         }
       } catch (value) {
         const insertError = asError(value);
-        setPhase(isConflict(insertError) ? "conflict" : "error");
+        setPhase(isCreatorEditConflict(insertError) ? "conflict" : "error");
       } finally {
         inFlightRef.current = false;
       }
@@ -312,10 +312,6 @@ function sourceExcerptOperation(
   };
 }
 
-function isConflict(value: Error): boolean {
-  return value instanceof CreatorEditError && value.code === "conflict";
-}
-
 function evidenceFailureMessage(error: Error): string {
   if (error.message.includes("cuts through a TranscriptCorrection")) {
     return "Include the entire corrected phrase or select outside it.";
@@ -327,8 +323,4 @@ function evidenceFailureMessage(error: Error): string {
     return "This transcript selection is too large. Choose a shorter range.";
   }
   return "This transcript range cannot be used. Choose another range.";
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
 }

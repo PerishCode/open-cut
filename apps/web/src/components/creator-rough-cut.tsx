@@ -168,11 +168,12 @@ export function CreatorRoughCutPanel({
   return (
     <Stack spacing="compact">
       <ControlStrip
-        hint={`START ${formatClock(timelineStart)} · ${occurrences.length} ${
-          occurrences.length === 1 ? "EXCERPT" : "EXCERPTS"
+        hint={`start ${formatClock(timelineStart)} · ${occurrences.length} ${
+          occurrences.length === 1 ? "excerpt" : "excerpts"
         }`}
         label="Rough cut queue start"
-        summary="ROUGH CUT · EXCERPT QUEUE"
+        revealActions="hover"
+        summary="Rough cut · excerpt queue"
       >
         <Button
           disabled={phase === "applying" || phase === "previewing"}
@@ -182,33 +183,33 @@ export function CreatorRoughCutPanel({
         </Button>
       </ControlStrip>
       {occurrences.map((occurrence, index) => (
-        <Stack key={occurrence.key} spacing="compact">
-          <ControlStrip
-            hint={occurrence.sourceExcerpt.effectiveText}
-            label={`Rough cut excerpt ${index + 1}`}
-            summary={`${String(index + 1).padStart(2, "0")} · ${occurrence.assetLabel}`}
+        <ControlStrip
+          hint={occurrence.assetLabel}
+          key={occurrence.key}
+          label={`Rough cut excerpt ${index + 1}`}
+          revealActions="hover"
+          summary={`${String(index + 1).padStart(2, "0")} · ${occurrence.sourceExcerpt.effectiveText}`}
+        >
+          <Button
+            disabled={index === 0}
+            label={`Move rough cut excerpt ${index + 1} up`}
+            onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}
           >
-            <Button
-              disabled={index === 0}
-              label={`Move rough cut excerpt ${index + 1} up`}
-              onPress={() => onChange(moveOccurrence(occurrences, index, index - 1))}
-            >
-              Up
-            </Button>
-            <Button
-              disabled={index === occurrences.length - 1}
-              label={`Move rough cut excerpt ${index + 1} down`}
-              onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
-            >
-              Down
-            </Button>
-            <Button
-              label={`Remove rough cut excerpt ${index + 1}`}
-              onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}
-            >
-              Remove
-            </Button>
-          </ControlStrip>
+            Up
+          </Button>
+          <Button
+            disabled={index === occurrences.length - 1}
+            label={`Move rough cut excerpt ${index + 1} down`}
+            onPress={() => onChange(moveOccurrence(occurrences, index, index + 1))}
+          >
+            Down
+          </Button>
+          <Button
+            label={`Remove rough cut excerpt ${index + 1}`}
+            onPress={() => onChange(occurrences.filter((candidate) => candidate.key !== occurrence.key))}
+          >
+            Remove
+          </Button>
           <LaneChoices
             candidates={currentLaneCandidates("video", occurrence, assets, tracks)}
             kind="video"
@@ -223,13 +224,13 @@ export function CreatorRoughCutPanel({
             ordinal={index + 1}
             selection={occurrence.audio}
           />
-        </Stack>
+        </ControlStrip>
       ))}
       {blocker ? <Status state="unavailable">{blocker}</Status> : null}
       <ControlStrip
-        hint={occurrences.length === 0 ? "ADD EXCERPTS FROM STORY TO BEGIN" : "CHECK LANES BEFORE TIMELINE"}
+        hint={occurrences.length === 0 ? "add excerpts from Story to begin" : "check lanes before Timeline"}
         label="Rough cut review"
-        summary={occurrences.length === 0 ? "REVIEW · QUEUE EMPTY" : `REVIEW · ${occurrences.length} READY`}
+        summary={occurrences.length === 0 ? "Review · queue empty" : `Review · ${occurrences.length} ready`}
       >
         <Button
           disabled={Boolean(blocker) || occurrences.length === 0 || phase === "previewing" || phase === "applying"}
@@ -288,7 +289,7 @@ function LaneChoices({
 }>) {
   return (
     <ControlStrip
-      hint={`${candidates.length} ${candidates.length === 1 ? "ROUTE" : "ROUTES"}`}
+      hint={`${candidates.length} ${candidates.length === 1 ? "route" : "routes"}`}
       label={`Rough cut excerpt ${ordinal} ${kind} lane`}
       summary={`${kind.toUpperCase()} · ${laneSelectionLabel(selection)}`}
     >

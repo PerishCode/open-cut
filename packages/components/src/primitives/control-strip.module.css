@@ -102,3 +102,21 @@
 .summaryDetail::before {
   content: "· ";
 }
+
+/* Collapsed controls reappear for the row under the pointer, holding focus,
+   or carrying a pressed choice. Zero-height rather than display:none keeps
+   the buttons focusable, so tabbing into a collapsed row expands it. Placed
+   after every body base rule so the width-tier cascade lesson holds. */
+.revealActions :is(.editorialBody, .revealBody) {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+}
+
+.revealActions:hover :is(.editorialBody, .revealBody),
+.revealActions:focus-within :is(.editorialBody, .revealBody),
+.revealActionsSelected:has([aria-pressed="true"]) :is(.editorialBody, .revealBody) {
+  overflow: visible;
+  max-height: none;
+  opacity: 1;
+}

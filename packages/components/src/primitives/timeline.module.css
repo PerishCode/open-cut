@@ -450,3 +450,11 @@
   border-top: 1px solid var(--oc-hairline-strong);
   background: color-mix(in srgb, var(--oc-surface) 94%, var(--oc-accent) 6%);
 }
+
+/* The tightest caption chips spend every glyph on the spoken lead: the
+   opening quote yields once even one more letter helps discrimination. */
+@container (max-width: 48px) {
+  .timelineItemLabelQuote {
+    display: none;
+  }
+}

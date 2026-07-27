@@ -642,10 +642,14 @@ const timelineLabelOrdinal = /^(\d+ · )(.+)$/;
 function renderTimelineItemLabel(label: string) {
   const ordinal = timelineLabelOrdinal.exec(label);
   if (ordinal) {
+    const prefix = ordinal[1] ?? "";
+    const spoken = ordinal[2] ?? "";
+    const quoted = spoken.startsWith("“");
     return (
       <span className={styles.timelineItemLabel}>
-        <span className={styles.timelineItemLabelOrdinal}>{ordinal[1]}</span>
-        {ordinal[2]}
+        <span className={styles.timelineItemLabelOrdinal}>{prefix}</span>
+        {quoted ? <span className={styles.timelineItemLabelQuote}>{"“"}</span> : null}
+        {quoted ? spoken.slice(1) : spoken}
       </span>
     );
   }
@@ -653,8 +657,8 @@ function renderTimelineItemLabel(label: string) {
   if (!match) return <span className={styles.timelineItemLabel}>{label}</span>;
   return (
     <span className={styles.timelineItemLabel}>
-      {match[1]}
-      <span className={styles.timelineItemLabelExtension}>{match[2]}</span>
+      {match[1] ?? label}
+      <span className={styles.timelineItemLabelExtension}>{match[2] ?? ""}</span>
     </span>
   );
 }

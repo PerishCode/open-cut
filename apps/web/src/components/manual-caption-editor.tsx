@@ -111,7 +111,7 @@ export function ManualCaptionEditor({
       <ControlStrip
         hint={`${snapshot.captions.length} in first 60 seconds`}
         label="Caption editor actions"
-        summary="COMMITTED CUES"
+        summary="Committed cues"
       >
         <Button disabled={busy} label="New manual Caption" onPress={() => controller.beginCreate()}>
           New caption
@@ -121,10 +121,12 @@ export function ManualCaptionEditor({
         const identity = `Caption ${index + 1} at ${formatClock(caption.range.start)} → ${formatClockEnd(caption.range)}`;
         return (
           <ControlStrip
-            hint={caption.text}
+            hint={`${formatClock(caption.range.start)} → ${formatClockEnd(caption.range)} · r${caption.revision} · ${captionProvenanceLabel(caption)}`}
             key={caption.id}
             label={`${identity} actions`}
-            summary={`${formatClock(caption.range.start)} → ${formatClockEnd(caption.range)} · r${caption.revision} · ${captionProvenanceLabel(caption)}`}
+            presentation="editorial"
+            revealActions
+            summary={caption.text}
           >
             <Button disabled={busy} label={`Edit ${identity}`} onPress={() => controller.selectCaption(caption.id)}>
               Edit
