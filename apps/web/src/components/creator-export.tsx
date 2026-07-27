@@ -176,7 +176,7 @@ export function CreatorExport({ projectId, projectName, available, refreshEpoch,
         <EmptyState hint="Completed exports and retained job history will appear here." title="No exports yet" />
       ) : null}
       {history && history.lineages.length > 0 ? (
-        <ResourceCard emphasis="quiet" eyebrow={`${history.lineages.length} LOADED`} title="Recent exports">
+        <ResourceCard emphasis="quiet" title="Recent exports">
           {history.lineages.map((lineage, index) => {
             const rootID = lineage.export.job.rootJobId;
             const filename = exportFilename(projectName, lineage.export.sequenceRevision);
