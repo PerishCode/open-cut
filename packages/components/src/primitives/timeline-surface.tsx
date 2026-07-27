@@ -367,7 +367,14 @@ export function TimelineSurface({
                       const gesturesActive = selected && itemGesturesEnabled && item.selectable !== false;
                       const durableLeft = percent(item.startSeconds - startSeconds, safeDuration);
                       const durableWidth = Math.max(0.8, percent(item.durationSeconds, safeDuration));
-                      const draggingThis = gesture?.id === item.id && visibleGhost !== undefined;
+                      const gestureSource = gesture
+                        ? items.find((candidate) => candidate.id === gesture.id)
+                        : undefined;
+                      const draggingThis =
+                        visibleGhost !== undefined &&
+                        gesture !== undefined &&
+                        (gesture.id === item.id ||
+                          (item.ghostGroup !== undefined && item.ghostGroup === gestureSource?.ghostGroup));
                       const actionIdentity = `${item.label} on ${track.label} at ${formatClock(item.startSeconds)}`;
                       const itemTitle = `${item.label} · ${formatClock(item.startSeconds)} · ${formatClock(
                         item.durationSeconds,
