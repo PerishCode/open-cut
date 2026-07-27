@@ -10,6 +10,7 @@ import (
 
 	"github.com/PerishCode/open-cut/internal/devsession"
 	"github.com/PerishCode/open-cut/internal/devsuite"
+	"github.com/PerishCode/open-cut/internal/workspace"
 )
 
 func devSuiteTarget(repository, baseDir string) (string, string, error) {
@@ -120,6 +121,12 @@ func newDevRestartCommand(stdout, stderr io.Writer) *cobra.Command {
 		}
 		if err := requireRecordedSuite(selectedBaseDir); err != nil {
 			return asExit(fail(stderr, err))
+		}
+		// Validate the repository before stopping anything: a restart whose
+		// --repo resolution is wrong must fail before it can leave the suite
+		// half-stopped with no generation to start.
+		if _, err := workspace.Load(repositoryRoot); err != nil {
+			return asExit(fail(stderr, fmt.Errorf("%w; check --repo resolution before restarting", err)))
 		}
 		if _, err := devsuite.Stop(selectedBaseDir); err != nil && !errors.Is(err, devsuite.ErrNoRoster) {
 			return asExit(fail(stderr, err))
