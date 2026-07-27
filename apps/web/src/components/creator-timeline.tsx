@@ -118,12 +118,13 @@ export function CreatorTimeline({
       const trackOrdinal = captions.filter(
         (peer) => peer.trackId === caption.trackId && seconds(caption.range.start) > seconds(peer.range.start),
       ).length;
+      const spoken = caption.text.replace(/\s+/g, " ").trim();
       return {
         id: caption.id,
         trackId: caption.trackId,
-        label: `${String(trackOrdinal + 1).padStart(2, "0")} · ${
-          caption.text.length > 38 ? `${caption.text.slice(0, 37)}…` : caption.text
-        }`,
+        label: `${String(trackOrdinal + 1).padStart(2, "0")} · “${
+          spoken.length > 36 ? `${spoken.slice(0, 35)}…` : spoken
+        }”`,
         startSeconds: seconds(caption.range.start),
         durationSeconds: seconds(caption.range.duration),
         selectable: false,

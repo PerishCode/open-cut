@@ -74,6 +74,7 @@ export function AssetSummary({
       }
       hint={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
       label={`${asset.displayName} actions`}
+      presentation="editorial"
       summary={asset.displayName}
     >
       <Status state={readinessState}>{readiness}</Status>

@@ -40,8 +40,8 @@ func (err EditInvalidError) Error() string {
 
 func (err EditInvalidError) Unwrap() error { return ErrEditInvalid }
 
-// editInvalidf builds an EditInvalidError with a bounded formatted reason.
-func editInvalidf(format string, args ...any) error {
+// EditInvalidf builds an EditInvalidError with a bounded formatted reason.
+func EditInvalidf(format string, args ...any) error {
 	return EditInvalidError{Reason: BoundedDiagnosticDetail(fmt.Sprintf(format, args...))}
 }
 

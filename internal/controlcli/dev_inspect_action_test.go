@@ -20,13 +20,49 @@ func TestParseDevRendererActionFailsClosed(t *testing.T) {
 		{kind: "click", role: "not a role", name: "Streams"},
 		{kind: "click", role: "tab", name: "Streams\nNow"},
 	} {
-		action, err := parseDevRendererAction(test.kind, test.role, test.name)
+		action, err := parseDevRendererAction(test.kind, test.role, test.name, -1)
 		if test.valid && err != nil {
 			t.Fatalf("kind=%q role=%q name=%q err=%v", test.kind, test.role, test.name, err)
 		}
 		if !test.valid && err == nil {
 			t.Fatalf("kind=%q role=%q name=%q action=%+v", test.kind, test.role, test.name, action)
 		}
+	}
+}
+
+func TestParseDevViewportBounds(t *testing.T) {
+	if width, height, err := parseDevViewport("1440x900"); err != nil || width != 1440 || height != 900 {
+		t.Fatalf("width=%d height=%d err=%v", width, height, err)
+	}
+	for _, invalid := range []string{"", "1440", "1440x", "x900", "100x900", "1440x20000", "wxh"} {
+		if _, _, err := parseDevViewport(invalid); err == nil {
+			t.Fatalf("viewport %q parsed", invalid)
+		}
+	}
+}
+
+func TestPerformDevRendererClickSelectsExplicitNthMatch(t *testing.T) {
+	cdp := &fakeActionCDP{
+		nodes: []any{
+			actionAXNode(41, "button", "Remove", false),
+			actionAXNode(42, "button", "Remove", false),
+		},
+		quads: [][]float64{{10, 20, 110, 20, 110, 60, 10, 60}},
+	}
+	receipt, err := performDevRendererAction(context.Background(), cdp, devRendererAction{
+		Kind: "click", Role: "button", Name: "Remove", Nth: 1, NthSet: true,
+	})
+	if err != nil || receipt.Matches != 2 {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	scrolled := cdp.calls[2].parameters
+	if scrolled["backendNodeId"] != int64(42) {
+		t.Fatalf("scrolled=%v", scrolled)
+	}
+	if _, err := performDevRendererAction(context.Background(), cdp, devRendererAction{
+		Kind: "click", Role: "button", Name: "Remove", Nth: 2, NthSet: true,
+	}); err == nil || !strings.Contains(err.Error(), "out of range") {
+		t.Fatalf("out-of-range err=%v", err)
 	}
 }
 
@@ -82,7 +118,7 @@ func TestPerformDevRendererClickRejectsAmbiguousAndDisabledTargets(t *testing.T)
 	_, err := performDevRendererAction(context.Background(), ambiguous, devRendererAction{
 		Kind: "click", Role: "button", Name: "Clear",
 	})
-	if err == nil || !strings.Contains(err.Error(), "ambiguous") || len(ambiguous.calls) != 2 {
+	if err == nil || !strings.Contains(err.Error(), "select one with --nth") || len(ambiguous.calls) != 2 {
 		t.Fatalf("calls=%v err=%v", ambiguous.methods(), err)
 	}
 

@@ -352,7 +352,7 @@ export function TimelineSurface({
                       )}`;
                       const itemContents = (
                         <>
-                          <span className={styles.timelineItemLabel}>{item.label}</span>
+                          {renderTimelineItemLabel(item.label)}
                           {item.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
                         </>
                       );
@@ -511,7 +511,7 @@ export function TimelineSurface({
                         width: `${Math.max(0.8, percent(visibleGhost.durationSeconds, safeDuration))}%`,
                       }}
                     >
-                      <span className={styles.timelineItemLabel}>{visibleGhost.label}</span>
+                      {renderTimelineItemLabel(visibleGhost.label)}
                       {visibleGhost.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
                     </div>
                   ) : null}
@@ -631,6 +631,32 @@ function formatClock(seconds: number): string {
 function formatRuler(seconds: number): string {
   if (seconds >= 60) return `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
   return `${Math.round(seconds)}s`;
+}
+
+const timelineLabelExtension = /^(.+)(\.[0-9a-z]{2,5})$/i;
+const timelineLabelOrdinal = /^(\d+ · )(.+)$/;
+
+/* Narrow clips keep the most recognizable part of the identity: the file
+   extension and a leading ordinal prefix yield at the same width tier where
+   the LINK badge already does. */
+function renderTimelineItemLabel(label: string) {
+  const ordinal = timelineLabelOrdinal.exec(label);
+  if (ordinal) {
+    return (
+      <span className={styles.timelineItemLabel}>
+        <span className={styles.timelineItemLabelOrdinal}>{ordinal[1]}</span>
+        {ordinal[2]}
+      </span>
+    );
+  }
+  const match = timelineLabelExtension.exec(label);
+  if (!match) return <span className={styles.timelineItemLabel}>{label}</span>;
+  return (
+    <span className={styles.timelineItemLabel}>
+      {match[1]}
+      <span className={styles.timelineItemLabelExtension}>{match[2]}</span>
+    </span>
+  );
 }
 
 function toneClass(kind: TimelineSurfaceTrack["kind"]): string {

@@ -586,7 +586,7 @@
 
 .fieldTextArea {
   width: 100%;
-  min-height: 96px;
+  min-height: 76px;
   padding: 13px 14px;
   resize: vertical;
   border: 1px solid var(--oc-hairline-input);

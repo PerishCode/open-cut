@@ -50,9 +50,15 @@ func (repository *SQLiteProjects) ReadCaptionDerivationPreview(
 	}
 	track := state.Tracks[query.Input.TrackID.String()]
 	clip := state.Clips[query.Input.ClipID.String()]
-	if track.SequenceID != query.SequenceID || track.Type != domain.TrackCaption ||
-		clip.SequenceID != query.SequenceID {
-		return application.CaptionDerivationPreview{}, application.ErrEditInvalid
+	if track.Type != domain.TrackCaption {
+		return application.CaptionDerivationPreview{}, application.EditInvalidf(
+			"caption target track is a %s track, not a caption track", track.Type,
+		)
+	}
+	if track.SequenceID != query.SequenceID || clip.SequenceID != query.SequenceID {
+		return application.CaptionDerivationPreview{}, application.EditInvalidf(
+			"caption target clip and track must belong to the addressed sequence",
+		)
 	}
 	policy := domain.ReadableCaptionPolicyV1()
 	cues, err := application.DeriveCaptionCues(
@@ -70,7 +76,11 @@ func (repository *SQLiteProjects) ReadCaptionDerivationPreview(
 			return application.CaptionDerivationPreview{}, err
 		}
 		if len(state.Captions) != 0 {
-			return application.CaptionDerivationPreview{}, application.ErrEditInvalid
+			return application.CaptionDerivationPreview{}, application.EditInvalidf(
+				"derived cue %d overlaps a committed caption on the target track; "+
+					"captions are insert-only — choose a clip range without captions or remove the existing caption",
+				index+1,
+			)
 		}
 		captionLocal, _ := domain.ParseLocalID(fmt.Sprintf("%s_caption_%03d", query.Input.LocalPrefix, index+1))
 		alignmentLocal, _ := domain.ParseLocalID(fmt.Sprintf("%s_alignment_%03d", query.Input.LocalPrefix, index+1))
