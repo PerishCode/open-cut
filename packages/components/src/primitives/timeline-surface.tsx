@@ -27,6 +27,8 @@ export type TimelineSurfaceItem = Readonly<{
   selected?: boolean;
   linked?: boolean;
   selectable?: boolean;
+  /** Items sharing a group ghost together during a linked-scope gesture. */
+  ghostGroup?: string;
 }>;
 
 export type TimelineSurfaceProps = Readonly<{
@@ -228,6 +230,26 @@ export function TimelineSurface({
   };
 
   const visibleGhost = gesture ? visibleGhostGeometry(gesture, items) : undefined;
+  const ghostFigures = (() => {
+    if (!gesture || !visibleGhost) return [];
+    const figures = [visibleGhost];
+    const source = items.find((item) => item.id === gesture.id);
+    if (source?.ghostGroup) {
+      const startDelta = visibleGhost.startSeconds - source.startSeconds;
+      const durationDelta = visibleGhost.durationSeconds - source.durationSeconds;
+      for (const companion of items) {
+        if (companion.id === source.id || companion.ghostGroup !== source.ghostGroup) continue;
+        figures.push({
+          trackId: companion.trackId,
+          label: companion.label,
+          linked: Boolean(companion.linked),
+          startSeconds: companion.startSeconds + startDelta,
+          durationSeconds: Math.max(minimumGestureDurationSeconds, companion.durationSeconds + durationDelta),
+        });
+      }
+    }
+    return figures;
+  })();
   const onToolbarKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (
       event.target !== event.currentTarget ||
@@ -502,19 +524,22 @@ export function TimelineSurface({
                         </div>
                       );
                     })}
-                  {visibleGhost && visibleGhost.trackId === track.id ? (
-                    <div
-                      aria-hidden="true"
-                      className={`${styles.timelineItemGhost} ${toneClass(track.kind)}`}
-                      style={{
-                        left: `${percent(visibleGhost.startSeconds - startSeconds, safeDuration)}%`,
-                        width: `${Math.max(0.8, percent(visibleGhost.durationSeconds, safeDuration))}%`,
-                      }}
-                    >
-                      {renderTimelineItemLabel(visibleGhost.label)}
-                      {visibleGhost.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
-                    </div>
-                  ) : null}
+                  {ghostFigures
+                    .filter((figure) => figure.trackId === track.id)
+                    .map((figure, figureIndex) => (
+                      <div
+                        aria-hidden="true"
+                        className={`${styles.timelineItemGhost} ${toneClass(track.kind)}`}
+                        key={`${figure.trackId}-${figureIndex}`}
+                        style={{
+                          left: `${percent(figure.startSeconds - startSeconds, safeDuration)}%`,
+                          width: `${Math.max(0.8, percent(figure.durationSeconds, safeDuration))}%`,
+                        }}
+                      >
+                        {renderTimelineItemLabel(figure.label)}
+                        {figure.linked ? <span className={styles.timelineItemBadge}>LINK</span> : null}
+                      </div>
+                    ))}
                   <span className={styles.timelinePlayhead} style={{ left: `${playheadPercent}%` }} />
                 </div>
               </div>
