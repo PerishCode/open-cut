@@ -34,6 +34,45 @@ func TestInspectDevInputFileRequiresNonEmptyRegularBytes(t *testing.T) {
 	}
 }
 
+func TestInspectDevEvaluationFileIsBoundedAndRepositoryScoped(t *testing.T) {
+	root := t.TempDir()
+	resources := filepath.Join(root, ".task", "resources")
+	if err := os.MkdirAll(resources, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	valid := filepath.Join(resources, "matrix.js")
+	source := "(async () => ({ count: 18 }))()"
+	if err := os.WriteFile(valid, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, actual, size, err := inspectDevEvaluationFile(root, filepath.Join(".task", "resources", "matrix.js"))
+	if err != nil || path != valid || actual != source || size != int64(len(source)) {
+		t.Fatalf("path=%q source=%q size=%d err=%v", path, actual, size, err)
+	}
+
+	empty := filepath.Join(resources, "empty.js")
+	if err := os.WriteFile(empty, []byte(" \n\t"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := inspectDevEvaluationFile(root, empty); err == nil || !strings.Contains(err.Error(), "whitespace") {
+		t.Fatalf("empty evaluation error = %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.js")
+	if err := os.WriteFile(outside, []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := inspectDevEvaluationFile(root, outside); err == nil || !strings.Contains(err.Error(), "within repository") {
+		t.Fatalf("outside evaluation error = %v", err)
+	}
+	large := filepath.Join(resources, "large.js")
+	if err := os.WriteFile(large, bytes.Repeat([]byte("x"), maximumDevEvaluationFileBytes+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := inspectDevEvaluationFile(root, large); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("large evaluation error = %v", err)
+	}
+}
+
 func TestDevInspectRequiresAnExplicitObservation(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := runDevInspect(context.Background(), devInspectOptions{}, &stdout, &stderr); code != 2 {
@@ -41,6 +80,13 @@ func TestDevInspectRequiresAnExplicitObservation(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "--snapshot") {
 		t.Fatalf("stderr=%q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runDevInspect(context.Background(), devInspectOptions{
+		evaluate: "1", evaluateFile: "matrix.js",
+	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "mutually exclusive") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()

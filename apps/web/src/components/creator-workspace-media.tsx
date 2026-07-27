@@ -1,4 +1,4 @@
-import { Button, ControlStrip, EmptyState, FeedEntry, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlStrip, EmptyState, FeedEntry, Heading, Stack, Status, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -67,14 +67,16 @@ export function AssetSummary({
   );
   return (
     <ControlStrip
+      action={
+        <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
+          {selected ? "In Viewer" : "Open source"}
+        </Button>
+      }
       hint={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
       label={`${asset.displayName} actions`}
       summary={asset.displayName}
     >
       <Status state={readinessState}>{readiness}</Status>
-      <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
-        {selected ? "In Viewer" : "Open source"}
-      </Button>
       <Button variant="quiet" onPress={onContext}>
         @ Agent
       </Button>
@@ -162,7 +164,11 @@ export function TranscriptSurface({
       {state.selectionError ? (
         <Status state="unavailable">Could not change the default transcript. Try again.</Status>
       ) : null}
-      {state.corrections.length > 0 ? <Text tone="eyebrow">CREATOR CORRECTIONS</Text> : null}
+      {state.corrections.length > 0 ? (
+        <Heading level={3} tone="eyebrow">
+          CREATOR CORRECTIONS
+        </Heading>
+      ) : null}
       {state.corrections.map((correction) => (
         <FeedEntry
           emphasis="quiet"

@@ -1,10 +1,50 @@
 // @vitest-environment jsdom
 
-import { ContractsProvider, durableID, revisionString } from "@open-cut/contracts";
+import { ContractsProvider, type DurableID, durableID, type RevisionString, revisionString } from "@open-cut/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreatorExport } from "../../src/components/creator-export.js";
+import { CreatorExportNext } from "../../src/components/creator-export-next.js";
+
+function ExportHarness({
+  hasContent = true,
+  projectId,
+  projectName,
+  sequenceId,
+  sequenceRevision,
+}: Readonly<{
+  hasContent?: boolean;
+  projectId: DurableID;
+  projectName: string;
+  sequenceId: DurableID;
+  sequenceRevision: RevisionString;
+}>) {
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
+  const [active, setActive] = useState(false);
+  return (
+    <>
+      <CreatorExportNext
+        activeExport={active}
+        available
+        hasContent={hasContent}
+        onStarted={() => setRefreshEpoch((current) => current + 1)}
+        projectId={projectId}
+        projectName={projectName}
+        sequenceId={sequenceId}
+        sequenceRevision={sequenceRevision}
+      />
+      <CreatorExport
+        available
+        onActiveChange={setActive}
+        projectId={projectId}
+        projectName={projectName}
+        refreshEpoch={refreshEpoch}
+      />
+    </>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -131,9 +171,7 @@ describe("CreatorExport", () => {
 
     const view = render(
       <ContractsProvider>
-        <CreatorExport
-          available
-          hasContent
+        <ExportHarness
           projectId={projectId}
           projectName="History story"
           sequenceId={sequenceId}
@@ -144,7 +182,7 @@ describe("CreatorExport", () => {
     const saveAsButton = await screen.findByRole("button", {
       name: "Save export History-story-r7.webm, history item 1, from 2026-07-16 00:00 UTC as",
     });
-    expect(screen.getByText("DESTINATION AFTER RENDER · WEBM · VP9 / OPUS")).toBeTruthy();
+    expect(screen.getByText("Destination chosen after render · WebM · VP9 / Opus")).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBe(2);
     fireEvent.click(saveAsButton);
     expect(await screen.findByText(/Saved History-story-r7\.webm/)).toBeTruthy();
@@ -194,9 +232,7 @@ describe("CreatorExport", () => {
 
     render(
       <ContractsProvider>
-        <CreatorExport
-          available
-          hasContent
+        <ExportHarness
           projectId={projectId}
           projectName="Running story"
           sequenceId={sequenceId}
@@ -206,7 +242,8 @@ describe("CreatorExport", () => {
     );
 
     expect(await screen.findByText("Rendering")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Export in progress" }) as HTMLButtonElement).disabled).toBe(true);
+    const inProgress = await screen.findByRole("button", { name: "Export in progress" });
+    expect((inProgress as HTMLButtonElement).disabled).toBe(true);
     expect(
       screen.getByRole("button", {
         name: "Cancel export Running-story-r8.webm, history item 1, from 2026-07-16 00:00 UTC",
@@ -235,8 +272,7 @@ describe("CreatorExport", () => {
 
     render(
       <ContractsProvider>
-        <CreatorExport
-          available
+        <ExportHarness
           hasContent={false}
           projectId={projectId}
           projectName="Empty story"
@@ -255,9 +291,7 @@ describe("CreatorExport", () => {
 function renderExport(projectId: string, sequenceId: string, projectName: string, revision: string) {
   return render(
     <ContractsProvider>
-      <CreatorExport
-        available
-        hasContent
+      <ExportHarness
         projectId={durableID(projectId)}
         projectName={projectName}
         sequenceId={durableID(sequenceId)}

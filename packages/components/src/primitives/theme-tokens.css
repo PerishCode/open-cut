@@ -12,6 +12,7 @@
   /* Compatibility names consumed by existing atoms. */
   --oc-surface: var(--oc-surface-pane);
   --oc-surface-header: var(--oc-surface-chrome);
+  --oc-surface-rail: var(--oc-surface-chrome);
   --oc-surface-timeline: var(--oc-surface-media);
   --oc-surface-panel: var(--oc-surface-raised);
   --oc-viewer-well: var(--oc-surface-media);

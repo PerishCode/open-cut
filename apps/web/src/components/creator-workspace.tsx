@@ -42,8 +42,7 @@ import {
 } from "./creator-agent-context.js";
 import { CreatorAgentPane } from "./creator-agent-pane.js";
 import { CreatorCaptions } from "./creator-captions.js";
-import { CreatorExport } from "./creator-export.js";
-import { CreatorHistory } from "./creator-history.js";
+import { creatorExportTab } from "./creator-export-tab.js";
 import { type NarrativeInsertionAnchor, useNarrativeHandoff } from "./creator-narrative-anchor.js";
 import { CreatorNarrativeWriter } from "./creator-narrative-writer.js";
 import { CreatorRoughCutPanel } from "./creator-rough-cut.js";
@@ -52,7 +51,7 @@ import { createSourcePanelNavigation } from "./creator-source-panel-navigation.j
 import { CreatorSourcePlacement } from "./creator-source-placement.js";
 import { CreatorTimeline } from "./creator-timeline.js";
 import { useCreatorTimelineHandoff } from "./creator-timeline-handoff.js";
-import { CreatorVersions } from "./creator-versions.js";
+import { creatorVersionsTab } from "./creator-versions-tab.js";
 import { CreatorWorkspaceActions } from "./creator-workspace-actions.js";
 import { AssetSummary, type TranscriptState, TranscriptSurface } from "./creator-workspace-media.js";
 import {
@@ -104,6 +103,8 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
   const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
+  const [exportRefreshEpoch, setExportRefreshEpoch] = useState(0);
+  const [exportActive, setExportActive] = useState(false);
   const [sourcePanel, setSourcePanel] = useState("source-media");
   const [timelinePanel, setTimelinePanel] = useState("timeline");
   const timelineHandoff = useCreatorTimelineHandoff();
@@ -687,39 +688,26 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                 </Stack>
               ),
             },
-            {
-              id: "versions",
-              label: "Versions",
-              content: ready ? (
-                <Stack spacing="compact">
-                  <CreatorVersions
-                    currentRevision={ready.overview.project.revision}
-                    onRestored={refreshRestoredWorkspace}
-                    projectId={project.id}
-                    refreshEpoch={historyRefreshEpoch}
-                  />
-                  <CreatorHistory projectId={project.id} refreshEpoch={historyRefreshEpoch} />
-                </Stack>
-              ) : (
-                <Text>Synchronizing project versions…</Text>
-              ),
-            },
-            {
-              id: "export",
-              label: "Export",
-              content: ready ? (
-                <CreatorExport
-                  available={sequenceExportAvailable}
-                  hasContent={ready.sequence.clips.length > 0 || ready.sequence.captions.length > 0}
-                  projectId={project.id}
-                  projectName={project.name}
-                  sequenceId={ready.overview.project.mainSequenceId}
-                  sequenceRevision={ready.sequence.sequenceRevision}
-                />
-              ) : (
-                <Text>Synchronizing the project…</Text>
-              ),
-            },
+            creatorVersionsTab({
+              currentRevision: ready?.overview.project.revision,
+              onCheckpointSaved: () => setHistoryRefreshEpoch((current) => current + 1),
+              onRestored: refreshRestoredWorkspace,
+              projectId: project.id,
+              refreshEpoch: historyRefreshEpoch,
+            }),
+            creatorExportTab({
+              activeExport: exportActive,
+              available: sequenceExportAvailable,
+              hasContent: ready ? ready.sequence.clips.length > 0 || ready.sequence.captions.length > 0 : false,
+              onActiveChange: setExportActive,
+              onStarted: () => setExportRefreshEpoch((current) => current + 1),
+              projectId: project.id,
+              projectName: project.name,
+              refreshEpoch: exportRefreshEpoch,
+              sequence: ready
+                ? { id: ready.overview.project.mainSequenceId, revision: ready.sequence.sequenceRevision }
+                : undefined,
+            }),
             {
               id: "system",
               label: "System",

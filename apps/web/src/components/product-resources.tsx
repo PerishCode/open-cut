@@ -1,4 +1,4 @@
-import { Button, Stack, Status, Text } from "@open-cut/components";
+import { Button, Heading, Stack, Status, Text } from "@open-cut/components";
 import type { ProductResource, ProductResourceSnapshot } from "@open-cut/contracts";
 import { useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useState } from "react";
@@ -78,7 +78,9 @@ export function ProductResources() {
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">OFFLINE RESOURCES</Text>
+      <Heading level={3} tone="eyebrow">
+        OFFLINE RESOURCES
+      </Heading>
       {state.status === "loading" ? <Status state="pending">Checking offline resources</Status> : null}
       {state.status === "unavailable" ? (
         <>

@@ -237,13 +237,14 @@ export function CreatorNarrativeWriter({
                 write={contracts.editing.write}
               />
             ) : (
-              <Stack spacing="compact">
+              <>
                 {nodeId === recentlyAddedNodeId ? <Status state="ready">Added from Transcript</Status> : null}
-                <Text tone="eyebrow">
-                  {String(index + 1).padStart(2, "0")} · {narrativeNodeLabel(node)}
-                </Text>
-                <Text>{narrativeNodeText(node)}</Text>
-                <ControlStrip label={`Story node ${index + 1} actions`}>
+                <ControlStrip
+                  hint={`${String(index + 1).padStart(2, "0")} · ${narrativeNodeLabel(node)}`}
+                  label={`Story node ${index + 1} actions`}
+                  presentation="editorial"
+                  summary={narrativeNodeText(node)}
+                >
                   <Button
                     label={`Set insertion point after Story node ${index + 1}`}
                     pressed={nodeId === selectedNodeId}
@@ -256,6 +257,7 @@ export function CreatorNarrativeWriter({
                       <Button
                         disabled={node.evidenceStatus !== "exact" || !onAddToRoughCut}
                         label="Add excerpt to rough cut"
+                        variant="quiet"
                         onPress={() => onAddToRoughCut?.(node.sourceExcerpt, node.evidenceStatus)}
                       >
                         Rough cut
@@ -263,6 +265,7 @@ export function CreatorNarrativeWriter({
                       <Button
                         disabled={node.evidenceStatus !== "exact" || !onCreateCaptions}
                         label="Create captions from excerpt"
+                        variant="quiet"
                         onPress={() => onCreateCaptions?.(node.sourceExcerpt, node.evidenceStatus)}
                       >
                         Captions
@@ -270,7 +273,7 @@ export function CreatorNarrativeWriter({
                     </>
                   ) : null}
                 </ControlStrip>
-              </Stack>
+              </>
             )}
             {emptyAfterNodeId === nodeId ? emptyParagraph : null}
           </Fragment>

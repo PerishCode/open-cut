@@ -43,6 +43,8 @@ than consumer-defined sizes.
 
 The default shell uses a 54px application header, 36px pane headers, and 28px
 standard controls. Compact media and placement strips may use 22px controls.
+Compact vertical stacks use a 12px rhythm; larger gaps must communicate a real
+section boundary rather than compensate for page-style composition.
 Space communicates grouping, not decoration: a panel must not grow large empty
 padding merely to appear important.
 

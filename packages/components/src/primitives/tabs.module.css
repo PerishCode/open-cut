@@ -42,9 +42,56 @@
   outline-offset: -2px;
 }
 
+.tabsWithHeader {
+  grid-template-rows: auto auto 1fr;
+}
+
+.tabHeader {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--oc-hairline);
+}
+
+.tabsCompact .tabHeader {
+  padding-bottom: 4px;
+}
+
 .tabPanel {
   min-height: 0;
   overflow: auto;
+  container-type: scroll-state;
+}
+
+.tabPanel::before,
+.tabPanel::after {
+  content: "";
+  display: block;
+  position: sticky;
+  height: 0;
+  pointer-events: none;
+}
+
+.tabPanel::before {
+  top: 0;
+}
+
+.tabPanel::after {
+  bottom: 0;
+}
+
+@container scroll-state(scrollable: block-start) {
+  .tabPanel::before {
+    height: 14px;
+    margin-bottom: -14px;
+    background: linear-gradient(var(--oc-surface-pane), transparent);
+  }
+}
+
+@container scroll-state(scrollable: block-end) {
+  .tabPanel::after {
+    height: 14px;
+    margin-top: -14px;
+    background: linear-gradient(transparent, var(--oc-surface-pane));
+  }
 }
 
 .tabsCompact {

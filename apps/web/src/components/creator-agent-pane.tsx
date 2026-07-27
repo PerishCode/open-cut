@@ -2,6 +2,7 @@ import {
   Button,
   ControlStrip,
   FeedEntry,
+  Heading,
   PanelDock,
   ResourceCard,
   Stack,
@@ -375,6 +376,7 @@ export function CreatorAgentPane({
   const latestMessage = state.messages.at(-1);
   const latestRevealMessageId = latestMessage?.role === "creator" ? undefined : latestMessage?.id;
   const latestRevealItem = latestOutcome?.id ?? latestRevealMessageId;
+  const messageContextCandidates = [...quickContextCandidates, ...contextCandidates];
 
   useEffect(() => {
     if (!latestRevealItem || lastRevealedItemRef.current === latestRevealItem) return;
@@ -388,11 +390,11 @@ export function CreatorAgentPane({
     <PanelDock
       footer={
         <Stack spacing="compact">
-          {quickContextCandidates.length > 0 ? (
+          {messageContextCandidates.length > 0 ? (
             <ControlStrip
-              hint={contextSelectionHint(quickContextCandidates, contextKeys, "Attach to next message")}
-              label="Quick Agent context"
-              summary="QUICK CONTEXT"
+              hint={contextSelectionHint(messageContextCandidates, contextKeys, "Attach to next message")}
+              label="Agent message context"
+              summary="CONTEXT"
             >
               {quickContextCandidates.map((candidate) => {
                 const selected = contextKeys.includes(candidate.key);
@@ -408,14 +410,6 @@ export function CreatorAgentPane({
                   </Button>
                 );
               })}
-            </ControlStrip>
-          ) : null}
-          {contextCandidates.length > 0 ? (
-            <ControlStrip
-              hint={contextSelectionHint(contextCandidates, contextKeys, "Optional")}
-              label="Agent context attachments"
-              summary="@ CONTEXT"
-            >
               {contextCandidates.map((candidate) => {
                 const selected = contextKeys.includes(candidate.key);
                 return (
@@ -426,7 +420,7 @@ export function CreatorAgentPane({
                     pressed={selected}
                     onPress={() => setContextKeys((current) => toggleContextKey(current, candidate.key))}
                   >
-                    @ {candidate.label}
+                    @ {compactContextLabel(candidate.label)}
                   </Button>
                 );
               })}
@@ -466,14 +460,40 @@ export function CreatorAgentPane({
         </Stack>
       }
       header={
-        <ControlStrip hint={availabilityText(state.availability)} label="Agent controls" summary="LOCAL AGENT">
+        <ControlStrip
+          hint={state.selected?.intent ?? availabilityText(state.availability)}
+          label="Agent controls"
+          summary={state.selected ? `TASK · TURN ${state.selected.currentTurn.generation}` : "LOCAL AGENT"}
+        >
           {!state.loading && (state.error || state.availability?.state !== "available") ? (
             <Button disabled={state.submitting} variant="quiet" onPress={() => void load()}>
               Check again
             </Button>
           ) : null}
+          {state.selected ? (
+            <>
+              {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
+              <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
+              {active ? (
+                <>
+                  <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
+                    Stop
+                  </Button>
+                  <Button disabled={state.submitting} label="Cancel task" onPress={() => void transition("cancel")}>
+                    Cancel
+                  </Button>
+                </>
+              ) : !terminal ? (
+                <Button disabled={state.submitting} label="Cancel task" onPress={() => void transition("cancel")}>
+                  Cancel
+                </Button>
+              ) : null}
+            </>
+          ) : null}
           <Button
             disabled={state.submitting}
+            label={state.selected ? "Start a new task" : undefined}
+            variant="quiet"
             onPress={() => {
               setState((current) => ({
                 ...current,
@@ -493,39 +513,14 @@ export function CreatorAgentPane({
               setReceiptsExpanded(false);
             }}
           >
-            New task
+            {state.selected ? "New" : "New task"}
           </Button>
         </ControlStrip>
       }
       label="Agent collaboration"
     >
       <Stack spacing="compact">
-        {state.selected ? (
-          <ControlStrip
-            hint={state.selected.intent}
-            label="Selected Agent task"
-            summary={`TASK · TURN ${state.selected.currentTurn.generation}`}
-          >
-            {state.presentation ? <Status state="pending">{presentationText(state.presentation)}</Status> : null}
-            <Status state={runStatusState(state.selected)}>{runStatusLabel(state.selected)}</Status>
-            {active ? (
-              <>
-                <Button disabled={state.submitting} onPress={() => void transition("interrupt")}>
-                  Stop
-                </Button>
-                <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-                  Cancel task
-                </Button>
-              </>
-            ) : !terminal ? (
-              <Button disabled={state.submitting} onPress={() => void transition("cancel")}>
-                Cancel task
-              </Button>
-            ) : null}
-          </ControlStrip>
-        ) : (
-          <Text>Describe a new writing or editing task.</Text>
-        )}
+        {!state.selected ? <Text>Describe a new writing or editing task.</Text> : null}
         {latestOutcome ? (
           <FeedEntry
             details={outcomeDetails(latestOutcome)}
@@ -537,7 +532,11 @@ export function CreatorAgentPane({
             <Status state={receiptStatusState(latestOutcome)}>{outcomeTitle(latestOutcome)}</Status>
           </FeedEntry>
         ) : null}
-        {state.messages.length > 0 ? <Text tone="eyebrow">CONVERSATION · {state.messages.length} MESSAGES</Text> : null}
+        {state.messages.length > 0 ? (
+          <Heading level={3} tone="eyebrow">
+            CONVERSATION · {state.messages.length} MESSAGES
+          </Heading>
+        ) : null}
         {state.messages.map((entry) => (
           <AgentConversationEntry
             elementRef={!latestOutcome && entry.id === latestRevealMessageId ? latestMessageRef : undefined}
@@ -577,7 +576,9 @@ export function CreatorAgentPane({
         ) : null}
         {state.selected && (state.turns.length > 1 || state.turnNextBefore) ? (
           <>
-            <Text tone="eyebrow">TURNS</Text>
+            <Heading level={3} tone="eyebrow">
+              TURNS
+            </Heading>
             <ControlStrip
               hint={`${state.turns.length} loaded`}
               label="Agent task Turns"
@@ -686,6 +687,10 @@ function contextSelectionHint(
 ): string {
   const count = candidates.filter((candidate) => keys.includes(candidate.key)).length;
   return count > 0 ? `${count} attached` : empty;
+}
+
+function compactContextLabel(value: string): string {
+  return value.length > 20 ? `${value.slice(0, 19).trimEnd()}…` : value;
 }
 
 function runStatusState(run: AgentRun): "ready" | "pending" | "unavailable" {

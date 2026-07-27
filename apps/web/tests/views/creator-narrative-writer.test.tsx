@@ -300,7 +300,7 @@ describe("CreatorNarrativeWriter", () => {
     );
     renderWriter(vi.fn(async () => undefined));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Section" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add section" }));
     const title = screen.getByRole("textbox", { name: "New Narrative Section title" });
     fireEvent.change(title, { target: { value: "The human problem" } });
     fireEvent.keyDown(title, { key: "Enter" });

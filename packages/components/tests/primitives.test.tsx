@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   Button,
+  ControlList,
   ControlStrip,
   EditorShell,
   EditorSplit,
@@ -70,6 +71,16 @@ describe("atomic components", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Open Cut");
     expect(screen.getByRole("status").textContent).toContain("Ready");
     expect(screen.getByRole("textbox", { name: "Project name" })).toBeTruthy();
+  });
+
+  it("offers leveled eyebrow headings for tool sections", () => {
+    render(
+      <Heading level={3} tone="eyebrow">
+        TRANSACTION LOG
+      </Heading>,
+    );
+    const heading = screen.getByRole("heading", { level: 3, name: "TRANSACTION LOG" });
+    expect(heading.tagName).toBe("H3");
   });
 
   it("owns the native browser media surface behind one semantic atom", () => {
@@ -289,6 +300,27 @@ describe("atomic components", () => {
     expect(panel.scrollTop).toBe(0);
   });
 
+  it("pins a tab's header outside its scrolling panel", () => {
+    render(
+      <Tabs
+        initialTabId="versions"
+        label="Timeline panels"
+        tabs={[
+          { id: "timeline", label: "Timeline", content: "Track surface" },
+          { id: "versions", label: "Versions", content: "Checkpoint list", header: "Checkpoint composer" },
+        ]}
+      />,
+    );
+
+    const panel = screen.getByRole("tabpanel");
+    const header = screen.getByText("Checkpoint composer");
+    expect(panel.textContent).toBe("Checkpoint list");
+    expect(panel.contains(header)).toBe(false);
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline" }));
+    expect(screen.queryByText("Checkpoint composer")).toBeNull();
+    expect(screen.getByRole("tabpanel").textContent).toBe("Track surface");
+  });
+
   it("normalizes file selection and drop behind one semantic atom", () => {
     const onSelect = vi.fn();
     render(<FileField label="Drop footage or browse" accept="video/*,audio/*" onSelect={onSelect} />);
@@ -326,6 +358,10 @@ describe("atomic components", () => {
     const timeline = screen.getByRole("region", { name: "Timeline" });
     expect(timeline).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agent" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Story" })).toBeTruthy();
+    for (const pane of ["Sources", "Viewer", "Timeline", "Agent"]) {
+      expect(screen.getByRole("heading", { level: 2, name: pane })).toBeTruthy();
+    }
     expect(screen.getByRole("separator", { name: "Resize Sources" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Timeline" })).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Agent" })).toBeTruthy();
@@ -550,6 +586,59 @@ describe("atomic components", () => {
     expect(strip.tabIndex).toBe(0);
     fireEvent.keyDown(strip, { key: "ArrowLeft" });
     expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a strip's trailing action accessible beside its identity", () => {
+    render(
+      <ControlStrip
+        action={<Button onPress={() => undefined}>Review restore</Button>}
+        hint="2 KiB · 2026-07-23 04:47 UTC"
+        label="Project version Before Agent turn at revision 16"
+        summary="AUTO · r16 · Before Agent turn"
+      />,
+    );
+
+    const strip = screen.getByRole("region", { name: "Project version Before Agent turn at revision 16" });
+    expect(within(strip).getByText("AUTO · r16 · Before Agent turn")).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Review restore" })).toBeTruthy();
+  });
+
+  it("renders editorial strips with content-first hierarchy without consumer styling props", () => {
+    render(
+      <ControlStrip
+        hint="01 · SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r1"
+        label="Story node 1"
+        presentation="editorial"
+        summary="Alpha Bravo. Spoken ideas become an editable story."
+      >
+        <button type="button" aria-pressed="true">
+          Insert after
+        </button>
+        <button type="button">Rough cut</button>
+      </ControlStrip>,
+    );
+
+    const strip = screen.getByRole("region", { name: "Story node 1" });
+    const body = within(strip).getByText("Alpha Bravo. Spoken ideas become an editable story.");
+    const meta = within(strip).getByText("01 · SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r1");
+    expect(body.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Insert after" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(strip).getByRole("button", { name: "Rough cut" })).toBeTruthy();
+  });
+
+  it("groups operational control rows without card chrome", () => {
+    render(
+      <ControlList label="Recent checkpoints">
+        <ControlStrip label="Checkpoint 1" summary="AUTO · r8" />
+        <ControlStrip label="Checkpoint 2" summary="NAMED · r5" />
+      </ControlList>,
+    );
+
+    const list = screen.getByRole("region", { name: "Recent checkpoints" });
+    expect(list.tagName).toBe("SECTION");
+    expect(within(list).getByRole("region", { name: "Checkpoint 1" })).toBeTruthy();
+    expect(within(list).getByRole("region", { name: "Checkpoint 2" })).toBeTruthy();
+    expect(within(list).queryByRole("article")).toBeNull();
   });
 
   it("renders the policy accessory inside the same Timeline editor unit as the canvas", () => {

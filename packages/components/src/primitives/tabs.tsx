@@ -6,6 +6,7 @@ export type TabDefinition = {
   id: string;
   label: string;
   content: ReactNode;
+  header?: ReactNode;
 };
 
 export type TabsProps = {
@@ -26,8 +27,11 @@ export function Tabs({ activeTabId, density = "default", label, onTabChange, tab
     if (activePanelRef.current) activePanelRef.current.scrollTop = 0;
   }, [active?.id]);
   if (!active) return null;
+  const classNames = [styles.tabs];
+  if (density === "compact") classNames.push(styles.tabsCompact);
+  if (active.header !== undefined) classNames.push(styles.tabsWithHeader);
   return (
-    <div className={density === "compact" ? `${styles.tabs} ${styles.tabsCompact}` : styles.tabs}>
+    <div className={classNames.join(" ")}>
       <div aria-label={label} className={styles.tabList} role="tablist">
         {tabs.map((tab) => (
           <button
@@ -47,6 +51,7 @@ export function Tabs({ activeTabId, density = "default", label, onTabChange, tab
           </button>
         ))}
       </div>
+      {active.header !== undefined ? <div className={styles.tabHeader}>{active.header}</div> : null}
       <div
         aria-labelledby={`tab-${active.id}`}
         className={styles.tabPanel}

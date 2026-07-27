@@ -1,4 +1,5 @@
 export { Button, type ButtonProps, type ButtonVariant } from "./primitives/button.js";
+export { ControlList, type ControlListProps } from "./primitives/control-list.js";
 export { ControlStrip, type ControlStripProps } from "./primitives/control-strip.js";
 export { EditorShell, type EditorShellProps } from "./primitives/editor-shell.js";
 export { EditorSplit, type EditorSplitProps } from "./primitives/editor-split.js";

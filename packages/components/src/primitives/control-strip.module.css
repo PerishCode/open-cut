@@ -1,0 +1,102 @@
+/**
+ * Opt-in editorial presentation for ControlStrip.
+ * Default compact strip styles stay in theme.module.css for other consumers.
+ */
+
+.editorial {
+  gap: 6px;
+  padding: 6px 0 8px;
+}
+
+.editorialMeta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.editorialSummary {
+  min-width: 0;
+  overflow: visible;
+  color: var(--oc-ink-strong);
+  font: 500 13px / 1.45 var(--oc-font-sans);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.editorialHint {
+  min-width: 0;
+  overflow: visible;
+  color: var(--oc-ink-faint);
+  font: 500 10px / 1.35 var(--oc-font-sans);
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.editorialBody {
+  margin-top: 2px;
+}
+
+/**
+ * Opt-in trailing action column: the row's primary verb keeps full button
+ * chrome and a stable trailing position instead of flattening into the body.
+ */
+
+.withAction {
+  align-items: center;
+  column-gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.lead {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action > button {
+  min-height: 22px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+/**
+ * Structured compact summary: the human name yields space last, the exact
+ * detail trail ellipsizes first.
+ */
+
+.summarySplit {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.summaryName,
+.summaryDetail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summaryName {
+  flex: 0 1 auto;
+}
+
+.summaryDetail {
+  flex: 0 1000 auto;
+  color: var(--oc-ink-dim);
+  font-weight: 500;
+}
+
+.summaryDetail::before {
+  content: "· ";
+}

@@ -7,15 +7,14 @@ import {
   type SequenceExportLineage,
   useContracts,
 } from "@open-cut/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type CreatorExportProps = Readonly<{
   projectId: DurableID;
   projectName: string;
-  sequenceId: DurableID;
-  sequenceRevision: RevisionString;
   available: boolean;
-  hasContent: boolean;
+  refreshEpoch: number;
+  onActiveChange(active: boolean): unknown;
 }>;
 
 type SavedLineage = Readonly<{
@@ -23,14 +22,7 @@ type SavedLineage = Readonly<{
   result: ExportSaveResult;
 }>;
 
-export function CreatorExport({
-  projectId,
-  projectName,
-  sequenceId,
-  sequenceRevision,
-  available,
-  hasContent,
-}: CreatorExportProps) {
+export function CreatorExport({ projectId, projectName, available, refreshEpoch, onActiveChange }: CreatorExportProps) {
   const contracts = useContracts();
   const [history, setHistory] = useState<SequenceExportHistoryPage>();
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -40,7 +32,6 @@ export function CreatorExport({
   const [save, setSave] = useState<SavedLineage>();
   const [revealedName, setRevealedName] = useState(undefined as string | undefined);
   const [deleteConfirmation, setDeleteConfirmation] = useState<DurableID>();
-  const suggestedName = useMemo(() => exportFilename(projectName, sequenceRevision), [projectName, sequenceRevision]);
 
   const run = useCallback(
     async <Result,>(failureMessage: string, operation: () => Promise<Result>): Promise<Result | undefined> => {
@@ -78,27 +69,11 @@ export function CreatorExport({
     const controller = new AbortController();
     void loadHistory(controller.signal);
     return () => controller.abort();
-  }, [loadHistory]);
+  }, [loadHistory, refreshEpoch]);
 
   useEffect(
     () => contracts.exports.subscribe(projectId, () => void loadHistory()),
     [contracts, loadHistory, projectId],
-  );
-
-  const start = useCallback(
-    () =>
-      run("Could not start this export. Try again.", async () => {
-        setSave(undefined);
-        setRevealedName(undefined);
-        setDeleteConfirmation(undefined);
-        await contracts.exports.start(projectId, sequenceId, {
-          requestId: requestIdentity("export-start"),
-          sequenceRevision,
-          preset: "webm-vp9-opus-v1",
-        });
-        await loadHistory();
-      }),
-    [contracts, loadHistory, projectId, run, sequenceId, sequenceRevision],
   );
 
   const cancel = useCallback(
@@ -183,33 +158,11 @@ export function CreatorExport({
   );
 
   const active = history?.lineages.some((lineage) => isActive(lineage)) ?? false;
-  const nextStatus = !hasContent
-    ? { state: "unavailable" as const, label: "Sequence empty" }
-    : !available
-      ? { state: "unavailable" as const, label: "Unavailable" }
-      : active || pending
-        ? { state: "pending" as const, label: active ? "Export in progress" : "Working" }
-        : { state: "ready" as const, label: "Ready" };
+  useEffect(() => {
+    onActiveChange(active);
+  }, [active, onActiveChange]);
   return (
     <Stack spacing="compact">
-      <ControlStrip
-        hint={
-          hasContent
-            ? "DESTINATION AFTER RENDER · WEBM · VP9 / OPUS"
-            : "Add a clip or caption to the Sequence before exporting."
-        }
-        label="Next export"
-        summary={`NEXT · SEQUENCE r${sequenceRevision} · ${suggestedName}`}
-      >
-        <Status state={nextStatus.state}>{nextStatus.label}</Status>
-        <Button
-          disabled={!available || !hasContent || pending || active}
-          variant="primary"
-          onPress={() => void start()}
-        >
-          {!hasContent ? "Nothing to export" : active ? "Export in progress" : "Export current revision"}
-        </Button>
-      </ControlStrip>
       {loadingHistory && !history ? <Text>Loading exports…</Text> : null}
       {historyError ? (
         <Stack spacing="compact">
@@ -223,7 +176,7 @@ export function CreatorExport({
         <EmptyState hint="Completed exports and retained job history will appear here." title="No exports yet" />
       ) : null}
       {history && history.lineages.length > 0 ? (
-        <ResourceCard emphasis="quiet" eyebrow={`${history.lineages.length} LOADED`} title="Recent exports">
+        <ResourceCard emphasis="quiet" title="Recent exports">
           {history.lineages.map((lineage, index) => {
             const rootID = lineage.export.job.rootJobId;
             const filename = exportFilename(projectName, lineage.export.sequenceRevision);
@@ -237,12 +190,49 @@ export function CreatorExport({
             const details = exportDetails(lineage);
             return (
               <ControlStrip
+                action={
+                  activeLineage ? (
+                    <Button
+                      disabled={pending}
+                      label={`Cancel export ${actionIdentity}`}
+                      onPress={() => void cancel(lineage)}
+                    >
+                      Cancel export
+                    </Button>
+                  ) : lineage.export.recovery === "retry-job" ? (
+                    <Button
+                      disabled={!available || pending}
+                      label={`Retry export ${actionIdentity}`}
+                      onPress={() => void retry(lineage)}
+                    >
+                      Retry export
+                    </Button>
+                  ) : availableArtifact && !confirmingDelete ? (
+                    <>
+                      <Button
+                        disabled={pending}
+                        label={`Save export ${actionIdentity} as`}
+                        onPress={() => void saveAs(lineage)}
+                      >
+                        Save As…
+                      </Button>
+                      <Button
+                        disabled={pending}
+                        label={`Delete export ${actionIdentity}`}
+                        onPress={() => setDeleteConfirmation(availableArtifact.id)}
+                      >
+                        Delete export…
+                      </Button>
+                    </>
+                  ) : undefined
+                }
                 hint={details[0]}
                 key={rootID}
                 label={`Export ${actionIdentity}`}
-                summary={`${index === 0 ? "LATEST" : `HISTORY ${historyPosition}`} · ${lineage.origin.toUpperCase()} · SEQUENCE r${
+                summary={filename}
+                summaryDetail={`${index === 0 ? "LATEST" : `HISTORY ${historyPosition}`} · ${lineage.origin.toUpperCase()} · SEQUENCE r${
                   lineage.export.sequenceRevision
-                } · ${filename}`}
+                }`}
               >
                 <Status state={exportStatusState(lineage)}>{exportStatusLabel(lineage)}</Status>
                 {details.slice(1).map((detail) => (
@@ -250,42 +240,6 @@ export function CreatorExport({
                 ))}
                 {confirmingDelete ? (
                   <Status state="pending">This removes the exported media but keeps its job history.</Status>
-                ) : null}
-                {activeLineage ? (
-                  <Button
-                    disabled={pending}
-                    label={`Cancel export ${actionIdentity}`}
-                    onPress={() => void cancel(lineage)}
-                  >
-                    Cancel export
-                  </Button>
-                ) : null}
-                {lineage.export.recovery === "retry-job" ? (
-                  <Button
-                    disabled={!available || pending}
-                    label={`Retry export ${actionIdentity}`}
-                    onPress={() => void retry(lineage)}
-                  >
-                    Retry export
-                  </Button>
-                ) : null}
-                {availableArtifact && !confirmingDelete ? (
-                  <>
-                    <Button
-                      disabled={pending}
-                      label={`Save export ${actionIdentity} as`}
-                      onPress={() => void saveAs(lineage)}
-                    >
-                      Save As…
-                    </Button>
-                    <Button
-                      disabled={pending}
-                      label={`Delete export ${actionIdentity}`}
-                      onPress={() => setDeleteConfirmation(availableArtifact.id)}
-                    >
-                      Delete export…
-                    </Button>
-                  </>
                 ) : null}
                 {overwrite ? (
                   <Button
@@ -410,7 +364,7 @@ function formatByteSize(value: string): string {
   return `${bytes / (1_024n * 1_024n)} MiB`;
 }
 
-function exportFilename(projectName: string, revision: RevisionString): string {
+export function exportFilename(projectName: string, revision: RevisionString): string {
   const stem = projectName
     .normalize("NFKC")
     .replace(/[^\p{L}\p{N}._-]+/gu, "-")

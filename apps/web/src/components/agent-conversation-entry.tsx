@@ -17,9 +17,8 @@ export function AgentConversationEntry({
       details={message.attachments.map((attachment) => `@ ${attachmentLabel(attachment)}`)}
       elementRef={elementRef}
       emphasis={message.role === "creator" ? "quiet" : "default"}
-      hint={title}
       label={`${title} · message ${message.ordinal}`}
-      summary={`${messageRole(message)} · MESSAGE #${message.ordinal}`}
+      summary={`${title} · #${message.ordinal}`}
     >
       {message.role === "agent" ? (
         <MessageContent text={presentAgentMessage(message.text)} />
@@ -37,12 +36,6 @@ function presentAgentMessage(value: string): string {
     /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
     "[internal reference]",
   );
-}
-
-function messageRole(message: AgentConversationMessage): string {
-  if (message.role === "creator") return "YOU";
-  if (message.role === "agent") return "AGENT";
-  return "SYSTEM";
 }
 
 function messageTitle(message: AgentConversationMessage): string {

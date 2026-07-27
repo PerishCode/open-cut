@@ -130,6 +130,8 @@ oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --eval 'document.body?.innerText'
 oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
+  --eval-file .task/resources/ui-matrix.js --watch-errors 1s
+oc-control dev inspect --base-dir .tmp/oc-control/ui-audit/dev/default \
   --set-file .tmp/fixture.webm
 ```
 
@@ -139,6 +141,12 @@ starting a second browser. Its node sets are bounded; `--match` applies a
 case-insensitive role/name filter while retaining the full-page summary. Combine
 snapshot, eval, and screenshot flags when one settled renderer state should
 produce all three forms of evidence.
+
+`--eval-file` runs the same awaited, return-by-value evaluation as `--eval` but
+reads it from a non-empty regular file inside the repository. It is mutually
+exclusive with inline `--eval`, rejects files larger than 256 KiB, and reports
+the resolved file path and byte size. This keeps repeatable multi-state audits
+in `.task/resources/` without shell quoting or a second browser.
 
 `--action click` resolves one exact accessible role/name pair, rejects missing,
 ambiguous, ignored, disabled, or layout-less targets, dispatches viewport CDP

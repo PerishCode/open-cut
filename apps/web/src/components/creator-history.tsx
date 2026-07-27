@@ -1,4 +1,4 @@
-import { Button, ControlStrip, ResourceCard, Stack, Status, Text } from "@open-cut/components";
+import { Button, ControlList, ControlStrip, Heading, Stack, Status, Text } from "@open-cut/components";
 import { type CreatorHistoryPage, type DurableID, useContracts } from "@open-cut/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -72,7 +72,9 @@ export function CreatorHistory({
 
   return (
     <Stack spacing="compact">
-      <Text tone="eyebrow">TRANSACTION LOG · TECHNICAL DETAIL</Text>
+      <Heading level={3} tone="eyebrow">
+        TRANSACTION LOG · TECHNICAL DETAIL
+      </Heading>
       {state.status === "loading" ? <Text>Loading recent creative transactions…</Text> : null}
       {state.status === "unavailable" ? (
         <Stack spacing="compact">
@@ -82,11 +84,7 @@ export function CreatorHistory({
       ) : null}
       {loadOlderError ? <Status state="unavailable">Could not load older history. Try again.</Status> : null}
       {state.status === "ready" && state.page.transactions.length > 0 ? (
-        <ResourceCard
-          emphasis="quiet"
-          eyebrow={`${state.page.transactions.length} LOADED`}
-          title="Recent creative transactions"
-        >
+        <ControlList label="Recent creative transactions">
           {state.page.transactions.map((transaction, index) => {
             const intent = presentTransactionIntent(transaction.intent);
             return (
@@ -94,13 +92,14 @@ export function CreatorHistory({
                 hint={`${formatChangeCount(transaction.changes.length)} · ${formatTimestamp(transaction.committedAt)}`}
                 key={transaction.id}
                 label={`Transaction r${transaction.committedProjectRevision}: ${intent}`}
-                summary={`${index === 0 ? "LATEST · " : ""}r${transaction.committedProjectRevision} · ${transaction.actor.toUpperCase()}${
-                  transaction.undoesTransactionId ? " · UNDO/REDO" : ""
-                } · ${intent}`}
+                summary={intent}
+                summaryDetail={`${index === 0 ? "LATEST · " : ""}${transaction.actor.toUpperCase()} · r${
+                  transaction.committedProjectRevision
+                }${transaction.undoesTransactionId ? " · UNDO/REDO" : ""}`}
               />
             );
           })}
-        </ResourceCard>
+        </ControlList>
       ) : null}
       {state.status === "ready" && state.page.transactions.length === 0 ? (
         <Text>No committed creative transactions.</Text>
