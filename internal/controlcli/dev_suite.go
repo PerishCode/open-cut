@@ -24,6 +24,31 @@ func devSuiteTarget(repository, baseDir string) (string, string, error) {
 	return repositoryRoot, selectedBaseDir, nil
 }
 
+// requireRecordedSuite refuses lifecycle commands aimed at a base directory
+// that has never hosted a development suite; that almost always means the
+// target was resolved against the wrong repository or a mistyped path, and
+// acting there would silently create or address a different cell.
+func requireRecordedSuite(baseDir string) error {
+	paths, err := devsession.ResolveCellPaths(baseDir)
+	if err != nil {
+		return err
+	}
+	_, rosterErr := devsuite.LoadRoster(devsuite.RosterPath(paths.Runtime))
+	if rosterErr == nil {
+		return nil
+	}
+	if !errors.Is(rosterErr, devsuite.ErrNoRoster) {
+		return rosterErr
+	}
+	if devsuite.LastGeneration(paths.Runtime) > 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"no development suite has ever run at %s; use `oc-control dev start`, and check --repo/--base-dir resolution",
+		baseDir,
+	)
+}
+
 func newDevStartCommand(stdout, stderr io.Writer) *cobra.Command {
 	command := &cobra.Command{Use: "start", Short: "Build the workspace and start the detached development suite", Args: cobra.NoArgs}
 	repository := command.Flags().String("repo", ".", "open-cut repository root")
@@ -49,6 +74,9 @@ func newDevStopCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
 		_, selectedBaseDir, err := devSuiteTarget(*repository, *baseDir)
 		if err != nil {
+			return asExit(fail(stderr, err))
+		}
+		if err := requireRecordedSuite(selectedBaseDir); err != nil {
 			return asExit(fail(stderr, err))
 		}
 		report, err := devsuite.Stop(selectedBaseDir)
@@ -90,6 +118,9 @@ func newDevRestartCommand(stdout, stderr io.Writer) *cobra.Command {
 		if err != nil {
 			return asExit(fail(stderr, err))
 		}
+		if err := requireRecordedSuite(selectedBaseDir); err != nil {
+			return asExit(fail(stderr, err))
+		}
 		if _, err := devsuite.Stop(selectedBaseDir); err != nil && !errors.Is(err, devsuite.ErrNoRoster) {
 			return asExit(fail(stderr, err))
 		}
@@ -111,6 +142,9 @@ func newDevLogsCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
 		_, selectedBaseDir, err := devSuiteTarget(*repository, *baseDir)
 		if err != nil {
+			return asExit(fail(stderr, err))
+		}
+		if err := requireRecordedSuite(selectedBaseDir); err != nil {
 			return asExit(fail(stderr, err))
 		}
 		if err := devsuite.Logs(selectedBaseDir, *app, *lines, stdout); err != nil {

@@ -3,7 +3,6 @@ package controlcli
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -88,6 +87,9 @@ func connectDevRenderer(
 type devInspectOptions struct {
 	repository, baseDir, screenshot, evaluate, evaluateFile, setFile, endpoint, match string
 	action, role, name                                                                string
+	viewport, region                                                                  string
+	nth                                                                               int
+	settle                                                                            time.Duration
 	snapshot                                                                          bool
 	watchErrors                                                                       time.Duration
 }
@@ -107,6 +109,10 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().StringVar(&options.action, "action", "", "generic renderer action; currently click")
 	command.Flags().StringVar(&options.role, "role", "", "exact accessible role for --action")
 	command.Flags().StringVar(&options.name, "name", "", "exact accessible name for --action")
+	command.Flags().IntVar(&options.nth, "nth", -1, "0-based match to act on when --action matches several nodes")
+	command.Flags().StringVar(&options.viewport, "viewport", "", "resize the renderer window to WxH (e.g. 1440x900) first")
+	command.Flags().DurationVar(&options.settle, "settle", 500*time.Millisecond, "settle delay after --viewport resize")
+	command.Flags().StringVar(&options.region, "region", "", "clip --screenshot to the first CSS selector match")
 	command.Flags().DurationVar(&options.watchErrors, "watch-errors", 0, "observe renderer errors for a bounded duration")
 	command.Flags().StringVar(&options.setFile, "set-file", "", "attach this file to the first enabled file input in the live renderer")
 	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
@@ -119,10 +125,27 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stderr io.Writer) int {
 	repository, baseDir, endpoint := &options.repository, &options.baseDir, &options.endpoint
 	screenshot, evaluate, evaluateFile, setFile := &options.screenshot, &options.evaluate, &options.evaluateFile, &options.setFile
-	action, actionErr := parseDevRendererAction(options.action, options.role, options.name)
+	action, actionErr := parseDevRendererAction(options.action, options.role, options.name, options.nth)
 	if actionErr != nil {
 		fmt.Fprintf(stderr, "dev inspect: %v\n", actionErr)
 		return 2
+	}
+	if options.nth > 0 && action == nil {
+		fmt.Fprintln(stderr, "dev inspect --nth requires --action")
+		return 2
+	}
+	if options.region != "" && options.screenshot == "" {
+		fmt.Fprintln(stderr, "dev inspect --region requires --screenshot")
+		return 2
+	}
+	viewportWidth, viewportHeight := 0, 0
+	if options.viewport != "" {
+		var viewportErr error
+		viewportWidth, viewportHeight, viewportErr = parseDevViewport(options.viewport)
+		if viewportErr != nil {
+			fmt.Fprintf(stderr, "dev inspect: %v\n", viewportErr)
+			return 2
+		}
 	}
 	if options.watchErrors < 0 || options.watchErrors > maximumDevErrorObservation ||
 		(options.watchErrors > 0 && options.watchErrors < minimumDevErrorObservation) {
@@ -135,9 +158,10 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		return 2
 	}
 	if *screenshot == "" && *evaluate == "" && *evaluateFile == "" && *setFile == "" && !options.snapshot &&
-		action == nil && options.watchErrors == 0 {
+		action == nil && options.watchErrors == 0 && options.viewport == "" {
 		fmt.Fprintln(stderr,
-			"dev inspect requires --snapshot, --screenshot, --eval, --eval-file, --set-file, --action, and/or --watch-errors")
+			"dev inspect requires --snapshot, --screenshot, --eval, --eval-file, --set-file, --action, "+
+				"--viewport, and/or --watch-errors")
 		return 2
 	}
 	if options.match != "" && !options.snapshot {
@@ -174,6 +198,16 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 	}
 	defer cdp.Close()
 	result := map[string]any{"schema": 1, "endpoint": resolvedEndpoint}
+	if options.viewport != "" {
+		outer, resizeErr := applyDevViewport(requestContext, cdp, viewportWidth, viewportHeight, options.settle)
+		if resizeErr != nil {
+			fmt.Fprintf(stderr, "resize development renderer: %v\n", resizeErr)
+			return 1
+		}
+		result["viewport"] = map[string]any{
+			"requested": [2]int{viewportWidth, viewportHeight}, "outer": outer,
+		}
+	}
 	var errorObservation *devErrorObservation
 	if options.watchErrors > 0 {
 		errorObservation, err = startDevErrorObservation(requestContext, cdp, options.watchErrors)
@@ -191,25 +225,25 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		result["setFileBytes"] = setFileBytes
 	}
 	if *evaluate != "" {
-		var evaluated struct {
-			Result struct {
-				Type  string `json:"type"`
-				Value any    `json:"value"`
-			} `json:"result"`
-			Exception json.RawMessage `json:"exceptionDetails"`
-		}
-		if err := cdp.Call(requestContext, "Runtime.evaluate", map[string]any{
-			"expression": *evaluate, "returnByValue": true, "awaitPromise": true,
-		}, &evaluated); err != nil {
-			fmt.Fprintf(stderr, "evaluate in development renderer: %v\n", err)
+		evaluated, evalErr := evaluateDevExpression(requestContext, cdp, *evaluate)
+		if evalErr != nil {
+			fmt.Fprintf(stderr, "evaluate in development renderer: %v\n", evalErr)
 			return 1
 		}
-		if len(evaluated.Exception) > 0 && string(evaluated.Exception) != "null" {
-			fmt.Fprintln(stderr, "development renderer expression raised an exception")
+		if evaluated.syntaxError() {
+			evaluated, evalErr = evaluateDevExpression(requestContext, cdp, "(() => {\n"+*evaluate+"\n})()")
+			if evalErr != nil {
+				fmt.Fprintf(stderr, "evaluate in development renderer: %v\n", evalErr)
+				return 1
+			}
+			result["evalMode"] = "statements"
+		}
+		if evaluated.exception != "" {
+			fmt.Fprintf(stderr, "development renderer expression raised an exception: %s\n", evaluated.exception)
 			return 1
 		}
-		result["valueType"] = evaluated.Result.Type
-		result["value"] = evaluated.Result.Value
+		result["valueType"] = evaluated.valueType
+		result["value"] = evaluated.value
 		if evaluateFilePath != "" {
 			result["evalFile"] = evaluateFilePath
 			result["evalFileBytes"] = evaluateFileBytes
@@ -232,10 +266,20 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		result["snapshot"] = filterDevRendererSnapshot(snapshot, options.match)
 	}
 	if *screenshot != "" {
+		captureParams := map[string]any{"format": "png"}
+		if options.region != "" {
+			clip, clipErr := devRegionClip(requestContext, cdp, options.region)
+			if clipErr != nil {
+				fmt.Fprintf(stderr, "resolve screenshot region: %v\n", clipErr)
+				return 1
+			}
+			captureParams["clip"] = clip
+			result["region"] = options.region
+		}
 		var capture struct {
 			Data string `json:"data"`
 		}
-		if err := cdp.Call(requestContext, "Page.captureScreenshot", map[string]any{"format": "png"}, &capture); err != nil {
+		if err := cdp.Call(requestContext, "Page.captureScreenshot", captureParams, &capture); err != nil {
 			fmt.Fprintf(stderr, "capture development renderer: %v\n", err)
 			return 1
 		}

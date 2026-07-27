@@ -12,18 +12,21 @@ const devActionSettleExpression = `new Promise((resolve) => requestAnimationFram
 const devActionViewportExpression = `({ width: innerWidth, height: innerHeight })`
 
 type devRendererAction struct {
-	Kind string
-	Role string
-	Name string
+	Kind   string
+	Role   string
+	Name   string
+	Nth    int
+	NthSet bool
 }
 
 type devRendererActionReceipt struct {
-	Kind   string     `json:"kind"`
-	Role   string     `json:"role"`
-	Name   string     `json:"name"`
-	Input  string     `json:"input"`
-	Point  [2]float64 `json:"point"`
-	Bounds [4]float64 `json:"bounds"`
+	Kind    string     `json:"kind"`
+	Role    string     `json:"role"`
+	Name    string     `json:"name"`
+	Input   string     `json:"input"`
+	Point   [2]float64 `json:"point"`
+	Bounds  [4]float64 `json:"bounds"`
+	Matches int        `json:"matches"`
 }
 
 type devActionAXNode struct {
@@ -37,7 +40,7 @@ type devActionAXNode struct {
 	} `json:"properties"`
 }
 
-func parseDevRendererAction(kind, role, name string) (*devRendererAction, error) {
+func parseDevRendererAction(kind, role, name string, nth int) (*devRendererAction, error) {
 	kind = strings.TrimSpace(kind)
 	role = strings.TrimSpace(role)
 	name = strings.TrimSpace(name)
@@ -59,7 +62,10 @@ func parseDevRendererAction(kind, role, name string) (*devRendererAction, error)
 	if len(name) > 240 || strings.ContainsFunc(name, unicode.IsControl) {
 		return nil, fmt.Errorf("--name must be bounded text without control characters")
 	}
-	return &devRendererAction{Kind: kind, Role: role, Name: name}, nil
+	if nth < -1 {
+		return nil, fmt.Errorf("--nth must be a 0-based match index")
+	}
+	return &devRendererAction{Kind: kind, Role: role, Name: name, Nth: nth, NthSet: nth >= 0}, nil
 }
 
 func validDevActionRole(role string) bool {
@@ -126,13 +132,22 @@ func performDevRendererAction(
 			"no renderer node exactly matches role %q and name %q", action.Role, action.Name,
 		)
 	}
-	if len(matches) > 1 {
+	if action.NthSet && action.Nth >= len(matches) {
 		return devRendererActionReceipt{}, fmt.Errorf(
-			"%d renderer nodes match role %q and name %q; the action is ambiguous",
-			len(matches), action.Role, action.Name,
+			"--nth %d is out of range; %d renderer nodes match role %q and name %q",
+			action.Nth, len(matches), action.Role, action.Name,
+		)
+	}
+	if !action.NthSet && len(matches) > 1 {
+		return devRendererActionReceipt{}, fmt.Errorf(
+			"%d renderer nodes match role %q and name %q; select one with --nth 0..%d",
+			len(matches), action.Role, action.Name, len(matches)-1,
 		)
 	}
 	target := matches[0]
+	if action.NthSet {
+		target = matches[action.Nth]
+	}
 	for _, property := range target.Properties {
 		if property.Name == "disabled" && snapshotValueBool(property.Value.Value) {
 			return devRendererActionReceipt{}, fmt.Errorf(
@@ -180,7 +195,7 @@ func performDevRendererAction(
 	}
 	return devRendererActionReceipt{
 		Kind: action.Kind, Role: action.Role, Name: action.Name, Input: "cdp",
-		Point: point, Bounds: bounds,
+		Point: point, Bounds: bounds, Matches: len(matches),
 	}, nil
 }
 
