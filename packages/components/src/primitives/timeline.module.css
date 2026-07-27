@@ -239,6 +239,15 @@
   color: var(--oc-ink-strong);
   font: 600 9px / 1 var(--oc-font-sans);
   touch-action: none;
+  container-type: inline-size;
+}
+
+/* On narrow clips the identity wins: the LINK badge yields its space to the
+   name; linked state stays on the selection policy strip and in titles. */
+@container (max-width: 96px) {
+  .timelineItemBadge {
+    display: none;
+  }
 }
 
 .timelineItemVideo {
