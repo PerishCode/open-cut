@@ -171,3 +171,31 @@ func devRegionClip(ctx context.Context, cdp devCDPCaller, selector string) (map[
 		"x": bounds[0], "y": bounds[1], "width": bounds[2], "height": bounds[3], "scale": 1,
 	}, nil
 }
+
+func parseDevDragDelta(value string) (float64, float64, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, 0, fmt.Errorf("--action drag requires --by dx[,dy]")
+	}
+	xText, yText, found := strings.Cut(trimmed, ",")
+	x, xErr := strconv.ParseFloat(strings.TrimSpace(xText), 64)
+	if xErr != nil {
+		return 0, 0, fmt.Errorf("--by must be numeric dx[,dy]")
+	}
+	y := 0.0
+	if found {
+		var yErr error
+		y, yErr = strconv.ParseFloat(strings.TrimSpace(yText), 64)
+		if yErr != nil {
+			return 0, 0, fmt.Errorf("--by must be numeric dx[,dy]")
+		}
+	}
+	if x == 0 && y == 0 {
+		return 0, 0, fmt.Errorf("--by must move at least one axis")
+	}
+	const maximumDelta = 4000.0
+	if x > maximumDelta || x < -maximumDelta || y > maximumDelta || y < -maximumDelta {
+		return 0, 0, fmt.Errorf("--by must stay within ±%d pixels", int(maximumDelta))
+	}
+	return x, y, nil
+}

@@ -17,16 +17,21 @@ type devRendererAction struct {
 	Name   string
 	Nth    int
 	NthSet bool
+	ByX    float64
+	ByY    float64
+	Hold   bool
 }
 
 type devRendererActionReceipt struct {
-	Kind    string     `json:"kind"`
-	Role    string     `json:"role"`
-	Name    string     `json:"name"`
-	Input   string     `json:"input"`
-	Point   [2]float64 `json:"point"`
-	Bounds  [4]float64 `json:"bounds"`
-	Matches int        `json:"matches"`
+	Kind    string      `json:"kind"`
+	Role    string      `json:"role"`
+	Name    string      `json:"name"`
+	Input   string      `json:"input"`
+	Point   [2]float64  `json:"point"`
+	To      *[2]float64 `json:"to,omitempty"`
+	Held    bool        `json:"held,omitempty"`
+	Bounds  [4]float64  `json:"bounds"`
+	Matches int         `json:"matches"`
 }
 
 type devActionAXNode struct {
@@ -50,11 +55,11 @@ func parseDevRendererAction(kind, role, name string, nth int) (*devRendererActio
 		}
 		return nil, nil
 	}
-	if kind != "click" {
+	if kind != "click" && kind != "drag" {
 		return nil, fmt.Errorf("unsupported --action %q", kind)
 	}
 	if role == "" || name == "" {
-		return nil, fmt.Errorf("--action click requires exact --role and --name")
+		return nil, fmt.Errorf("--action %s requires exact --role and --name", kind)
 	}
 	if len(role) > 80 || !validDevActionRole(role) {
 		return nil, fmt.Errorf("--role must be a bounded accessible role token")
@@ -91,7 +96,7 @@ func performDevRendererAction(
 	cdp devCDPCaller,
 	action devRendererAction,
 ) (devRendererActionReceipt, error) {
-	if action.Kind != "click" {
+	if action.Kind != "click" && action.Kind != "drag" {
 		return devRendererActionReceipt{}, fmt.Errorf("unsupported renderer action %q", action.Kind)
 	}
 	var document struct {
@@ -180,7 +185,34 @@ func performDevRendererAction(
 	events := []map[string]any{
 		{"type": "mouseMoved", "x": point[0], "y": point[1]},
 		{"type": "mousePressed", "x": point[0], "y": point[1], "button": "left", "buttons": 1, "clickCount": 1},
-		{"type": "mouseReleased", "x": point[0], "y": point[1], "button": "left", "buttons": 0, "clickCount": 1},
+	}
+	receipt := devRendererActionReceipt{
+		Kind: action.Kind, Role: action.Role, Name: action.Name, Input: "cdp",
+		Point: point, Bounds: bounds, Matches: len(matches),
+	}
+	if action.Kind == "drag" {
+		const steps = 4
+		for step := 1; step <= steps; step++ {
+			fraction := float64(step) / steps
+			events = append(events, map[string]any{
+				"type": "mouseMoved",
+				"x":    point[0] + action.ByX*fraction, "y": point[1] + action.ByY*fraction,
+				"button": "left", "buttons": 1,
+			})
+		}
+		target := [2]float64{point[0] + action.ByX, point[1] + action.ByY}
+		receipt.To = &target
+		receipt.Held = action.Hold
+		if !action.Hold {
+			events = append(events, map[string]any{
+				"type": "mouseReleased", "x": target[0], "y": target[1],
+				"button": "left", "buttons": 0, "clickCount": 1,
+			})
+		}
+	} else {
+		events = append(events, map[string]any{
+			"type": "mouseReleased", "x": point[0], "y": point[1], "button": "left", "buttons": 0, "clickCount": 1,
+		})
 	}
 	for _, event := range events {
 		if err := cdp.Call(ctx, "Input.dispatchMouseEvent", event, nil); err != nil {
@@ -193,10 +225,28 @@ func performDevRendererAction(
 	}, &settled); err != nil {
 		return devRendererActionReceipt{}, err
 	}
-	return devRendererActionReceipt{
-		Kind: action.Kind, Role: action.Role, Name: action.Name, Input: "cdp",
-		Point: point, Bounds: bounds, Matches: len(matches),
-	}, nil
+	return receipt, nil
+}
+
+// releaseHeldDrag cancels a held drag after captures: Escape lets the renderer
+// abandon the gesture semantically, and the release returns the button state.
+func releaseHeldDrag(ctx context.Context, cdp devCDPCaller, receipt devRendererActionReceipt) error {
+	for _, kind := range []string{"keyDown", "keyUp"} {
+		if err := cdp.Call(ctx, "Input.dispatchKeyEvent", map[string]any{
+			"type": kind, "key": "Escape", "code": "Escape",
+			"windowsVirtualKeyCode": 27, "nativeVirtualKeyCode": 27,
+		}, nil); err != nil {
+			return err
+		}
+	}
+	target := receipt.Point
+	if receipt.To != nil {
+		target = *receipt.To
+	}
+	return cdp.Call(ctx, "Input.dispatchMouseEvent", map[string]any{
+		"type": "mouseReleased", "x": target[0], "y": target[1],
+		"button": "left", "buttons": 0, "clickCount": 1,
+	}, nil)
 }
 
 func devActionViewport(ctx context.Context, cdp devCDPCaller) ([2]float64, error) {

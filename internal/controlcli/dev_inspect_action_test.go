@@ -229,3 +229,50 @@ func (fake *fakeActionCDP) methods() []string {
 	}
 	return methods
 }
+
+func TestParseDevDragDeltaBounds(t *testing.T) {
+	if x, y, err := parseDevDragDelta("90"); err != nil || x != 90 || y != 0 {
+		t.Fatalf("x=%v y=%v err=%v", x, y, err)
+	}
+	if x, y, err := parseDevDragDelta("-40, 12.5"); err != nil || x != -40 || y != 12.5 {
+		t.Fatalf("x=%v y=%v err=%v", x, y, err)
+	}
+	for _, invalid := range []string{"", "0", "0,0", "abc", "5000", "10,-9000"} {
+		if _, _, err := parseDevDragDelta(invalid); err == nil {
+			t.Fatalf("delta %q parsed", invalid)
+		}
+	}
+}
+
+func TestPerformDevRendererHeldDragPressesAndMovesWithoutRelease(t *testing.T) {
+	cdp := &fakeActionCDP{
+		nodes: []any{actionAXNode(42, "button", "Move clip", false)},
+		quads: [][]float64{{10, 20, 110, 20, 110, 60, 10, 60}},
+	}
+	receipt, err := performDevRendererAction(context.Background(), cdp, devRendererAction{
+		Kind: "drag", Role: "button", Name: "Move clip", Nth: -1, ByX: 90, Hold: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !receipt.Held || receipt.To == nil || receipt.To[0] != receipt.Point[0]+90 {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	pressed, released, moves := 0, 0, 0
+	for _, call := range cdp.calls {
+		if call.method != "Input.dispatchMouseEvent" {
+			continue
+		}
+		switch call.parameters["type"] {
+		case "mousePressed":
+			pressed++
+		case "mouseReleased":
+			released++
+		case "mouseMoved":
+			moves++
+		}
+	}
+	if pressed != 1 || released != 0 || moves < 4 {
+		t.Fatalf("pressed=%d released=%d moves=%d", pressed, released, moves)
+	}
+}
