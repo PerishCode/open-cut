@@ -1,6 +1,6 @@
 //go:build linux
 
-package lifecycle
+package process
 
 import "testing"
 
