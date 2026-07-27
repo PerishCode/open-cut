@@ -94,10 +94,10 @@ export function narrativeNodeLabel(node: NarrativeNode): string {
         node.authoredText.revision
       }`;
     case "source-excerpt": {
+      // The range leads: neighboring excerpts often share their opening
+      // words, and the differing span is what tells them apart in a scan.
       const range = node.sourceExcerpt.sourceRange;
-      return `SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · ${formatClock(range.start)} → ${formatClockEnd(
-        range,
-      )} · r${node.sourceExcerpt.revision}`;
+      return `${formatClock(range.start)} → ${formatClockEnd(range)} · SOURCE EXCERPT · ${node.evidenceStatus.toUpperCase()} · r${node.sourceExcerpt.revision}`;
     }
     case "visual-intent":
       return `VISUAL ${node.visualIntent.purpose.toUpperCase()} · ${formatLanguageLabel(

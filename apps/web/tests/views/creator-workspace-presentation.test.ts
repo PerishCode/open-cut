@@ -68,7 +68,7 @@ describe("caption presentation", () => {
           tombstoned: false,
         },
       }),
-    ).toBe("SOURCE EXCERPT · EXACT · 00:00.01 → 00:03.66 · r4");
+    ).toBe("00:00.01 → 00:03.66 · SOURCE EXCERPT · EXACT · r4");
   });
 
   it("keeps automatic language policy out of Story metadata codes", () => {
