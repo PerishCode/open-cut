@@ -588,6 +588,21 @@ describe("atomic components", () => {
     expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a strip's trailing action accessible beside its identity", () => {
+    render(
+      <ControlStrip
+        action={<Button onPress={() => undefined}>Review restore</Button>}
+        hint="2 KiB · 2026-07-23 04:47 UTC"
+        label="Project version Before Agent turn at revision 16"
+        summary="AUTO · r16 · Before Agent turn"
+      />,
+    );
+
+    const strip = screen.getByRole("region", { name: "Project version Before Agent turn at revision 16" });
+    expect(within(strip).getByText("AUTO · r16 · Before Agent turn")).toBeTruthy();
+    expect(within(strip).getByRole("button", { name: "Review restore" })).toBeTruthy();
+  });
+
   it("renders editorial strips with content-first hierarchy without consumer styling props", () => {
     render(
       <ControlStrip

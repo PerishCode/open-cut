@@ -28,6 +28,12 @@ export type ControlStripProps = Readonly<{
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
   /** Optional horizontal choice and action controls. */
   children?: ReactNode;
+  /**
+   * Optional trailing primary verb (or status) for this row. Keeps full
+   * button chrome in a stable trailing column instead of flattening into
+   * the body row.
+   */
+  action?: ReactNode;
 }>;
 
 /**
@@ -42,16 +48,14 @@ export function ControlStrip({
   keyboardShortcuts,
   onKeyDown,
   children,
+  action,
 }: ControlStripProps) {
   const editorialMode = presentation === "editorial";
-  return (
-    <section
-      aria-keyshortcuts={keyboardShortcuts}
-      aria-label={label}
-      className={editorialMode ? `${styles.controlStrip} ${editorial.editorial}` : styles.controlStrip}
-      tabIndex={onKeyDown ? 0 : undefined}
-      onKeyDown={onKeyDown}
-    >
+  const classNames = [styles.controlStrip];
+  if (editorialMode) classNames.push(editorial.editorial);
+  if (action) classNames.push(editorial.withAction);
+  const lead = (
+    <>
       {summary || hint ? (
         <div className={editorialMode ? editorial.editorialMeta : styles.controlStripMeta}>
           {summary ? (
@@ -69,6 +73,24 @@ export function ControlStrip({
           {children}
         </div>
       ) : null}
+    </>
+  );
+  return (
+    <section
+      aria-keyshortcuts={keyboardShortcuts}
+      aria-label={label}
+      className={classNames.join(" ")}
+      tabIndex={onKeyDown ? 0 : undefined}
+      onKeyDown={onKeyDown}
+    >
+      {action ? (
+        <>
+          <div className={editorial.lead}>{lead}</div>
+          <div className={editorial.action}>{action}</div>
+        </>
+      ) : (
+        lead
+      )}
     </section>
   );
 }

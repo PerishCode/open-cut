@@ -138,6 +138,23 @@ export function CreatorVersions({
             const title = version.name ?? versionSourceLabel(version);
             return (
               <ControlStrip
+                action={
+                  confirming ? undefined : current ? (
+                    <Status state="ready">Current</Status>
+                  ) : (
+                    <Button
+                      disabled={restoring}
+                      label={`Review restore ${title} at r${version.capturedProjectRevision}`}
+                      onPress={() => {
+                        setActionError(undefined);
+                        setNotice(undefined);
+                        setRestoreCandidate(version.id);
+                      }}
+                    >
+                      Review restore
+                    </Button>
+                  )
+                }
                 hint={`${formatByteSize(version.byteSize)} · ${formatTimestamp(version.createdAt)}`}
                 key={version.id}
                 label={`Project version ${title} at revision ${version.capturedProjectRevision}`}
@@ -157,21 +174,7 @@ export function CreatorVersions({
                       Cancel
                     </Button>
                   </>
-                ) : current ? (
-                  <Status state="ready">Current</Status>
-                ) : (
-                  <Button
-                    disabled={restoring}
-                    label={`Review restore ${title} at r${version.capturedProjectRevision}`}
-                    onPress={() => {
-                      setActionError(undefined);
-                      setNotice(undefined);
-                      setRestoreCandidate(version.id);
-                    }}
-                  >
-                    Review restore
-                  </Button>
-                )}
+                ) : null}
               </ControlStrip>
             );
           })}

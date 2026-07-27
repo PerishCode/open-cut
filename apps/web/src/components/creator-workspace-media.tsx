@@ -67,14 +67,16 @@ export function AssetSummary({
   );
   return (
     <ControlStrip
+      action={
+        <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
+          {selected ? "In Viewer" : "Open source"}
+        </Button>
+      }
       hint={asset.facts ? formatMediaFacts(asset.facts) : "Awaiting identity and media facts"}
       label={`${asset.displayName} actions`}
       summary={asset.displayName}
     >
       <Status state={readinessState}>{readiness}</Status>
-      <Button disabled={!previewable} pressed={selected} onPress={onPreview}>
-        {selected ? "In Viewer" : "Open source"}
-      </Button>
       <Button variant="quiet" onPress={onContext}>
         @ Agent
       </Button>

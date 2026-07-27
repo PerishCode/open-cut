@@ -237,6 +237,42 @@ export function CreatorExport({
             const details = exportDetails(lineage);
             return (
               <ControlStrip
+                action={
+                  activeLineage ? (
+                    <Button
+                      disabled={pending}
+                      label={`Cancel export ${actionIdentity}`}
+                      onPress={() => void cancel(lineage)}
+                    >
+                      Cancel export
+                    </Button>
+                  ) : lineage.export.recovery === "retry-job" ? (
+                    <Button
+                      disabled={!available || pending}
+                      label={`Retry export ${actionIdentity}`}
+                      onPress={() => void retry(lineage)}
+                    >
+                      Retry export
+                    </Button>
+                  ) : availableArtifact && !confirmingDelete ? (
+                    <>
+                      <Button
+                        disabled={pending}
+                        label={`Save export ${actionIdentity} as`}
+                        onPress={() => void saveAs(lineage)}
+                      >
+                        Save As…
+                      </Button>
+                      <Button
+                        disabled={pending}
+                        label={`Delete export ${actionIdentity}`}
+                        onPress={() => setDeleteConfirmation(availableArtifact.id)}
+                      >
+                        Delete export…
+                      </Button>
+                    </>
+                  ) : undefined
+                }
                 hint={details[0]}
                 key={rootID}
                 label={`Export ${actionIdentity}`}
@@ -250,42 +286,6 @@ export function CreatorExport({
                 ))}
                 {confirmingDelete ? (
                   <Status state="pending">This removes the exported media but keeps its job history.</Status>
-                ) : null}
-                {activeLineage ? (
-                  <Button
-                    disabled={pending}
-                    label={`Cancel export ${actionIdentity}`}
-                    onPress={() => void cancel(lineage)}
-                  >
-                    Cancel export
-                  </Button>
-                ) : null}
-                {lineage.export.recovery === "retry-job" ? (
-                  <Button
-                    disabled={!available || pending}
-                    label={`Retry export ${actionIdentity}`}
-                    onPress={() => void retry(lineage)}
-                  >
-                    Retry export
-                  </Button>
-                ) : null}
-                {availableArtifact && !confirmingDelete ? (
-                  <>
-                    <Button
-                      disabled={pending}
-                      label={`Save export ${actionIdentity} as`}
-                      onPress={() => void saveAs(lineage)}
-                    >
-                      Save As…
-                    </Button>
-                    <Button
-                      disabled={pending}
-                      label={`Delete export ${actionIdentity}`}
-                      onPress={() => setDeleteConfirmation(availableArtifact.id)}
-                    >
-                      Delete export…
-                    </Button>
-                  </>
                 ) : null}
                 {overwrite ? (
                   <Button

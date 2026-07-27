@@ -38,3 +38,32 @@
 .editorialBody {
   margin-top: 2px;
 }
+
+/**
+ * Opt-in trailing action column: the row's primary verb keeps full button
+ * chrome and a stable trailing position instead of flattening into the body.
+ */
+
+.withAction {
+  align-items: center;
+  column-gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.lead {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action > button {
+  min-height: 22px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
