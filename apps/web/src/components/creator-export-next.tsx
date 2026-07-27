@@ -69,12 +69,11 @@ export function CreatorExportNext({
       <ControlStrip
         hint={
           hasContent
-            ? "Destination chosen after render · WebM · VP9 / Opus"
+            ? `Sequence r${sequenceRevision} · Destination chosen after render · WebM · VP9 / Opus`
             : "Add a clip or caption to the Sequence before exporting."
         }
         label="Next export"
         summary={suggestedName}
-        summaryDetail={`NEXT · SEQUENCE r${sequenceRevision}`}
       >
         <Status state={nextStatus.state}>{nextStatus.label}</Status>
         <Button
