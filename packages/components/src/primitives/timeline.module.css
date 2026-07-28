@@ -458,3 +458,29 @@
     display: none;
   }
 }
+
+/* Mid-drag legibility: the gesture group's durable seeds keep their slots but
+   yield their type, and ghosts paint on an opaque wash so neighbor labels do
+   not bleed through the preview. */
+.timelineItemDragging .timelineItemLabel,
+.timelineItemDragging .timelineItemBadge {
+  visibility: hidden;
+}
+
+.timelineItemGhost.timelineItemVideo {
+  background: color-mix(in srgb, var(--oc-accent) 34%, var(--oc-surface));
+}
+
+.timelineItemGhost.timelineItemAudio {
+  background: color-mix(in srgb, #70b7ff 34%, var(--oc-surface));
+}
+
+.timelineItemGhost.timelineItemCaption {
+  background: color-mix(in srgb, #f4d35e 34%, var(--oc-surface));
+}
+
+/* The proposal owns its rectangle: full opacity keeps covered neighbor type
+   from bleeding through; the dashed edge and tone wash still read as preview. */
+.timelineItemGhost {
+  opacity: 1;
+}

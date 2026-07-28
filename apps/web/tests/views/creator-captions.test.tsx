@@ -114,6 +114,60 @@ describe("Creator captions", () => {
     await waitFor(() => expect(onCommitted).toHaveBeenCalledOnce());
     expect(screen.getByText("Creator Caption transaction committed")).toBeTruthy();
   });
+
+  it("labels Clip choices by track and surfaces the product reason when a preview is rejected", async () => {
+    vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "018f0a60-7b80-7a01-8000-000000000a12") });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/caption-derivation-preview")) {
+          return new Response(
+            JSON.stringify({
+              title: "Unprocessable Entity",
+              status: 422,
+              detail: "edit request is invalid",
+              errors: [
+                {
+                  message:
+                    "edit request is invalid: caption line does not fit: 80 characters need 4s at the " +
+                    "20-cps reading limit but only 3.72s of clip time is available; shorten the text or extend the clip",
+                },
+              ],
+            }),
+            { status: 422, headers: { "content-type": "application/problem+json" } },
+          );
+        }
+        throw new Error(`unexpected request ${url}`);
+      }),
+    );
+    const base = createContracts();
+    const contracts = { ...base, start: () => undefined, close: () => undefined };
+    render(
+      <ContractsProvider contracts={contracts}>
+        <CreatorCaptions
+          alignments={[]}
+          clips={[clip()]}
+          onCommitted={vi.fn(async () => undefined)}
+          onReload={async () => undefined}
+          projectId={durableID(ids.project)}
+          sequenceId={durableID(ids.sequence)}
+          source={{ sourceExcerpt: excerpt(), evidenceStatus: "exact" }}
+          tracks={tracks()}
+        />
+      </ContractsProvider>,
+    );
+
+    const choose = screen.getByRole("button", { name: /Choose Clip · A1 · / });
+    expect(choose.textContent).not.toContain(ids.clip);
+    fireEvent.click(screen.getByRole("button", { name: "Preview readable captions" }));
+
+    await screen.findByText(/caption line does not fit: 80 characters need 4s at the 20-cps reading limit/);
+    expect(
+      screen.queryByText("Could not prepare a Caption review. Check the selected inputs and try again."),
+    ).toBeNull();
+    expect(screen.queryByText(/edit request is invalid:/)).toBeNull();
+  });
 });
 
 function excerpt(): SourceExcerpt {

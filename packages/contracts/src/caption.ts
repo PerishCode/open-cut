@@ -82,7 +82,7 @@ export function createCreatorCaptionPort(): CreatorCaptionPort {
     preview: async (input, signal) => {
       const request = normalizePreviewInput(input);
       const response = await previewCreatorCaptions(request.projectId, request.sequenceId, request.body, { signal });
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       const { review, envelope } = normalizeReview(response.data, request);
       envelopes.set(review, envelope);
       return review;

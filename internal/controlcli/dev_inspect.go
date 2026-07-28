@@ -87,8 +87,9 @@ func connectDevRenderer(
 type devInspectOptions struct {
 	repository, baseDir, screenshot, evaluate, evaluateFile, setFile, endpoint, match string
 	action, role, name                                                                string
-	viewport, region                                                                  string
+	viewport, region, by                                                              string
 	nth                                                                               int
+	hold                                                                              bool
 	settle                                                                            time.Duration
 	snapshot                                                                          bool
 	watchErrors                                                                       time.Duration
@@ -110,6 +111,9 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().StringVar(&options.role, "role", "", "exact accessible role for --action")
 	command.Flags().StringVar(&options.name, "name", "", "exact accessible name for --action")
 	command.Flags().IntVar(&options.nth, "nth", -1, "0-based match to act on when --action matches several nodes")
+	command.Flags().StringVar(&options.by, "by", "", "drag delta as dx[,dy] CSS pixels for --action drag")
+	command.Flags().BoolVar(&options.hold, "hold", false,
+		"keep the drag mid-flight through --snapshot/--screenshot, then cancel it instead of committing")
 	command.Flags().StringVar(&options.viewport, "viewport", "", "resize the renderer window to WxH (e.g. 1440x900) first")
 	command.Flags().DurationVar(&options.settle, "settle", 500*time.Millisecond, "settle delay after --viewport resize")
 	command.Flags().StringVar(&options.region, "region", "", "clip --screenshot to the first CSS selector match")
@@ -132,6 +136,17 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 	}
 	if options.nth > 0 && action == nil {
 		fmt.Fprintln(stderr, "dev inspect --nth requires --action")
+		return 2
+	}
+	if action != nil && action.Kind == "drag" {
+		byX, byY, byErr := parseDevDragDelta(options.by)
+		if byErr != nil {
+			fmt.Fprintf(stderr, "dev inspect: %v\n", byErr)
+			return 2
+		}
+		action.ByX, action.ByY, action.Hold = byX, byY, options.hold
+	} else if options.by != "" || options.hold {
+		fmt.Fprintln(stderr, "dev inspect --by and --hold require --action drag")
 		return 2
 	}
 	if options.region != "" && options.screenshot == "" {
@@ -249,6 +264,7 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 			result["evalFileBytes"] = evaluateFileBytes
 		}
 	}
+	var heldDrag *devRendererActionReceipt
 	if action != nil {
 		receipt, actionErr := performDevRendererAction(requestContext, cdp, *action)
 		if actionErr != nil {
@@ -256,6 +272,9 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 			return 1
 		}
 		result["action"] = receipt
+		if receipt.Held {
+			heldDrag = &receipt
+		}
 	}
 	if options.snapshot {
 		snapshot, snapshotErr := captureDevRendererSnapshot(requestContext, cdp)
@@ -299,6 +318,12 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		}
 		result["screenshot"] = destination
 		result["screenshotBytes"] = len(decoded)
+	}
+	if heldDrag != nil {
+		if err := releaseHeldDrag(requestContext, cdp, *heldDrag); err != nil {
+			fmt.Fprintf(stderr, "release held drag: %v\n", err)
+			return 1
+		}
 	}
 	if errorObservation != nil {
 		report, observeErr := finishDevErrorObservation(requestContext, cdp, *errorObservation)

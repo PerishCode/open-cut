@@ -113,6 +113,7 @@ export function CreatorTimeline({
       durationSeconds: seconds(clip.timelineRange.duration),
       selected: clip.id === selected?.id || clip.id === snapshot.selectionHint?.clipId || handoffClipIds.has(clip.id),
       linked: clip.linkGroupId !== undefined,
+      ghostGroup: snapshot.scope === "linked" && clip.linkGroupId ? clip.linkGroupId : undefined,
     })),
     ...captions.map((caption) => {
       const trackOrdinal = captions.filter(

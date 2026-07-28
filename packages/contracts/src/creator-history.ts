@@ -71,7 +71,7 @@ export function createCreatorHistoryPort(): CreatorHistoryPort {
         },
         { signal },
       );
-      if (response.status !== 200) throw creatorEditResponseError(response.status);
+      if (response.status !== 200) throw creatorEditResponseError(response.status, response.data);
       return normalizeCreatorHistory(response.data, before);
     },
   };
