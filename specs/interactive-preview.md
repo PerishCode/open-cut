@@ -86,6 +86,26 @@ typed blocked reasons, conflict recovery, and pending-work-loss notices. A
 draft is never silently rebased, and a refusal is never presented as an empty
 timeline that merely snapped back.
 
+## Capability precedence
+
+At the commit tier the stable CLI is never a narrower surface than the first
+party UI: any committed truth the UI can produce must be producible through the
+registry-derived CLI, byte-identically. The schema registry is the single
+attachment point that makes this structural — an operation family exists for
+every surface the moment it registers, and the family order below puts CLI
+reachability at step one, before any gesture work.
+
+Draft-tier affordances — overlays, ghosts, refusal and loss presentation — are
+interaction feedback, not capability; they carry nothing committable that the
+CLI cannot submit directly, so their UI exclusivity does not breach precedence.
+
+Deliberate authority edges may restrict the Agent below the creator — today:
+project genesis and media import, both consent-bound creator transactions, and
+the typed gesture-preview outcome, which remains a creator-port convenience
+until its vocabulary reaches the CLI. Every such edge must be enumerated here
+or in the owning baseline; an unenumerated capability gap between the surfaces
+is a defect, not a policy.
+
 ## The feature family shape
 
 Every future creative capability is added in this order, and the first two
