@@ -42,6 +42,14 @@ func TestValidateEditProposeInputReportsActionableReasons(t *testing.T) {
 	}
 	empty := base
 	empty.Operations = nil
+	captionID, err := domain.ParseCaptionID("018f0000-0000-7000-8000-0000000000a2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bareMove := base
+	bareMove.Operations = []EditOperationInput{{Type: domain.EditMoveClip}}
+	bareRemoveCaption := base
+	bareRemoveCaption.Operations = []EditOperationInput{{Type: domain.EditRemoveCaption, CaptionID: &captionID, Range: &domain.TimeRange{}}}
 
 	for _, testCase := range []struct {
 		name  string
@@ -50,6 +58,8 @@ func TestValidateEditProposeInputReportsActionableReasons(t *testing.T) {
 	}{
 		{"duplicate precondition", duplicate, "duplicate precondition"},
 		{"empty operations", empty, "1 to 512 operations"},
+		{"malformed move-clip names its shape", bareMove, "move-clip requires clip, scope (linked|single), trackId, and timelineStart"},
+		{"malformed remove-caption names its shape", bareRemoveCaption, "remove-caption requires captionId only"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			err := validateEditProposeInput(testCase.input)
