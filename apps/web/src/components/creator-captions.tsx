@@ -3,7 +3,6 @@ import {
   type Alignment,
   type Clip,
   type CreatorEditCommit,
-  CreatorEditError,
   type DurableID,
   type Track,
   useContracts,
@@ -11,6 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { CreatorCaptionController, type CreatorCaptionSource } from "../lib/creator-caption-controller.js";
+import { editFailureReason } from "../lib/creator-edit-failure.js";
 import { formatClock, formatClockEnd } from "./creator-workspace-presentation.js";
 
 type AsyncResult = unknown;
@@ -221,8 +221,4 @@ function candidateLabel(value: "exact-alignment" | "source-stream" | "compatible
 
 function clipTrackLabel(clip: Clip, tracks: readonly Track[]): string {
   return tracks.find((track) => track.id === clip.trackId)?.label ?? "unlabeled track";
-}
-
-function editFailureReason(error: Error): string | undefined {
-  return error instanceof CreatorEditError ? error.reason : undefined;
 }
