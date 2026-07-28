@@ -1,9 +1,11 @@
 package renderengine
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/PerishCode/open-cut/product/domain"
+	"github.com/PerishCode/open-cut/product/rendercontract"
 )
 
 func settleTime(t *testing.T, value int64, scale int32) domain.RationalTime {
@@ -20,27 +22,22 @@ func settleRange(t *testing.T, start, duration domain.RationalTime) domain.TimeR
 	return domain.TimeRange{Start: start, Duration: duration}
 }
 
-func settleFrameCount(t *testing.T, value uint64) domain.UInt64 {
-	t.Helper()
-	count, err := domain.NewUInt64(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return count
-}
-
 // settlePlanFixture is two seconds of 30fps output: one instruction covering
 // [0s, 2s) from source 5s, and one covering [2s, 3s) from source 0s.
 func settlePlanFixture(t *testing.T) domain.RenderPlanPayload {
 	t.Helper()
+	format := domain.DefaultSequenceFormat()
+	format.CanvasWidth, format.CanvasHeight = 64, 64
+	duration := settleTime(t, 3, 1)
+	output, err := rendercontract.SequencePreviewOutput(format, duration)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return domain.RenderPlanPayload{
-		Duration: settleTime(t, 3, 1),
-		Output: domain.RenderOutputPolicy{
-			CanvasWidth: 64, CanvasHeight: 64,
-			FrameRate:        settleTime(t, 30, 1),
-			VideoFrameCount:  settleFrameCount(t, 90),
-			AudioSampleCount: settleFrameCount(t, 144_000),
-		},
+		Purpose:        domain.RenderPurposeSequencePreview,
+		SequenceFormat: format,
+		Duration:       duration,
+		Output:         output,
 		Video: []domain.RenderVideoInstruction{
 			{
 				TimelineRange: settleRange(t, settleTime(t, 0, 1), settleTime(t, 2, 1)),
@@ -135,8 +132,15 @@ func TestSettlePlanDropsAudioAndBoundsTheOutputToOneFrame(t *testing.T) {
 	if settled.Audio != nil {
 		t.Fatalf("a settled frame carries no samples: %+v", settled.Audio)
 	}
-	if settled.Output.VideoFrameCount.Value() != 1 || settled.Output.AudioSampleCount.Value() != 0 {
-		t.Fatalf("output=%+v", settled.Output)
+	expected, err := rendercontract.SequencePreviewOutput(plan.SequenceFormat, settled.Duration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settled.Output != expected {
+		t.Fatal("the settled output policy was edited rather than derived from its duration")
+	}
+	if settled.Output.VideoFrameCount.Value() != 1 || settled.Output.AudioSampleCount.Value() == 0 {
+		t.Fatalf("one frame still declares the silence its profile requires: %+v", settled.Output)
 	}
 	oneFrame := settleTime(t, 1, 30)
 	comparison, err := settled.Duration.Compare(oneFrame)
@@ -148,18 +152,27 @@ func TestSettlePlanDropsAudioAndBoundsTheOutputToOneFrame(t *testing.T) {
 	}
 }
 
-func TestSettlePlanTreatsAnEmptyInstantAsAGapRatherThanAnError(t *testing.T) {
+// A plan's duration must equal its latest instruction end, so one frame of
+// nothing has no valid plan. Emptiness is reported rather than encoded.
+func TestSettlePlanReportsAnEmptyInstantInsteadOfEncodingOne(t *testing.T) {
 	plan := settlePlanFixture(t)
 	plan.Video = []domain.RenderVideoInstruction{{
 		TimelineRange: settleRange(t, settleTime(t, 0, 1), settleTime(t, 1, 1)),
 		SourceRange:   settleRange(t, settleTime(t, 0, 1), settleTime(t, 1, 1)),
 	}}
+	plan.Captions = nil
+	if _, err := SettlePlan(plan, 60); !errors.Is(err, ErrSettleInstantEmpty) {
+		t.Fatalf("err=%v", err)
+	}
+	plan.Captions = []domain.RenderCaptionInstruction{
+		{Text: "late", Range: settleRange(t, settleTime(t, 2, 1), settleTime(t, 1, 1))},
+	}
 	settled, err := SettlePlan(plan, 60)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(settled.Video) != 0 {
-		t.Fatalf("video=%+v", settled.Video)
+	if len(settled.Video) != 0 || len(settled.Captions) != 1 {
+		t.Fatal("a caption alone still makes the instant renderable")
 	}
 }
 
@@ -191,5 +204,55 @@ func TestSettledPlanDrivesTheOrdinaryCompositor(t *testing.T) {
 	}
 	if compositor.bindings[0].firstFrame != 0 || compositor.bindings[0].endFrame != 1 {
 		t.Fatalf("the settled binding does not cover exactly frame zero: %+v", compositor.bindings[0])
+	}
+}
+
+// The rebase has to produce a plan the contract accepts, not merely one the
+// compositor tolerates. A plan's output policy is derived from its duration, and
+// it may not carry inputs or fonts nothing references — settling has to honour
+// both or it silently produces a plan that can never be executed.
+func TestSettledPlanSatisfiesTheRenderContract(t *testing.T) {
+	plan := newVideoEvaluatorFixture(t, executionClosure(t)).manifest.Plan
+	if err := rendercontract.ValidateRenderPlanPayload(plan); err != nil {
+		t.Fatalf("the fixture plan is not a valid plan: %v", err)
+	}
+	for outputFrame := uint64(0); outputFrame < plan.Output.VideoFrameCount.Value(); outputFrame++ {
+		settled, err := SettlePlan(plan, outputFrame)
+		if errors.Is(err, ErrSettleInstantEmpty) {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("frame %d: %v", outputFrame, err)
+		}
+		if err := rendercontract.ValidateRenderPlanPayload(settled); err != nil {
+			t.Fatalf("frame %d: settled plan is not a valid plan: %v", outputFrame, err)
+		}
+	}
+}
+
+func TestSettlePlanCarriesOnlyTheMaterialItsInstructionsReference(t *testing.T) {
+	plan := newVideoEvaluatorFixture(t, executionClosure(t)).manifest.Plan
+	settled, err := SettlePlan(plan, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	referenced := make(map[string]struct{}, len(settled.Video))
+	for _, instruction := range settled.Video {
+		referenced[instruction.InputArtifactID.String()] = struct{}{}
+	}
+	if len(settled.Inputs) != len(referenced) {
+		t.Fatalf("inputs=%d referenced=%d", len(settled.Inputs), len(referenced))
+	}
+	for _, input := range settled.Inputs {
+		if _, used := referenced[input.ArtifactID.String()]; !used {
+			t.Fatalf("settled plan carries an input nothing references: %s", input.ArtifactID)
+		}
+	}
+	fonts := make(map[string]struct{}, len(settled.Captions))
+	for _, caption := range settled.Captions {
+		fonts[caption.Style.FontResourceID] = struct{}{}
+	}
+	if len(settled.FontResources) != len(fonts) {
+		t.Fatalf("fonts=%d referenced=%d", len(settled.FontResources), len(fonts))
 	}
 }
