@@ -16,6 +16,7 @@ import {
   useContracts,
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { readAndClearCaptionStagingMarker, writeCaptionStagingMarker } from "../lib/caption-staging-marker.js";
 import type { CreatorCaptionSource } from "../lib/creator-caption-controller.js";
 import { adoptViewerSequenceFromCommit } from "../lib/creator-timeline-controller.js";
 import {
@@ -101,7 +102,19 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
   const narrativeHandoff = useNarrativeHandoff();
   const [roughCutOccurrences, setRoughCutOccurrences] = useState([] as readonly CreatorRoughCutOccurrence[]);
   const [roughCutTimelineStart, setRoughCutTimelineStart] = useState<RationalTime>();
-  const [captionSource, setCaptionSource] = useState<CreatorCaptionSource>();
+  const [captionSource, setCaptionSourceState] = useState<CreatorCaptionSource>();
+  const [captionStagingCleared, setCaptionStagingCleared] = useState(false);
+  useEffect(() => {
+    if (readAndClearCaptionStagingMarker(project.id)) setCaptionStagingCleared(true);
+  }, [project.id]);
+  const setCaptionSource = useCallback(
+    (source: CreatorCaptionSource | undefined) => {
+      writeCaptionStagingMarker(project.id, source !== undefined);
+      if (source !== undefined) setCaptionStagingCleared(false);
+      setCaptionSourceState(source);
+    },
+    [project.id],
+  );
   const [historyRefreshEpoch, setHistoryRefreshEpoch] = useState(0);
   const [exportRefreshEpoch, setExportRefreshEpoch] = useState(0);
   const [exportActive, setExportActive] = useState(false);
@@ -666,6 +679,7 @@ export function CreatorWorkspace({ project, onExit }: { project: Project; onExit
                       projectId={project.id}
                       sequenceId={ready.overview.project.mainSequenceId}
                       source={captionSource}
+                      stagingCleared={captionStagingCleared}
                       tracks={ready.overview.tracks}
                     />
                   ) : null}

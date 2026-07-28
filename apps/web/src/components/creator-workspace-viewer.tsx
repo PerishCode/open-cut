@@ -1,4 +1,4 @@
-import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Tabs, Text } from "@open-cut/components";
+import { Button, ControlStrip, EditorSplit, MediaPlayer, Stack, Status, Tabs, Text } from "@open-cut/components";
 import type {
   Asset,
   DurableID,
@@ -132,7 +132,12 @@ function SequencePreparationSurface({
   };
   if (snapshot.status === "idle" || snapshot.status === "preparing") {
     const progress = preparation?.job ? ` · ${preparation.job.progressBasisPoints / 100}%` : "";
-    return <Text>Preparing immutable Sequence preview{progress}</Text>;
+    return (
+      <Stack spacing="compact">
+        <Status state="pending">Preparing immutable Sequence preview{progress}</Status>
+        <Text>Frames appear here once the pinned Sequence finishes rendering.</Text>
+      </Stack>
+    );
   }
   if (snapshot.status === "empty") return <Text>The pinned Sequence is empty.</Text>;
   if (snapshot.status === "unavailable") {

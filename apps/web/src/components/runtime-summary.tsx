@@ -2,7 +2,15 @@ import { Button, Heading, ProjectList, Stack, Text, TextField } from "@open-cut/
 import { type DurableID, useCreateProject, useProjects } from "@open-cut/contracts";
 import { useState } from "react";
 
-export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => void }) {
+export function RuntimeSummary({
+  currentProject,
+  onOpen,
+  onReturn,
+}: {
+  currentProject?: Readonly<{ id: DurableID; name: string }>;
+  onOpen?: (projectId: DurableID) => void;
+  onReturn?: () => void;
+}) {
   const projects = useProjects();
   const write = useCreateProject();
   const [name, setName] = useState("Untitled story");
@@ -20,6 +28,11 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
         A local workspace where you and your agent turn footage and writing into an editable, reversible video timeline.
         A project is one story: its script and its sequence, side by side.
       </Text>
+      {currentProject && onReturn ? (
+        <Button variant="primary" onPress={onReturn}>
+          Return to {currentProject.name}
+        </Button>
+      ) : null}
       {onOpen && projects.projects.length > 0 ? (
         <Stack spacing="compact">
           <Heading level={2} tone="eyebrow">
@@ -27,7 +40,11 @@ export function RuntimeSummary({ onOpen }: { onOpen?: (projectId: DurableID) => 
           </Heading>
           <ProjectList
             label="Projects"
-            projects={projects.projects.map((project) => ({ id: project.id, name: project.name }))}
+            projects={projects.projects.map((project) => ({
+              id: project.id,
+              name: project.name,
+              ...(project.id === currentProject?.id ? { meta: "Open now" } : {}),
+            }))}
             onOpen={(id) => {
               const match = projects.projects.find((project) => project.id === id);
               if (match) onOpen(match.id);

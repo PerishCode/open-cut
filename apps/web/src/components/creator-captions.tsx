@@ -23,6 +23,7 @@ export function CreatorCaptions({
   projectId,
   sequenceId,
   source,
+  stagingCleared,
   tracks,
 }: Readonly<{
   alignments: readonly Alignment[];
@@ -32,6 +33,7 @@ export function CreatorCaptions({
   projectId: DurableID;
   sequenceId: DurableID;
   source?: CreatorCaptionSource;
+  stagingCleared?: boolean;
   tracks: readonly Track[];
 }>) {
   const contracts = useContracts();
@@ -90,7 +92,16 @@ export function CreatorCaptions({
   }, [snapshot.phase]);
 
   if (!snapshot.source) {
-    return <Text tone="eyebrow">Story caption draft · choose captions in Story</Text>;
+    return (
+      <Stack spacing="compact">
+        {stagingCleared ? (
+          <Status state="unavailable">
+            Caption staging was cleared when this project closed · choose captions in Story again
+          </Status>
+        ) : null}
+        <Text tone="eyebrow">Story caption draft · choose captions in Story</Text>
+      </Stack>
+    );
   }
 
   return (
