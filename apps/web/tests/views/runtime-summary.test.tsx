@@ -31,4 +31,38 @@ describe("RuntimeSummary", () => {
     expect((screen.getByRole("button", { name: "Create and open" }) as HTMLButtonElement).disabled).toBe(false);
     expect(create).toHaveBeenCalledOnce();
   });
+
+  it("marks the open project and offers an explicit return when reached from a workspace", () => {
+    const base = createContracts();
+    const current = { id: "018f0a60-7b80-7a01-8000-000000000b02", name: "Second story" };
+    const projects = [{ id: "018f0a60-7b80-7a01-8000-000000000b01", name: "First story" }, current];
+    const snapshot = { projects };
+    const contracts = {
+      ...base,
+      projects: {
+        ...base.projects,
+        read: {
+          ...base.projects.read,
+          subscribe: () => () => undefined,
+          getSnapshot: () => snapshot,
+        },
+      },
+      start: () => undefined,
+      close: () => undefined,
+    };
+    const onReturn = vi.fn();
+    render(
+      <ContractsProvider contracts={contracts}>
+        <RuntimeSummary
+          currentProject={{ id: current.id, name: current.name }}
+          onOpen={() => undefined}
+          onReturn={onReturn}
+        />
+      </ContractsProvider>,
+    );
+
+    expect(screen.getByText("Open now")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Return to Second story" }));
+    expect(onReturn).toHaveBeenCalledOnce();
+  });
 });

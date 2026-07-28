@@ -19,10 +19,12 @@ export function HomeView() {
   return (
     <Surface label="Open Cut runtime">
       <RuntimeSummary
+        currentProject={showProjects && selected ? { id: selected.id, name: selected.name } : undefined}
         onOpen={(projectId) => {
           setSelectedId(projectId);
           setShowProjects(false);
         }}
+        onReturn={showProjects && selected ? () => setShowProjects(false) : undefined}
       />
     </Surface>
   );
