@@ -3,6 +3,7 @@ package devsuite
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,5 +96,29 @@ func TestPruneMemberLogsKeepsTwoGenerations(t *testing.T) {
 		if !wanted && err == nil {
 			t.Fatalf("%s should be pruned", name)
 		}
+	}
+}
+
+func TestStaleMemberArtifactsFlagsFilesNewerThanTheirProcess(t *testing.T) {
+	workDir := t.TempDir()
+	entry := filepath.Join(workDir, "dist", "sidecar", "index.js")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte("bundle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	member := Member{
+		App: "web", Executable: "node",
+		Args:      []string{"dist/sidecar/index.js", "--cell-stamp=dev/default/3/abc"},
+		Directory: workDir, StartedAt: time.Now().Add(time.Hour),
+	}
+	if stale := staleMemberArtifacts(Roster{Members: []Member{member}}); len(stale) != 0 {
+		t.Fatalf("artifact older than the process must not be stale, got %v", stale)
+	}
+	member.StartedAt = time.Now().Add(-time.Hour)
+	stale := staleMemberArtifacts(Roster{Members: []Member{member}})
+	if len(stale) != 1 || !strings.Contains(stale[0], "web: ") || !strings.Contains(stale[0], entry) {
+		t.Fatalf("expected one stale warning naming the web entry, got %v", stale)
 	}
 }

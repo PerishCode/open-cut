@@ -92,7 +92,8 @@ type devInspectOptions struct {
 	hold                                                                              bool
 	settle                                                                            time.Duration
 	snapshot                                                                          bool
-	watchErrors                                                                       time.Duration
+	watchErrors, watchNetwork                                                         time.Duration
+	networkMatch                                                                      string
 }
 
 const maximumDevEvaluationFileBytes = 256 * 1024
@@ -118,6 +119,8 @@ func newDevInspectCommand(stdout, stderr io.Writer) *cobra.Command {
 	command.Flags().DurationVar(&options.settle, "settle", 500*time.Millisecond, "settle delay after --viewport resize")
 	command.Flags().StringVar(&options.region, "region", "", "clip --screenshot to the first CSS selector match")
 	command.Flags().DurationVar(&options.watchErrors, "watch-errors", 0, "observe renderer errors for a bounded duration")
+	command.Flags().DurationVar(&options.watchNetwork, "watch-network", 0, "observe renderer network activity for a bounded duration; EventSource frames appear only for streams opened inside the window")
+	command.Flags().StringVar(&options.networkMatch, "network-match", "", "only report network activity whose URL contains this substring")
 	command.Flags().StringVar(&options.setFile, "set-file", "", "attach this file to the first enabled file input in the live renderer")
 	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -168,15 +171,29 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 			minimumDevErrorObservation, maximumDevErrorObservation)
 		return 2
 	}
+	if options.watchNetwork < 0 || options.watchNetwork > maximumDevErrorObservation ||
+		(options.watchNetwork > 0 && options.watchNetwork < minimumDevErrorObservation) {
+		fmt.Fprintf(stderr, "dev inspect --watch-network must be within [%s, %s]\n",
+			minimumDevErrorObservation, maximumDevErrorObservation)
+		return 2
+	}
+	if options.watchNetwork > 0 && options.watchErrors > 0 {
+		fmt.Fprintln(stderr, "dev inspect --watch-network and --watch-errors are one bounded observation each; run them separately")
+		return 2
+	}
+	if options.networkMatch != "" && options.watchNetwork == 0 {
+		fmt.Fprintln(stderr, "dev inspect --network-match requires --watch-network")
+		return 2
+	}
 	if *evaluate != "" && *evaluateFile != "" {
 		fmt.Fprintln(stderr, "dev inspect --eval and --eval-file are mutually exclusive")
 		return 2
 	}
 	if *screenshot == "" && *evaluate == "" && *evaluateFile == "" && *setFile == "" && !options.snapshot &&
-		action == nil && options.watchErrors == 0 && options.viewport == "" {
+		action == nil && options.watchErrors == 0 && options.watchNetwork == 0 && options.viewport == "" {
 		fmt.Fprintln(stderr,
 			"dev inspect requires --snapshot, --screenshot, --eval, --eval-file, --set-file, --action, "+
-				"--viewport, and/or --watch-errors")
+				"--viewport, --watch-errors, and/or --watch-network")
 		return 2
 	}
 	if options.match != "" && !options.snapshot {
@@ -228,6 +245,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 		errorObservation, err = startDevErrorObservation(requestContext, cdp, options.watchErrors)
 		if err != nil {
 			fmt.Fprintf(stderr, "start development renderer error observation: %v\n", err)
+			return 1
+		}
+	}
+	var networkObservation *devNetworkObservation
+	if options.watchNetwork > 0 {
+		networkObservation, err = startDevNetworkObservation(requestContext, cdp, options.watchNetwork, options.networkMatch)
+		if err != nil {
+			fmt.Fprintf(stderr, "start development renderer network observation: %v\n", err)
 			return 1
 		}
 	}
@@ -332,6 +357,14 @@ func runDevInspect(ctx context.Context, options devInspectOptions, stdout, stder
 			return 1
 		}
 		result["errors"] = report
+	}
+	if networkObservation != nil {
+		report, observeErr := finishDevNetworkObservation(requestContext, cdp, *networkObservation)
+		if observeErr != nil {
+			fmt.Fprintf(stderr, "observe development renderer network activity: %v\n", observeErr)
+			return 1
+		}
+		result["network"] = report
 	}
 	return writeOutput(stdout, stderr, result)
 }

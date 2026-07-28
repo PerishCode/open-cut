@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/PerishCode/open-cut/internal/devsession"
 	"github.com/PerishCode/open-cut/sidecar/client"
@@ -21,14 +24,18 @@ type MemberReport struct {
 }
 
 type StatusReport struct {
-	Schema      int              `json:"schema"`
-	BaseDir     string           `json:"baseDir"`
-	State       string           `json:"state"` // stopped | running-ready | running-degraded | running-starting
-	Generation  uint64           `json:"generation,omitempty"`
-	Stamp       string           `json:"stamp,omitempty"`
-	Members     []MemberReport   `json:"members,omitempty"`
-	Divergences []string         `json:"divergences,omitempty"`
-	Status      *protocol.Status `json:"status,omitempty"`
+	Schema      int            `json:"schema"`
+	BaseDir     string         `json:"baseDir"`
+	State       string         `json:"state"` // stopped | running-ready | running-degraded | running-starting
+	Generation  uint64         `json:"generation,omitempty"`
+	Stamp       string         `json:"stamp,omitempty"`
+	Members     []MemberReport `json:"members,omitempty"`
+	Divergences []string       `json:"divergences,omitempty"`
+	// StaleArtifacts warns when a member's recorded command artifacts changed
+	// on disk after its generation started; the suite still runs the old
+	// build until the next restart. Warning only — never a degradation.
+	StaleArtifacts []string         `json:"staleArtifacts,omitempty"`
+	Status         *protocol.Status `json:"status,omitempty"`
 }
 
 // Status reports the suite's recorded expectations against live process and
@@ -108,7 +115,56 @@ func Status(ctx context.Context, baseDir string) (StatusReport, error) {
 		report.State = "running-degraded"
 	}
 	report.Status = brokerStatus
+	if running > 0 {
+		report.StaleArtifacts = staleMemberArtifacts(roster)
+	}
 	return report, nil
+}
+
+// staleMemberArtifacts compares each running member's recorded command
+// artifacts against its start instant. It inspects only the argv the roster
+// already records, so it stays generic: no manifest interpretation, no app
+// semantics — just files that are provably newer than the process using them.
+func staleMemberArtifacts(roster Roster) []string {
+	var stale []string
+	for _, member := range roster.Members {
+		for _, candidate := range memberArtifactPaths(member) {
+			info, err := os.Stat(candidate)
+			if err != nil || info.IsDir() {
+				continue
+			}
+			if info.ModTime().After(member.StartedAt) {
+				stale = append(stale, fmt.Sprintf(
+					"%s: %s changed at %s, after this generation started; restart to adopt it",
+					member.App, candidate, info.ModTime().UTC().Format(time.RFC3339)))
+			}
+		}
+	}
+	return stale
+}
+
+func memberArtifactPaths(member Member) []string {
+	seen := map[string]struct{}{}
+	var paths []string
+	add := func(value string) {
+		if value == "" || strings.HasPrefix(value, "-") {
+			return
+		}
+		resolved := value
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(member.Directory, resolved)
+		}
+		if _, duplicate := seen[resolved]; duplicate {
+			return
+		}
+		seen[resolved] = struct{}{}
+		paths = append(paths, resolved)
+	}
+	add(member.Executable)
+	for _, arg := range member.Args {
+		add(arg)
+	}
+	return paths
 }
 
 // Logs snapshots the tail of each selected member's current log file.
