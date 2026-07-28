@@ -8,36 +8,7 @@ stable product-CLI resolver. A launcher-managed release is one atomic
 `launcher + payload` bundle; the opaque payload contains the app runtime and the
 versioned product CLI at `payload/bin/open-cut[.exe]`.
 
-Start with [AGENTS.md](./AGENTS.md) and the specifications under [`specs/`](./specs/).
-
-The business baseline is split across
-[`product.md`](./specs/product.md),
-[`business-kernel.md`](./specs/business-kernel.md),
-[`domain-model.md`](./specs/domain-model.md),
-[`persistence.md`](./specs/persistence.md),
-[`agent-native.md`](./specs/agent-native.md),
-[`agent-bridge.md`](./specs/agent-bridge.md),
-[`local-authorization.md`](./specs/local-authorization.md),
-[`ui-session.md`](./specs/ui-session.md),
-[`wire-contract.md`](./specs/wire-contract.md),
-[`canonicalization.md`](./specs/canonicalization.md),
-[`read-activity.md`](./specs/read-activity.md),
-[`media-pipeline.md`](./specs/media-pipeline.md),
-[`source-access.md`](./specs/source-access.md),
-[`media-delivery.md`](./specs/media-delivery.md),
-[`timeline.md`](./specs/timeline.md),
-[`transcript-caption.md`](./specs/transcript-caption.md),
-[`rendering.md`](./specs/rendering.md),
-[`durable-work.md`](./specs/durable-work.md),
-[`job-scheduler.md`](./specs/job-scheduler.md),
-[`project-lifecycle.md`](./specs/project-lifecycle.md),
-[`editing-interaction.md`](./specs/editing-interaction.md),
-[`project-versions.md`](./specs/project-versions.md),
-[`playback.md`](./specs/playback.md),
-[`visual-language.md`](./specs/visual-language.md),
-[`workspace-ui.md`](./specs/workspace-ui.md) and
-[`business-harness.md`](./specs/business-harness.md). These sit above the
-product-independent cold-start, sidecar, release, and delivery contracts.
+Start with [AGENTS.md](./AGENTS.md).
 
 ## Day 0 development path
 
