@@ -142,6 +142,14 @@ func TestSQLiteCreatorTimelineGestureRejectsUnprovableAlignmentPreservation(t *t
 		len(blocked.Blocked.Recoveries) != 2 {
 		t.Fatalf("expected typed unprovable preservation block, got result=%+v err=%v", blocked, err)
 	}
+	if blocked.Blocked.SubjectClipIDs == nil || blocked.Blocked.SubjectAlignmentIDs == nil ||
+		blocked.Blocked.Recoveries == nil {
+		t.Fatalf("blocked outcome slices must stay non-nil so the wire never encodes null, got %+v", blocked.Blocked)
+	}
+	wire, err := json.Marshal(blocked.Blocked)
+	if err != nil || bytes.Contains(wire, []byte("null")) {
+		t.Fatalf("blocked outcome must encode empty arrays, not null: %s err=%v", wire, err)
+	}
 	result, err := fixture.editReads.TimelineGestureForCreator(
 		creatorContext(t), fixture.project.Project.Project.ID, fixture.project.Project.Project.MainSequenceID,
 		application.CreatorTimelineGesturePreviewInput{

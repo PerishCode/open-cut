@@ -48,9 +48,9 @@ func creatorTimelineBlocked(
 	alignments []domain.AlignmentID,
 	recoveries []application.CreatorTimelineBlockedRecovery,
 ) application.CreatorTimelineGesturePreviewResult {
-	clipIDs := append([]domain.ClipID(nil), clips...)
-	alignmentIDs := append([]domain.AlignmentID(nil), alignments...)
-	recoveryValues := append([]application.CreatorTimelineBlockedRecovery(nil), recoveries...)
+	clipIDs := append(make([]domain.ClipID, 0, len(clips)), clips...)
+	alignmentIDs := append(make([]domain.AlignmentID, 0, len(alignments)), alignments...)
+	recoveryValues := append(make([]application.CreatorTimelineBlockedRecovery, 0, len(recoveries)), recoveries...)
 	sort.Slice(clipIDs, func(left, right int) bool { return clipIDs[left].String() < clipIDs[right].String() })
 	sort.Slice(alignmentIDs, func(left, right int) bool {
 		return alignmentIDs[left].String() < alignmentIDs[right].String()

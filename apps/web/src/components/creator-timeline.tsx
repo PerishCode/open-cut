@@ -4,6 +4,7 @@ import {
   type Caption,
   type Clip,
   type CreatorEditCommit,
+  type CreatorTimelineBlockedReason,
   type DurableID,
   int64String,
   type RationalTime,
@@ -14,6 +15,7 @@ import {
 } from "@open-cut/contracts";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { editFailureReason } from "../lib/creator-edit-failure.js";
 import { adoptViewerSequenceFromCommit, CreatorTimelineController } from "../lib/creator-timeline-controller.js";
 import type { SequenceViewerController } from "../lib/sequence-viewer-controller.js";
 import type { CreatorTimelineHandoff } from "./creator-timeline-handoff.js";
@@ -288,7 +290,7 @@ export function CreatorTimeline({
       ) : null}
       {snapshot.phase === "blocked" && snapshot.blocked ? (
         <Stack spacing="compact">
-          <Status state="unavailable">Timeline gesture blocked · {snapshot.blocked.reason}</Status>
+          <Status state="unavailable">Timeline gesture blocked · {blockedReasonText(snapshot.blocked.reason)}</Status>
           <Text>
             {snapshot.blocked.subjectClipIds.length} Clip subjects · {snapshot.blocked.subjectAlignmentIds.length}{" "}
             Alignment subjects · no mutation was submitted
@@ -338,7 +340,7 @@ export function CreatorTimeline({
           <Status state="unavailable">
             {snapshot.canRetryIdenticalApply
               ? "Could not confirm the Timeline update."
-              : "Could not prepare this Timeline edit. Try the gesture again."}
+              : (editFailureReason(snapshot.error) ?? "Could not prepare this Timeline edit. Try the gesture again.")}
           </Status>
           {snapshot.canRetryIdenticalApply ? (
             <Button onPress={() => void run(() => controller.retryIdenticalApply())}>
@@ -373,4 +375,14 @@ function greatestCommonDivisor(left: bigint, right: bigint): bigint {
   let b = right < 0n ? -right : right;
   while (b !== 0n) [a, b] = [b, a % b];
   return a;
+}
+
+function blockedReasonText(reason: CreatorTimelineBlockedReason): string {
+  if (reason === "no-change") return "the gesture would change nothing";
+  if (reason === "scope-unavailable") return "the chosen scope is unavailable for this Clip";
+  if (reason === "track-incompatible") return "the target Track cannot hold this Clip";
+  if (reason === "range-invalid") return "the target range is invalid";
+  if (reason === "track-collision") return "the move would collide with committed Clips on its Track";
+  if (reason === "alignment-preserve-unprovable") return "Alignment preservation cannot be proven for this gesture";
+  return "the complete gesture exceeds its atomic closure budget";
 }
