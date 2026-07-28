@@ -140,6 +140,9 @@ func validateEditProposeInput(input EditProposeInput) error {
 }
 
 func validateEditOperation(operation EditOperationInput) error {
+	if operation.Placement != nil && operation.Type != domain.EditSetClipPlacement {
+		return ErrEditInvalid
+	}
 	if operation.Type == domain.EditDeriveRoughCut {
 		return validateRoughCutOperation(operation)
 	}
@@ -285,6 +288,19 @@ func validateEditOperation(operation EditOperationInput) error {
 	case domain.EditRemoveCaption:
 		if !noCreate || operation.CaptionID == nil || operation.TrackID != nil || operation.Range != nil ||
 			operation.Language != nil || operation.Text != nil || !noNode || !noAlignment || !noClip || !noTranscript {
+			return ErrEditInvalid
+		}
+	case domain.EditSetClipPlacement:
+		if !noCreate || operation.Clip == nil || operation.Clip.ID == "" || operation.Clip.Local != nil ||
+			(operation.Placement != nil && operation.Placement.Validate() != nil) ||
+			!noNode || operation.CaptionID != nil || operation.TrackID != nil || operation.Range != nil ||
+			operation.Language != nil || !noAlignment || operation.Text != nil ||
+			operation.AssetID != nil || operation.SourceStreamID != nil || operation.SourceRange != nil ||
+			operation.TimelineRange != nil || operation.Enabled != nil || operation.CreateLinkGroupAs != nil ||
+			operation.LinkGroup != nil || operation.TranscriptCorrectionID != nil ||
+			operation.TranscriptArtifactID != nil || len(operation.TranscriptSegmentIDs) != 0 ||
+			len(operation.CorrectionRevisions) != 0 || operation.AcceptedFingerprint != nil ||
+			operation.CaptionPolicy != nil || len(operation.DerivedCaptions) != 0 {
 			return ErrEditInvalid
 		}
 	case domain.EditBindAlignment:
@@ -688,6 +704,8 @@ func operationShapeHint(operationType EditOperationInputType) string {
 		return "; update-caption requires captionId, range, language, and text, with no trackId"
 	case domain.EditRemoveCaption:
 		return "; remove-caption requires captionId only"
+	case domain.EditSetClipPlacement:
+		return "; set-clip-placement requires clip (by id) and an optional complete placement; omitting placement resets to identity"
 	case domain.EditUnbindAlignment:
 		return "; unbind-alignment requires alignmentId only"
 	case domain.EditMarkAlignmentStale:

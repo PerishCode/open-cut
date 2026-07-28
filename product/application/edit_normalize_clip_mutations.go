@@ -600,3 +600,55 @@ func sameBoundaryDelta(
 	rightComparison, rightErr := actualRight.Compare(right)
 	return leftErr == nil && rightErr == nil && leftComparison == 0 && rightComparison == 0
 }
+
+func (normalizer *editNormalizer) setClipPlacement(operation EditOperationInput) error {
+	id, err := normalizer.resolveClipReference(*operation.Clip)
+	if err != nil {
+		return err
+	}
+	current, exists := normalizer.clips[id.String()]
+	if !exists || current.Tombstoned {
+		return EditInvalidf("clip %s is not a live clip in this sequence", id)
+	}
+	if err := normalizer.require(domain.EntityClip, current.ID.String(), current.Revision); err != nil {
+		return err
+	}
+	track := normalizer.input.State.Tracks[current.TrackID.String()]
+	if track.ID.IsZero() {
+		return ErrEditInvalid
+	}
+	if track.Type != domain.TrackVideo {
+		return EditInvalidf(
+			"clip %s sits on %s track %s; placement applies to video clips only",
+			id, track.Type, track.ID,
+		)
+	}
+	if err := normalizer.require(domain.EntityTrack, track.ID.String(), track.Revision); err != nil {
+		return err
+	}
+	normalizer.trackChanges[track.ID.String()] = track.Revision
+	next := current
+	next.Revision = mustNext(current.Revision)
+	if operation.Placement == nil || operation.Placement.IsIdentity() {
+		next.Placement = nil
+	} else {
+		if err := operation.Placement.Validate(); err != nil {
+			return EditInvalidf("%s", err)
+		}
+		value := *operation.Placement
+		next.Placement = &value
+	}
+	// Placement changes composition, not time: every dependent alignment keeps
+	// its exact temporal meaning, so register each one as unchanged instead of
+	// demanding an explicit remap/stale/unbind decision.
+	for _, alignmentID := range normalizer.input.State.ClipAlignments[current.ID.String()] {
+		alignment, exists := normalizer.input.State.Alignments[alignmentID.String()]
+		if !exists {
+			return ErrEditInvalid
+		}
+		if _, handled := normalizer.alignmentEffects[alignmentID.String()]; !handled {
+			normalizer.alignmentEffects[alignmentID.String()] = alignment.Status
+		}
+	}
+	return normalizer.putExistingClip(current, next, false)
+}

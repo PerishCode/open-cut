@@ -303,7 +303,7 @@ func compileRenderInstructions(
 				TrackRevision: track.state.Revision, Layer: track.layer,
 				InputArtifactID: binding.input.ArtifactID, SourceStreamID: clip.SourceStreamID,
 				SourceRange: clip.SourceRange, TimelineRange: clip.TimelineRange,
-				Orientation: "normalized-by-render-material-v1", Placement: defaultRenderPlacement(),
+				Orientation: "normalized-by-render-material-v1", Placement: renderPlacementForClip(clip),
 			})
 		case domain.TrackAudio:
 			plan.Audio = append(plan.Audio, domain.RenderAudioInstruction{
@@ -431,6 +431,27 @@ func uniqueRenderInputs(bindings map[string]validatedRenderBinding) ([]domain.Re
 		return result[left].ArtifactID.String() < result[right].ArtifactID.String()
 	})
 	return result, nil
+}
+
+// renderPlacementForClip merges a clip's stored creative placement over the
+// default placement. Fit policy and anchors stay default until the plan schema
+// versions them as creative inputs.
+func renderPlacementForClip(clip domain.ClipState) domain.RenderPlacement {
+	placement := defaultRenderPlacement()
+	if clip.Placement == nil {
+		return placement
+	}
+	stored := *clip.Placement
+	placement.CropXBasisPoints = stored.CropXBasisPoints
+	placement.CropYBasisPoints = stored.CropYBasisPoints
+	placement.CropWidthBasisPoints = stored.CropWidthBasisPoints
+	placement.CropHeightBasisPoints = stored.CropHeightBasisPoints
+	placement.ScaleX = stored.ScaleX
+	placement.ScaleY = stored.ScaleY
+	placement.TranslateX = stored.TranslateX
+	placement.TranslateY = stored.TranslateY
+	placement.OpacityBasisPoints = stored.OpacityBasisPoints
+	return placement
 }
 
 func defaultRenderPlacement() domain.RenderPlacement {

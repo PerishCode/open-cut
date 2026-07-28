@@ -31,6 +31,7 @@ type SequencePreviewIntentClip struct {
 	SourceStreamID domain.SourceStreamID `json:"sourceStreamId"`
 	SourceRange    domain.TimeRange      `json:"sourceRange"`
 	TimelineRange  domain.TimeRange      `json:"timelineRange"`
+	Placement      *domain.ClipPlacement `json:"placement,omitempty"`
 }
 
 type SequencePreviewIntentCaption struct {
@@ -84,11 +85,16 @@ func NewSequencePreviewRenderIntent(
 		if !clip.Enabled || clip.Tombstoned {
 			continue
 		}
-		intent.Clips = append(intent.Clips, SequencePreviewIntentClip{
+		entry := SequencePreviewIntentClip{
 			ID: clip.ID, Revision: clip.Revision, TrackID: clip.TrackID,
 			AssetID: clip.AssetID, SourceStreamID: clip.SourceStreamID,
 			SourceRange: clip.SourceRange, TimelineRange: clip.TimelineRange,
-		})
+		}
+		if clip.Placement != nil {
+			placement := *clip.Placement
+			entry.Placement = &placement
+		}
+		intent.Clips = append(intent.Clips, entry)
 		assets[clip.AssetID.String()] = struct{}{}
 	}
 	for _, caption := range snapshot.Captions {
@@ -309,9 +315,14 @@ func (intent SequencePreviewRenderIntent) sequence() domain.Sequence {
 }
 
 func (clip SequencePreviewIntentClip) state(sequenceID domain.SequenceID) domain.ClipState {
-	return domain.ClipState{
+	state := domain.ClipState{
 		ID: clip.ID, Revision: clip.Revision, SequenceID: sequenceID,
 		TrackID: clip.TrackID, AssetID: clip.AssetID, SourceStreamID: clip.SourceStreamID,
 		SourceRange: clip.SourceRange, TimelineRange: clip.TimelineRange, Enabled: true,
 	}
+	if clip.Placement != nil {
+		placement := *clip.Placement
+		state.Placement = &placement
+	}
+	return state
 }

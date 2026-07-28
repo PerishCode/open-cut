@@ -117,7 +117,7 @@ type DerivedRoughCutOutputInput struct {
 }
 
 type EditOperationInput struct {
-	Type                   EditOperationInputType               `json:"type" enum:"insert-section,update-section,insert-authored-text,update-authored-text,insert-visual-intent,update-visual-intent,insert-note,update-note,insert-source-excerpt,move-narrative-node,remove-narrative-node,add-transcript-correction,update-transcript-correction,remove-transcript-correction,derive-captions,derive-rough-cut,add-caption,update-caption,remove-caption,bind-alignment,remap-alignment,mark-alignment-stale,unbind-alignment,add-clip,move-clip,trim-clip,split-clip,remove-clip,link-clips,unlink-clips"`
+	Type                   EditOperationInputType               `json:"type" enum:"insert-section,update-section,insert-authored-text,update-authored-text,insert-visual-intent,update-visual-intent,insert-note,update-note,insert-source-excerpt,move-narrative-node,remove-narrative-node,add-transcript-correction,update-transcript-correction,remove-transcript-correction,derive-captions,derive-rough-cut,add-caption,update-caption,remove-caption,bind-alignment,remap-alignment,mark-alignment-stale,unbind-alignment,add-clip,move-clip,trim-clip,split-clip,remove-clip,set-clip-placement,link-clips,unlink-clips"`
 	CreateAs               *domain.LocalID                      `json:"createAs,omitempty" pattern:"^[a-z][a-z0-9_-]{0,63}$"`
 	NodeID                 *domain.NarrativeNodeID              `json:"nodeId,omitempty"`
 	ParentID               *domain.NarrativeNodeID              `json:"parentId,omitempty"`
@@ -139,6 +139,7 @@ type EditOperationInput struct {
 	SourceRange            *domain.TimeRange                    `json:"sourceRange,omitempty"`
 	TimelineRange          *domain.TimeRange                    `json:"timelineRange,omitempty"`
 	Enabled                *bool                                `json:"enabled,omitempty"`
+	Placement              *domain.ClipPlacement                `json:"placement,omitempty"`
 	CreateLinkGroupAs      *domain.LocalID                      `json:"createLinkGroupAs,omitempty" pattern:"^[a-z][a-z0-9_-]{0,63}$"`
 	LeftLinkGroupAs        *domain.LocalID                      `json:"leftLinkGroupAs,omitempty" pattern:"^[a-z][a-z0-9_-]{0,63}$"`
 	RightLinkGroupAs       *domain.LocalID                      `json:"rightLinkGroupAs,omitempty" pattern:"^[a-z][a-z0-9_-]{0,63}$"`

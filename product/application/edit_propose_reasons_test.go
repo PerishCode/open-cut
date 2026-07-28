@@ -50,6 +50,8 @@ func TestValidateEditProposeInputReportsActionableReasons(t *testing.T) {
 	bareMove.Operations = []EditOperationInput{{Type: domain.EditMoveClip}}
 	bareRemoveCaption := base
 	bareRemoveCaption.Operations = []EditOperationInput{{Type: domain.EditRemoveCaption, CaptionID: &captionID, Range: &domain.TimeRange{}}}
+	barePlacement := base
+	barePlacement.Operations = []EditOperationInput{{Type: domain.EditSetClipPlacement}}
 
 	for _, testCase := range []struct {
 		name  string
@@ -60,6 +62,7 @@ func TestValidateEditProposeInputReportsActionableReasons(t *testing.T) {
 		{"empty operations", empty, "1 to 512 operations"},
 		{"malformed move-clip names its shape", bareMove, "move-clip requires clip, scope (linked|single), trackId, and timelineStart"},
 		{"malformed remove-caption names its shape", bareRemoveCaption, "remove-caption requires captionId only"},
+		{"malformed set-clip-placement names its shape", barePlacement, "set-clip-placement requires clip (by id)"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			err := validateEditProposeInput(testCase.input)

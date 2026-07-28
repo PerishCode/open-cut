@@ -1,5 +1,6 @@
 import type { AlignmentTargetInput } from './alignmentTargetInput';
 import type { CaptionDerivationPolicy } from './captionDerivationPolicy';
+import type { ClipPlacement } from './clipPlacement';
 import type { ClipSplitOutputInput } from './clipSplitOutputInput';
 import type { DerivedCaptionOutputInput } from './derivedCaptionOutputInput';
 import type { DerivedRoughCutOutputInput } from './derivedRoughCutOutputInput';
@@ -67,6 +68,7 @@ export interface EditOperationInput {
   narrativeNode?: EditReference;
   nodeId?: string;
   parentId?: string;
+  placement?: ClipPlacement;
   range?: TimeRange;
   /** @pattern ^[a-z][a-z0-9_-]{0,63}$ */
   rightLinkGroupAs?: string;

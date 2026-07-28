@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -301,4 +302,58 @@ func clipRangePointer(value domain.TimeRange) *domain.TimeRange { return &value 
 func sameRational(left, right domain.RationalTime) bool {
 	comparison, err := left.Compare(right)
 	return err == nil && comparison == 0
+}
+
+func TestNormalizeSetClipPlacementBumpsRevisionAndPreservesAlignment(t *testing.T) {
+	fixture := newClipMutationFixture(t)
+	placement := domain.IdentityClipPlacement()
+	placement.OpacityBasisPoints = 5_000
+	placement.ScaleX = domain.ExactRational{Value: 3, Scale: 2}
+	input := fixture.input(t, []EditOperationInput{
+		{Type: domain.EditSetClipPlacement, Clip: fixture.ref(fixture.video.ID.String()), Placement: &placement},
+	}, nil)
+
+	proposal, _, err := NormalizeEditProposal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(proposal.Operations) != 1 || proposal.Operations[0].Clip == nil {
+		t.Fatalf("operations=%+v", proposal.Operations)
+	}
+	next := proposal.Operations[0].Clip
+	if next.Revision.Value() != 2 || next.Placement == nil ||
+		next.Placement.OpacityBasisPoints != 5_000 || next.Placement.ScaleX != placement.ScaleX {
+		t.Fatalf("placed clip=%+v", next)
+	}
+	if len(proposal.InversePreview) != 1 || proposal.InversePreview[0].Clip == nil ||
+		proposal.InversePreview[0].Clip.Placement != nil {
+		t.Fatalf("inverse must restore identity placement, got %+v", proposal.InversePreview)
+	}
+}
+
+func TestNormalizeSetClipPlacementIdentityResetsAndAudioRefusesWithReason(t *testing.T) {
+	fixture := newClipMutationFixture(t)
+	identity := domain.IdentityClipPlacement()
+	input := fixture.input(t, []EditOperationInput{
+		{Type: domain.EditSetClipPlacement, Clip: fixture.ref(fixture.video.ID.String()), Placement: &identity},
+	}, nil)
+	proposal, _, err := NormalizeEditProposal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposal.Operations[0].Clip.Placement != nil {
+		t.Fatalf("identity placement must store as nil, got %+v", proposal.Operations[0].Clip.Placement)
+	}
+
+	audio := fixture.input(t, []EditOperationInput{
+		{Type: domain.EditSetClipPlacement, Clip: fixture.ref(fixture.audio.ID.String())},
+	}, nil)
+	_, _, err = NormalizeEditProposal(audio)
+	if !errors.Is(err, ErrEditInvalid) {
+		t.Fatalf("expected invalid, got %v", err)
+	}
+	var invalid EditInvalidError
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Reason, "placement applies to video clips only") {
+		t.Fatalf("expected the video-only reason, got %v", err)
+	}
 }

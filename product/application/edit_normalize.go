@@ -273,6 +273,10 @@ func (normalizer *editNormalizer) normalizeEntityOperations() error {
 			if err := normalizer.splitClip(operation); err != nil {
 				return err
 			}
+		case domain.EditSetClipPlacement:
+			if err := normalizer.setClipPlacement(operation); err != nil {
+				return err
+			}
 		case domain.EditRemoveClip:
 			if err := normalizer.removeClip(operation); err != nil {
 				return err
