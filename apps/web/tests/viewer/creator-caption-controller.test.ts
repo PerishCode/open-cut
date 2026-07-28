@@ -145,6 +145,37 @@ describe("CreatorCaptionController", () => {
     });
     expect(controller.getSnapshot()).toMatchObject({ phase: "ready", selectedClip: { revision: "3" } });
     expect(controller.getSnapshot().review).toBeUndefined();
+    expect(controller.getSnapshot().lostPendingWork).toBe("conflict");
+  });
+
+  it("marks concurrent loss of a staged review durably and clears it on the next preview", async () => {
+    const controller = new CreatorCaptionController(captionPort());
+    const projection = {
+      projectId: ids.project,
+      sequenceId: ids.sequence,
+      source: selection(),
+      clips: [clip(ids.streamClip, ids.stream, 2)],
+      alignments: [],
+      tracks: [track(ids.captionTrack, "Captions")],
+    } as const;
+    controller.setProjection(projection);
+    await controller.preview();
+    expect(controller.getSnapshot().phase).toBe("review");
+
+    const drifted = {
+      ...projection,
+      clips: [{ ...projection.clips[0], revision: revisionString("3") }],
+    };
+    controller.setProjection(drifted);
+    expect(controller.getSnapshot()).toMatchObject({ phase: "ready", lostPendingWork: "review" });
+    expect(controller.getSnapshot().review).toBeUndefined();
+
+    controller.setProjection(drifted);
+    expect(controller.getSnapshot().lostPendingWork).toBe("review");
+
+    await controller.preview();
+    expect(controller.getSnapshot().phase).toBe("review");
+    expect(controller.getSnapshot().lostPendingWork).toBeUndefined();
   });
 });
 
