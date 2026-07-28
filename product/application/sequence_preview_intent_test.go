@@ -70,3 +70,41 @@ func TestSequencePreviewRenderIntentIsCanonicalExactAndClosed(t *testing.T) {
 		t.Fatal("render intent accepted an unknown field")
 	}
 }
+
+func TestSequencePreviewIntentCarriesClipPlacementRoundTrip(t *testing.T) {
+	fixture := renderPlanFixture(t)
+	placement := domain.IdentityClipPlacement()
+	placement.OpacityBasisPoints = 6_000
+	placement.ScaleX = domain.ExactRational{Value: 1, Scale: 2}
+	clips := append([]domain.ClipState(nil), fixture.Clips...)
+	clips[0].Placement = &placement
+	snapshot := SequencePreviewPreparationSnapshot{
+		ProjectID: fixture.ProjectID, ObservedProjectRevision: fixture.ObservedProjectRevision,
+		Sequence: fixture.Sequence, Clips: clips, Captions: fixture.Captions,
+		Assets: fixture.Assets,
+	}
+
+	firstJob, _ := domain.ParseWorkJobID("00000000-0000-7000-8000-000000000030")
+	secondJob, _ := domain.ParseWorkJobID("00000000-0000-7000-8000-000000000031")
+	inputs := []SequencePreviewInputRequirement{
+		{ClipID: clips[0].ID, SourceStreamID: clips[0].SourceStreamID, ProducerJobID: firstJob},
+		{ClipID: clips[1].ID, SourceStreamID: clips[1].SourceStreamID, ProducerJobID: secondJob},
+	}
+	intent, encoded, _, err := NewSequencePreviewRenderIntent(snapshot, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(encoded, []byte(`"opacityBasisPoints":6000`)) {
+		t.Fatalf("intent wire must carry the placement, got %s", encoded)
+	}
+	input := intent.CompileInput(nil, nil)
+	var placed *domain.ClipPlacement
+	for _, clip := range input.Clips {
+		if clip.ID == clips[0].ID {
+			placed = clip.Placement
+		}
+	}
+	if placed == nil || placed.OpacityBasisPoints != 6_000 || placed.ScaleX != placement.ScaleX {
+		t.Fatalf("compile input dropped the placement: %+v", placed)
+	}
+}

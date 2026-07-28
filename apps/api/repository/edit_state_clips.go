@@ -185,7 +185,7 @@ func loadClipState(
 	id domain.ClipID,
 ) (domain.ClipState, error) {
 	var idValue, sequenceValue, trackValue, assetValue, streamValue string
-	var linkGroupValue sql.NullString
+	var linkGroupValue, placementValue sql.NullString
 	var revisionValue uint64
 	var sourceStart, sourceDuration, timelineStart, timelineDuration int64
 	var sourceStartScale, sourceDurationScale, timelineStartScale, timelineDurationScale int32
@@ -194,12 +194,12 @@ func loadClipState(
 SELECT id, sequence_id, track_id, asset_id, source_stream_id, revision,
        source_start_value, source_start_scale, source_duration_value, source_duration_scale,
        timeline_start_value, timeline_start_scale, timeline_duration_value, timeline_duration_scale,
-       enabled, link_group_id, tombstoned
+       enabled, link_group_id, placement, tombstoned
 FROM clips WHERE id = ? AND project_id = ?`, id.String(), projectID.String()).Scan(
 		&idValue, &sequenceValue, &trackValue, &assetValue, &streamValue, &revisionValue,
 		&sourceStart, &sourceStartScale, &sourceDuration, &sourceDurationScale,
 		&timelineStart, &timelineStartScale, &timelineDuration, &timelineDurationScale,
-		&enabled, &linkGroupValue, &tombstoned,
+		&enabled, &linkGroupValue, &placementValue, &tombstoned,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ClipState{}, application.ErrEditInvalid
@@ -232,10 +232,15 @@ FROM clips WHERE id = ? AND project_id = ?`, id.String(), projectID.String()).Sc
 		}
 		linkGroupID = &parsed
 	}
+	placement, err := decodedClipPlacement(placementValue)
+	if err != nil {
+		return domain.ClipState{}, err
+	}
 	return domain.ClipState{
 		ID: clipID, Revision: revision, SequenceID: sequenceID, TrackID: trackID,
 		AssetID: assetID, SourceStreamID: streamID, SourceRange: sourceRange,
-		TimelineRange: timelineRange, Enabled: enabled, LinkGroupID: linkGroupID, Tombstoned: tombstoned,
+		TimelineRange: timelineRange, Enabled: enabled, LinkGroupID: linkGroupID,
+		Placement: placement, Tombstoned: tombstoned,
 	}, nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/PerishCode/open-cut/product/application"
@@ -489,4 +491,38 @@ func readClipEntity(
 func sameTestRational(left, right domain.RationalTime) bool {
 	comparison, err := left.Compare(right)
 	return err == nil && comparison == 0
+}
+
+func TestSQLiteSetClipPlacementRefusesAudioClipsWithReason(t *testing.T) {
+	parallelAPITest(t)
+	fixture := newCaptionDerivationIntegrationFixture(t)
+	defer fixture.store.Close()
+	projectRevision := fixture.project.Project.Project.Revision
+	audioTrackRevision, _ := domain.NewRevision(2)
+	_, err := fixture.edits.Propose(
+		fixture.agent,
+		fixture.project.Project.Project.ID,
+		fixture.project.Project.Project.MainSequenceID,
+		fixture.run.Run.ID, fixture.run.Run.CurrentTurn.ID,
+		application.EditProposeInput{
+			RequestID:           mustRequestID(t, "gesture:placement-audio-refusal"),
+			Intent:              "Try to place an audio clip",
+			BaseProjectRevision: projectRevision,
+			Preconditions: []domain.EntityPrecondition{
+				{Kind: domain.EntityClip, ID: fixture.clipID.String(), Revision: 1},
+				{Kind: domain.EntityTrack, ID: fixture.audioTrack.ID.String(), Revision: audioTrackRevision},
+			},
+			Operations: []application.EditOperationInput{{
+				Type: domain.EditSetClipPlacement,
+				Clip: &application.EditReference{ID: fixture.clipID.String()},
+			}},
+		},
+	)
+	if !errors.Is(err, application.ErrEditInvalid) {
+		t.Fatalf("expected invalid, got %v", err)
+	}
+	var invalid application.EditInvalidError
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Reason, "placement applies to video clips only") {
+		t.Fatalf("expected the video-only reason, got %v", err)
+	}
 }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -14,6 +15,8 @@ const (
 )
 
 var ErrInvalidNarrativeContent = errors.New("invalid narrative content")
+
+var ErrInvalidPlacement = errors.New("invalid clip placement")
 
 type EditEntityKind string
 
@@ -55,6 +58,7 @@ const (
 	EditTrimClip                   EditOperationType = "trim-clip"
 	EditSplitClip                  EditOperationType = "split-clip"
 	EditRemoveClip                 EditOperationType = "remove-clip"
+	EditSetClipPlacement           EditOperationType = "set-clip-placement"
 	EditLinkClips                  EditOperationType = "link-clips"
 	EditUnlinkClips                EditOperationType = "unlink-clips"
 	EditAddTranscriptCorrection    EditOperationType = "add-transcript-correction"
@@ -368,7 +372,73 @@ type ClipState struct {
 	TimelineRange  TimeRange      `json:"timelineRange"`
 	Enabled        bool           `json:"enabled"`
 	LinkGroupID    *LinkGroupID   `json:"linkGroupId,omitempty"`
+	Placement      *ClipPlacement `json:"placement,omitempty"`
 	Tombstoned     bool           `json:"tombstoned"`
+}
+
+// ClipPlacement is a visual clip's static creative transform, expressed in the
+// exact vocabulary the render plan already composes with: a source crop window
+// in basis points, exact-rational scale and canvas translation, and opacity in
+// basis points. Absent placement means identity. Rotation and anchor deliberately
+// stay out until the plan schema versions them.
+type ClipPlacement struct {
+	CropXBasisPoints      uint16        `json:"cropXBasisPoints" maximum:"9999"`
+	CropYBasisPoints      uint16        `json:"cropYBasisPoints" maximum:"9999"`
+	CropWidthBasisPoints  uint16        `json:"cropWidthBasisPoints" minimum:"1" maximum:"10000"`
+	CropHeightBasisPoints uint16        `json:"cropHeightBasisPoints" minimum:"1" maximum:"10000"`
+	ScaleX                ExactRational `json:"scaleX"`
+	ScaleY                ExactRational `json:"scaleY"`
+	TranslateX            ExactRational `json:"translateX"`
+	TranslateY            ExactRational `json:"translateY"`
+	OpacityBasisPoints    uint16        `json:"opacityBasisPoints" maximum:"10000"`
+}
+
+// ClipPlacementScaleLimit bounds |scale| to a sane creative magnitude; the
+// renderer is exact but a thousandfold blowup is an input mistake, not intent.
+const ClipPlacementScaleLimit = 100
+
+// ClipPlacementTranslateLimit bounds |translate| in canvas units (1 = one full
+// canvas edge); ten canvas widths off-screen is an input mistake.
+const ClipPlacementTranslateLimit = 10
+
+func (placement ClipPlacement) Validate() error {
+	if placement.CropWidthBasisPoints < 1 || placement.CropHeightBasisPoints < 1 ||
+		uint32(placement.CropXBasisPoints)+uint32(placement.CropWidthBasisPoints) > 10_000 ||
+		uint32(placement.CropYBasisPoints)+uint32(placement.CropHeightBasisPoints) > 10_000 {
+		return fmt.Errorf("%w: placement crop window must stay inside [0,10000] basis points", ErrInvalidPlacement)
+	}
+	if placement.OpacityBasisPoints > 10_000 {
+		return fmt.Errorf("%w: placement opacity is at most 10000 basis points", ErrInvalidPlacement)
+	}
+	for _, scale := range []ExactRational{placement.ScaleX, placement.ScaleY} {
+		if scale.Validate() != nil || scale.Value <= 0 ||
+			int64(scale.Value) > int64(scale.Scale)*ClipPlacementScaleLimit {
+			return fmt.Errorf("%w: placement scale must be positive and at most %dx", ErrInvalidPlacement, ClipPlacementScaleLimit)
+		}
+	}
+	for _, translate := range []ExactRational{placement.TranslateX, placement.TranslateY} {
+		if translate.Validate() != nil ||
+			absInt64(int64(translate.Value)) > uint64(translate.Scale)*ClipPlacementTranslateLimit {
+			return fmt.Errorf("%w: placement translation must stay within %d canvas units", ErrInvalidPlacement, ClipPlacementTranslateLimit)
+		}
+	}
+	return nil
+}
+
+// IdentityClipPlacement is the placement every clip has when none is stored.
+func IdentityClipPlacement() ClipPlacement {
+	one := ExactRational{Value: 1, Scale: 1}
+	zero := ExactRational{Value: 0, Scale: 1}
+	return ClipPlacement{
+		CropXBasisPoints: 0, CropYBasisPoints: 0,
+		CropWidthBasisPoints: 10_000, CropHeightBasisPoints: 10_000,
+		ScaleX: one, ScaleY: one, TranslateX: zero, TranslateY: zero,
+		OpacityBasisPoints: 10_000,
+	}
+}
+
+func (placement ClipPlacement) IsIdentity() bool {
+	return placement == IdentityClipPlacement()
 }
 
 type LinkGroupState struct {

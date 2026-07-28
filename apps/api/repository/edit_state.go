@@ -164,6 +164,21 @@ func loadEditNormalizationState(
 			if err := loadClipMutationInput(ctx, tx, &state, operation, mutatedClips); err != nil {
 				return state, err
 			}
+		case domain.EditSetClipPlacement:
+			if operation.Clip == nil || operation.Clip.ID == "" {
+				return state, application.ErrEditInvalid
+			}
+			clipID, parseErr := domain.ParseClipID(operation.Clip.ID)
+			if parseErr != nil {
+				return state, application.ErrEditInvalid
+			}
+			if err := ensureClipState(ctx, tx, &state, clipID); err != nil {
+				return state, err
+			}
+			if err := ensureTrackState(ctx, tx, &state, state.Clips[clipID.String()].TrackID); err != nil {
+				return state, err
+			}
+			mutatedClips[clipID.String()] = struct{}{}
 		case domain.EditLinkClips:
 			if err := loadLinkClipsInput(ctx, tx, &state, operation, mutatedClips); err != nil {
 				return state, err
