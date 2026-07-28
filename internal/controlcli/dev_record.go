@@ -29,7 +29,7 @@ const maximumRecordSeconds = 300
 type devRecordOptions struct {
 	repository, baseDir, output, speech, voice, endpoint string
 	duration                                             float64
-	maxWidth                                             int
+	maxWidth, rate                                       int
 }
 
 func newDevRecordCommand(stdout, stderr io.Writer) *cobra.Command {
@@ -43,6 +43,7 @@ func newDevRecordCommand(stdout, stderr io.Writer) *cobra.Command {
 	// The system default voice follows the OS locale and garbles or drops
 	// English narration on non-English systems, so an English voice is pinned.
 	command.Flags().StringVar(&options.voice, "voice", "Samantha", "say voice for the narration")
+	command.Flags().IntVar(&options.rate, "rate", 0, "say speaking rate in words per minute (0 keeps the voice default)")
 	command.Flags().IntVar(&options.maxWidth, "max-width", 1920, "cap the captured frame width")
 	command.Flags().StringVar(&options.endpoint, "endpoint", "", "explicit loopback CDP origin of a controlled renderer")
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -65,6 +66,10 @@ func runDevRecord(ctx context.Context, options devRecordOptions, stdout, stderr 
 	}
 	if *speech != "" && runtime.GOOS != "darwin" {
 		fmt.Fprintln(stderr, "dev record narration requires the macOS say voice platform")
+		return 2
+	}
+	if options.rate < 0 || options.rate > 720 {
+		fmt.Fprintln(stderr, "dev record --rate must be within [0, 720] words per minute")
 		return 2
 	}
 	destination, err := filepath.Abs(*output)
@@ -151,6 +156,9 @@ func runDevRecord(ctx context.Context, options devRecordOptions, stdout, stderr 
 		sayArgs := []string{"-o", narration}
 		if *voice != "" {
 			sayArgs = append(sayArgs, "-v", *voice)
+		}
+		if options.rate > 0 {
+			sayArgs = append(sayArgs, "-r", strconv.Itoa(options.rate))
 		}
 		sayArgs = append(sayArgs, *speech)
 		if err := runBoundedCommand(recordContext, "/usr/bin/say", sayArgs...); err != nil {
