@@ -1,3 +1,4 @@
+import type { ClipPlacement } from './clipPlacement';
 import type { TimeRange } from './timeRange';
 
 export interface ClipState {
@@ -5,6 +6,7 @@ export interface ClipState {
   enabled: boolean;
   id: string;
   linkGroupId?: string;
+  placement?: ClipPlacement;
   revision: string;
   sequenceId: string;
   sourceRange: TimeRange;

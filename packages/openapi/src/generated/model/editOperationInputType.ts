@@ -31,6 +31,7 @@ export const EditOperationInputType = {
   'trim-clip': 'trim-clip',
   'split-clip': 'split-clip',
   'remove-clip': 'remove-clip',
+  'set-clip-placement': 'set-clip-placement',
   'link-clips': 'link-clips',
   'unlink-clips': 'unlink-clips',
 } as const;
