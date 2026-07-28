@@ -97,7 +97,7 @@ WHERE id = ? AND project_id = ?`, id.String(), state.ProjectID.String()).Scan(
 		&trackValue, &sequenceValue, &revisionValue, &kind,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return application.ErrEditInvalid
+		return application.EditInvalidf("track %s does not exist in this project", id)
 	}
 	if err != nil {
 		return err
@@ -202,7 +202,7 @@ FROM captions WHERE id = ? AND project_id = ?`, id.String(), projectID.String())
 		&startValue, &startScale, &durationValue, &durationScale, &languageValue, &text, &tombstoned,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.CaptionState{}, application.ErrEditInvalid
+		return domain.CaptionState{}, application.EditInvalidf("caption %s does not exist in this project", id)
 	}
 	if err != nil {
 		return domain.CaptionState{}, err

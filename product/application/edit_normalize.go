@@ -377,8 +377,11 @@ func (normalizer *editNormalizer) addCaption(operation EditOperationInput) error
 
 func (normalizer *editNormalizer) updateCaption(operation EditOperationInput, remove bool) error {
 	current, exists := normalizer.captions[operation.CaptionID.String()]
-	if !exists || current.Tombstoned || normalizer.markTouched(domain.EntityCaption, current.ID.String()) != nil {
-		return ErrEditInvalid
+	if !exists || current.Tombstoned {
+		return EditInvalidf("caption %s is not a live caption in this sequence", operation.CaptionID)
+	}
+	if normalizer.markTouched(domain.EntityCaption, current.ID.String()) != nil {
+		return EditInvalidf("caption %s is mutated more than once in this proposal", operation.CaptionID)
 	}
 	if err := normalizer.require(domain.EntityCaption, current.ID.String(), current.Revision); err != nil {
 		return err
@@ -593,7 +596,10 @@ func (normalizer *editNormalizer) validateAlignmentEffects() error {
 		for _, alignmentID := range dependent {
 			status, handled := normalizer.alignmentEffects[alignmentID.String()]
 			if !handled || (status != domain.AlignmentExact && status != domain.AlignmentStale && status != domain.AlignmentUnbound) {
-				return ErrEditInvalid
+				return EditInvalidf(
+					"%s %s still anchors alignment %s; unbind it or mark it stale in the same proposal",
+					kind, id, alignmentID,
+				)
 			}
 		}
 	}

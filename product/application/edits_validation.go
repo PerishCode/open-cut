@@ -39,7 +39,7 @@ func validateEditProposeInput(input EditProposeInput) error {
 	afterGraph := make(map[string]string)
 	for index, operation := range input.Operations {
 		if err := validateEditOperation(operation); err != nil {
-			return EditInvalidf("operation %d (%s) is malformed", index, operation.Type)
+			return EditInvalidf("operation %d (%s) is malformed%s", index, operation.Type, operationShapeHint(operation.Type))
 		}
 		if operation.CreateAs != nil {
 			local := operation.CreateAs.String()
@@ -667,4 +667,32 @@ func hasLocalReferenceCycle(edges map[string]string) bool {
 
 func editValidationError(format string, values ...any) error {
 	return fmt.Errorf("%w: %s", ErrEditInvalid, fmt.Sprintf(format, values...))
+}
+
+// operationShapeHint names the required field shape for operation types whose
+// strict validation would otherwise refuse without an actionable direction.
+// Diagnostic text only; the command schema remains the authority.
+func operationShapeHint(operationType EditOperationInputType) string {
+	switch domain.EditOperationType(operationType) {
+	case domain.EditMoveClip:
+		return "; move-clip requires clip, scope (linked|single), trackId, and timelineStart, with no range fields"
+	case domain.EditTrimClip:
+		return "; trim-clip requires clip, scope (linked|single), sourceRange, and timelineRange, with no trackId or timelineStart"
+	case domain.EditSplitClip:
+		return "; split-clip requires clip, scope (linked|single), splitAt, and splitOutputs (linked scope also needs leftLinkGroupAs/rightLinkGroupAs)"
+	case domain.EditRemoveClip:
+		return "; remove-clip requires clip and scope (linked|single) only"
+	case domain.EditAddCaption:
+		return "; add-caption requires createAs, trackId, range, language, and text"
+	case domain.EditUpdateCaption:
+		return "; update-caption requires captionId, range, language, and text, with no trackId"
+	case domain.EditRemoveCaption:
+		return "; remove-caption requires captionId only"
+	case domain.EditUnbindAlignment:
+		return "; unbind-alignment requires alignmentId only"
+	case domain.EditMarkAlignmentStale:
+		return "; mark-alignment-stale requires alignmentId only"
+	default:
+		return ""
+	}
 }
