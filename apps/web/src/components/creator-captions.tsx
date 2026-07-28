@@ -119,6 +119,13 @@ export function CreatorCaptions({
           </Button>
         </Stack>
       ) : null}
+      {snapshot.lostPendingWork ? (
+        <Status state="unavailable">
+          {snapshot.lostPendingWork === "conflict"
+            ? "The Caption conflict view was superseded by concurrent project changes · reselect and preview again"
+            : "The staged Caption review was discarded by concurrent project changes · preview again to continue"}
+        </Status>
+      ) : null}
       <Text tone="eyebrow">CAPTION DRAFT · STORY EXCERPT</Text>
       <Text>Choose one exact Story excerpt, one committed Clip instance, and one Caption Track.</Text>
       <Stack spacing="compact">

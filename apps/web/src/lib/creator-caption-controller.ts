@@ -40,6 +40,8 @@ export type CreatorCaptionSnapshot = Readonly<{
   review?: CreatorCaptionReview;
   error?: Error;
   canRetryIdenticalApply: boolean;
+  /** A staged review or conflict view was discarded by concurrent project changes. */
+  lostPendingWork?: "review" | "conflict";
 }>;
 
 export type CreatorCaptionProjection = Readonly<{
@@ -120,6 +122,15 @@ export class CreatorCaptionController {
       revisionChanged ||
       selectedClip?.id !== currentClip?.id ||
       selectedTrack?.id !== currentTrack?.id;
+    const concurrentLoss =
+      invalidated && !sourceChanged && !scopeChanged
+        ? this.#snapshot.phase === "conflict"
+          ? ("conflict" as const)
+          : this.#snapshot.review !== undefined
+            ? ("review" as const)
+            : undefined
+        : undefined;
+    const lostPendingWork = concurrentLoss ?? this.#snapshot.lostPendingWork;
     if (invalidated) {
       this.#invalidateReview();
     }
@@ -134,6 +145,7 @@ export class CreatorCaptionController {
       trackCandidates,
       ...(selectedClip ? { selectedClip } : {}),
       ...(selectedTrack ? { selectedTrack } : {}),
+      ...(lostPendingWork ? { lostPendingWork } : {}),
     };
     this.#emit();
   }
@@ -150,6 +162,7 @@ export class CreatorCaptionController {
       review: undefined,
       error: undefined,
       canRetryIdenticalApply: false,
+      lostPendingWork: undefined,
     };
     this.#emit();
   }
@@ -166,6 +179,7 @@ export class CreatorCaptionController {
       review: undefined,
       error: undefined,
       canRetryIdenticalApply: false,
+      lostPendingWork: undefined,
     };
     this.#emit();
   }
@@ -188,6 +202,7 @@ export class CreatorCaptionController {
       review: undefined,
       error: undefined,
       canRetryIdenticalApply: false,
+      lostPendingWork: undefined,
     };
     this.#emit();
     try {
