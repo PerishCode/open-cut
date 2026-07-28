@@ -265,6 +265,14 @@ func validatePublishedRenderCaptions(
 	return duration, nil
 }
 
+// ValidateRenderPlacement checks one Clip's compiled placement against the
+// contract's exact bounds. It is the placement-sized entry a draft overlay needs:
+// substituting a placement into an already-valid plan cannot invalidate anything
+// else, so the whole plan does not have to be revalidated on an interactive path.
+func ValidateRenderPlacement(value domain.RenderPlacement) error {
+	return validateRenderPlacement(value)
+}
+
 func validateRenderPlacement(value domain.RenderPlacement) error {
 	maximumScale, _ := domain.NewExactRational(64, 1)
 	maximumTranslation, _ := domain.NewExactRational(16, 1)
